@@ -93,6 +93,17 @@ BEGIN
                     BS_AUTOCHECKBOX | WS_TABSTOP,4,78,102,10
 END
 
+IDD_SURFACEEDIT_DM2000 DIALOG DISCARDABLE  0, 0, 268, 42
+STYLE DS_CENTER | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    RTEXT           "Starting port:",IDC_STATIC,15,6,64,8
+    COMBOBOX        IDC_COMBO_PORTGROUP,81,4,181,105,CBS_DROPDOWNLIST | WS_VSCROLL |
+                    WS_TABSTOP
+    LTEXT           "Uses the selected MIDI port plus the next two. Must match the 3 consecutive USB ports set in DM2000 SETUP > MIDI/HOST > DAW.",
+                    IDC_STATIC,15,21,247,18
+END
+
 /////////////////////////////////////////////////////////////////////////////
 //
 // DESIGNINFO

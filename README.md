@@ -1,101 +1,100 @@
-# Building REAPER CSurf with Visual Studio
-This repository contains a REAPER Surface Controller (CSurf) project for all Reaper versions, 
-running on Windows 32 and 64 bit. It describes step by step how to build and debug with 
-Microsoft Visual Studio (Free Community Edition).
+# reaper_csurf_dm2000 — Yamaha DM2000 control surface for REAPER
 
-## Introduction
-A [surface controller](https://en.wikipedia.org/wiki/Audio_control_surface) allows users to control
-a DAW ([Digital Audio Workstation](https://en.wikipedia.org/wiki/Digital_audio_workstation)), in this case REAPER. Supporting new surface controllers in REAPER is not well documented. The goal of this project to provide you a quick-start.
+A native REAPER control surface DLL giving bidirectional integration between
+the Yamaha DM2000 digital console and REAPER: 24 touch-sensitive faders, pan
+knobs, mute/solo/rec-arm/select buttons with LED feedback, transport, jog
+wheel scrub, bank switching, and channel-name scribble strips. The DLL speaks
+HUI on the console's USB MIDI ports 1–3, with native Yamaha SysEx on port 8
+planned for features HUI cannot reach (8-char names, meter bridge, scene
+recall).
 
-The free C++ REAPER Extension SDK is required to build a Surface Controller for REAPER. It is based on an old Visual C++ 6 project and supports a 32-bit version only for REAPER. Upgrading the project to a newer Visual Studio versions requires some project changes and knowledge which are already applied.
+To our knowledge this is the first open-source DM2000 control surface for
+REAPER.
 
-## Prerequisites
-* Windows (7/8/10)
+**License:** The Unlicense (public domain).
+**Design document:** see [DESIGN.md](DESIGN.md) for the full protocol
+reference, layer plan, and task tracking.
 
-* Microsoft Visual Studio (Tested with the free Community Edition):
+## Hardware requirements
 
-* REAPER version 4, 5 and 6. (32 or 64 bit)
+- Yamaha DM2000 **V2** (firmware V2.40) — V1 uses a different DAW port layout
+  and is not supported
+- USB connection to the PC with the Yamaha USB-MIDI driver (exposes 8 virtual
+  MIDI port pairs)
+- Console setup:
+  - Remote Layer target: **Pro Tools**
+  - `SETUP → MIDI/HOST SETUP → DAW = USB 1–3`
+- Windows x64, REAPER 6 or later
+- Note: "DAW Off-line" on the DM2000 display is normal until REAPER is running
+  with the surface configured (the DLL answers the console's keepalive ping)
 
-* REAPER Extension SDK
+## Building
 
-* A compatible surface, for example:
+Prerequisites:
 
-  * [Behringer X-Touch](https://www.google.nl/search?q=behringer+x-touch)
-  * [Mackie Controller](https://www.google.nl/search?q=mackie+mcu+pro)
+- Visual Studio 2019 Community or later with the
+  "Desktop development with C++" workload
+- REAPER Extension SDK extracted to `C:\reaper_extension_sdk\` with the
+  environment variable `REAPER_EXTENSION_SDK` pointing at it
+- `msbuild` on `PATH`
 
-  * [Behringer BCF2000](https://www.google.nl/search?q=behringer+bcf2000)
-  * [Presonus faderport](https://www.google.nl/search?q=presonus+faderport)
+```powershell
+cd C:\dev\reaper_csurf_vs201x
+# Close REAPER first — it locks the DLL and the post-build copy will fail
+msbuild Builds\VisualStudio2019\reaper_csurf.sln /p:Configuration=Debug /p:Platform=x64
+```
 
-* C++ knowledge
+The post-build step copies the DLL to `%APPDATA%\REAPER\UserPlugins\`.
+Restart REAPER to load it.
 
-### Installation
-1. Install Visual Studio 2013, 2015, 2017, 2019 (Free Community Edition) or higher.
-   VS2019 requirements during installation:
-   * MSVC v142 - VS 2019 C++ x64/x86 build tools.
-   * Windows 10 SDK
-   * C++ MFC for latest v142 build tools
-   * Others are optional
-2. Download REAPER SDK from:
-  https://www.reaper.fm/sdk/plugin/reaper_extension_sdk.zip
-3. Extract ```reaper_extension_sdk.zip``` for example into ```C:\reaper_extension_sdk\```.
-4. Add an environment variable to the REAPER Extension SDK:
-* Start ```Windows Explorer```
-* Right mouse click ```This PC```
-* Click ```Advanced system settings```
-* Click ```Environment Variables...```  
-* Create a new ```System variable:```
-  * Variable name: ```REAPER_EXTENSION_SDK```
-  * Variable value: ```C:\reaper_extension_sdk```
+Only the **VisualStudio2019** solution includes `csurf_dm2000.cpp`; the
+2013/2015/2017 solutions are left over from the scaffold and will not link.
 
-5. Clone this repository with the GIT command: 
-```git clone https://github.com/Erriez/reaper_csurf_vs201x.git```
-or download and extract the ZIP of this repository.
+This project is built on the [Erriez/reaper_csurf_vs201x](https://github.com/Erriez/reaper_csurf_vs201x)
+scaffold — see its README/wiki for a step-by-step Visual Studio debugging
+setup (attaching to reaper.exe, breakpoints, etc.).
 
-6. Open the solution ```Builds\VisualStudio<VERSION>\reaper_csurf.sln``` with Visual Studio.  
-   Note: Replace ```<VERSION>``` with the Visual Studio version, for example 2013, 2015 or 2017.
+## REAPER configuration
 
-7. Select in the toolbar:
- * ```Debug``` (Default)
- * For REAPER 64-bit: ```x64``` (Default)
- * For REAPER 32-bit: ```x86```
+1. Disable the DM2000's MIDI ports as regular MIDI devices in
+   `Preferences → Audio → MIDI Devices` (the surface opens them itself;
+   conflicts cause erratic behavior).
+2. `Preferences → Control/OSC/web → Add → "Yamaha DM2000"`.
+3. In the surface settings, pick the **starting port** group — with the
+   default console setup that is the entry reading
+   `Yamaha DM2000-1 ... Yamaha DM2000-3`. The DLL uses the selected port plus
+   the next two (matching `DAW = USB 1–3` on the console), and locates the
+   matching output ports by name.
+4. OK, then restart REAPER if the DLL was just rebuilt.
 
-8. Open the ```Solution Explorer``` | Right mouse click ```reaper_csurf``` | Properties: 
-   * Select ```Configuration```: ```Debug``` or ```Release```.
-   * Select ```Platform```: ```Win32``` or ```x64```.
-   * Set ```Debugging | Command:```
-     * For REAPER 32-bit: ```C:\Program Files (x86)\REAPER\reaper.exe```
-     * For REAPER 64-bit: ```C:\Program Files\REAPER (x64)\reaper.exe```
-   * Check the REAPER Extension SDK environment variable:
-     * ```VC++ Directories | Include Directories:``` should contain ```$(REAPER_EXTENSION_SDK)```
-       or the full path to the REAPER Extension SDK.
-   * Set ``` Build Events | Post-Build Event | Command Line:``` 
-     * For REAPER 32-bit: ```copy "x64\Debug\reaper_csurf_x86.dll" "%APPDATA%\REAPER\UserPlugins\"```
-     * For REAPER 64-bit: ```copy "x64\Debug\reaper_csurf_x64.dll" "%APPDATA%\REAPER\UserPlugins\"```
-   
-9. Rename original REAPER CSurf DLL to something else to prevent conflicts between the original and
-   new CSurf: 
-   * For REAPER 32-bit: ```C:\Program Files\REAPER\Plugins\reaper_csurf.dll.org```
-   * For REAPER 64-bit: ```C:\Program Files\REAPER (x64)\Plugins\reaper_csurf.dll.org```
+## Feature status
 
-10. Set a breakpoint in ```csurf_main.cpp``` function ```REAPER_PLUGIN_ENTRYPOINT()```.
+### Layer 1 — HUI core: implemented
 
-11. Click the green ```Local Windows Debugger``` button to build and start debugging.
+- 3-port MIDI open/close, keepalive ping echo, config dialog
+- Faders both directions, touch detect (touch automation works)
+- Mute / solo / rec-arm / select buttons with LED feedback
+- Transport (play/stop/record/rewind/forward) with LEDs
+- Bank switching (channel ±1, bank ±24)
 
-12. REAPER will be started automatically and the breakpoint should be hit. Now you're ready to debug 
-    and add support for new surfaces or change the behavior of existing surfaces.
-    
-13. In REAPER click ```Tools | Preferences | Control/OSC/web``` Click ```Add``` to add a surface.
+### Layer 2 — Channel strip feedback: complete
 
-### Wiki
-A more detailed description of the CSurf project settings and code is located on
-[the Wiki page](https://github.com/Erriez/reaper_csurf_vs2015/wiki).
+- [x] Pan: knob input (relative v-pot deltas) and ring-LED feedback
+- [x] Selected channel highlight
+- [x] Jog wheel scrub (speed-scaled, 1–6)
+- [x] 4-char track names on scribble strips (HUI SysEx)
+- [x] VU meters on channel strips (100ms peak polling)
 
-### FAQ
+### Layer 3 — Native SysEx (port 8): scaffolding only
 
-> Q: Is OSX supported?  
+- Port 8 output is opened and a `SendSysEx()` helper exists
+- [ ] 8-char track names — **blocked**: Yamaha does not publish the channel-name
+      SysEx addresses (manual 13.4.5: "Consult your dealer"); requires capturing
+      Studio Manager rename traffic first (see DESIGN.md)
+- [ ] Meter bridge
+- [ ] Scene recall ↔ REAPER markers
 
-Short answer: No.
-Long answer: I will not support MAC.
+### Layer 4 — future
 
-### Contact
-Please use the [REAPER forum](https://forum.cockos.com/showthread.php?p=1884391).
+EQ/dynamics parameter control, sends, surround panner joystick, talkback,
+USER DEFINED KEYS. See [DESIGN.md](DESIGN.md).
