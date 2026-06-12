@@ -1,19 +1,17 @@
-# reaper_csurf_dm2000 - Yamaha DM2000 control surface for REAPER
+[![C++](https://img.shields.io/badge/C++-17-blue.svg)]() [![Windows](https://img.shields.io/badge/Windows-x64-0078D4.svg?logo=windows&logoColor=white)]() [![REAPER](https://img.shields.io/badge/REAPER-6+-darkgreen.svg)]() [![v0.1](https://img.shields.io/badge/version-v0.1-lightgrey.svg)](https://bmroz.eu/projects/dm2000-csurf) [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
 
-**v0.1** | bmroz.eu/projects/dm2000-csurf
+# reaper_csurf_dm2000 - Yamaha DM2000 control surface for REAPER
 
 A native REAPER control surface DLL giving bidirectional integration between
 the Yamaha DM2000 digital console and REAPER: 24 touch-sensitive faders, pan
 knobs, mute/solo/rec-arm/select buttons with LED feedback, transport controls,
 automation mode switching, jog wheel, bank switching, and channel-name scribble
-strips. The DLL speaks HUI on the console's USB MIDI ports 1–4, with native
+strips. The DLL speaks HUI on the console's USB MIDI ports 1-4, with native
 Yamaha SysEx on a configurable port 8 output for channel names.
 
 To our knowledge this is the first open-source DM2000 control surface for
 REAPER.
 
-**License:** LGPL v3 (Cockos csurf sources are LGPL; user contributions are
-additionally released under The Unlicense).
 **Design document:** see [DESIGN.md](DESIGN.md) for the full protocol
 reference, layer plan, and task tracking.
 
@@ -25,7 +23,7 @@ reference, layer plan, and task tracking.
   MIDI port pairs)
 - Console setup:
   - Remote Layer target: **Pro Tools**
-  - `SETUP → MIDI/HOST SETUP → DAW = USB 1–4`
+  - `SETUP → MIDI/HOST SETUP → DAW = USB 1-4`
 - Windows x64, REAPER 6 or later
 - Note: "DAW Off-line" on the DM2000 display is normal until REAPER is running
   with the surface configured (the DLL answers the console's keepalive ping)
@@ -65,7 +63,7 @@ setup (attaching to reaper.exe, breakpoints, etc.).
 3. In the surface settings, pick the **starting port** group - with the
    default console setup that is the entry reading
    `Yamaha DM2000-1 ... Yamaha DM2000-4`. The DLL opens 4 consecutive ports
-   (matching `DAW = USB 1–4` on the console).
+   (matching `DAW = USB 1-4` on the console).
 4. Optionally select a **SysEx output** port - pick the DM2000's USB port 8
    output for native channel names on the scribble strips (shows up as
    `Yamaha DM2000-8` or similar in the dropdown). Leave as None if not needed.
@@ -79,14 +77,14 @@ setup (attaching to reaper.exe, breakpoints, etc.).
 - Faders both directions, touch detect (touch automation works)
 - Mute / solo / rec-arm / select buttons with LED feedback
 - Transport (play/stop/record/rewind/forward) with LEDs
-- Bank switching (channel ±1, bank ±24)
+- Bank switching (channel +-1, bank +-24)
 - Automation modes: AUTOMIX section buttons control REAPER's global automation override (read/touch/write/latch/latch preview/bypass), with LED feedback
 
 ### Layer 2 - Channel strip feedback: complete (hardware-tested)
 
 - [x] Pan: knob input (relative v-pot deltas), ring-LED feedback, knob press centers pan
 - [x] Selected channel highlight
-- [x] Jog wheel moves the edit cursor (speed-scaled, 1–6)
+- [x] Jog wheel moves the edit cursor (speed-scaled, 1-6)
 - [x] 4-char track names on scribble strips (HUI SysEx)
 - [x] VU meters on channel strips (100ms peak polling, 3-cycle peak hold,
       red OVER only above 0 dBFS - matches REAPER's clip indication)
@@ -101,14 +99,14 @@ setup (attaching to reaper.exe, breakpoints, etc.).
 - The console keeps an internal model of DAW fader positions and springs motors
   back to it on release; the DLL echoes every received fader move to keep that
   model in sync.
-- On close, the DLL drives all faders to −∞, then clears meters, LEDs, pan rings, and scribbles.
+- On close, the DLL drives all faders to -inf, then clears meters, LEDs, pan rings, and scribbles.
 
 ### Layer 3 - Native SysEx (port 8): partial
 
 - SysEx output port is user-configured (config dialog SysEx dropdown)
 - [x] Channel names via native SysEx - format captured 2026-06-12; sends pos=0..7 alongside HUI 4-char names; hardware-tested: scribble strip remains 4-char wide in DAW mode (physical limit)
 - [x] Meter bridge - driven by existing HUI meter messages (Layer 2); no native SysEx needed
-- [ ] Scene recall ↔ REAPER markers (SysEx address not yet confirmed)
+- [ ] Scene recall <-> REAPER markers (SysEx address not yet confirmed)
 
 ### Layer 4 - future
 
@@ -117,10 +115,19 @@ USER DEFINED KEYS. See [DESIGN.md](DESIGN.md).
 
 ## Known limitations
 
-- **Channels 25–32 (port 4) not mapped** - port 4 is active but no track controls
+- **Channels 25-32 (port 4) not mapped** - port 4 is active but no track controls
   are wired there; the physical purpose of those strips on the DM2000 is not yet
   determined.
 - **macOS not supported** - Windows x64 only for now; a macOS port is planned.
 - **Scribble strips show 4 characters only** - hardware-verified; the display is
   4-char wide in DAW mode regardless of what native SysEx sends.
 - **Scene recall not implemented** - SysEx address unconfirmed; queued for v0.2.
+
+## License
+
+LGPL v3 (Cockos csurf sources are LGPL; user contributions are additionally
+released under The Unlicense). See [LICENSE](LICENSE).
+
+## Contact
+
+Bartłomiej Mróz · bartlomiej.mroz@pg.edu.pl · Department of Multimedia Systems, Gdańsk University of Technology · [bmroz.eu](https://bmroz.eu)
