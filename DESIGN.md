@@ -19,8 +19,9 @@ Build target: Windows x64 DLL, REAPER 6+
 
 - Console: Yamaha DM2000 V2, firmware V2.40 (final, no further Yamaha updates)
 - Connection: USB (8 virtual MIDI ports), "Pro Tools" Remote Layer target
-- DAW port assignment on DM2000: SETUP → MIDI/HOST SETUP → DAW = USB 1–3
-  (V2 firmware uses 3 ports; V1 used 4 — not relevant here)
+- DAW port assignment on DM2000: SETUP → MIDI/HOST SETUP → DAW = USB 1–4
+  (groups are 1–4, 2–5, 3–6, … four consecutive ports; earlier documentation
+  said "3 ports" but hardware testing shows 4)
 - Port 8: always carries Yamaha native SysEx regardless of Remote Layer setting
 - "DAW Off-line" on DM2000 display = normal; means controls are routed to MIDI
 
@@ -31,7 +32,8 @@ Build target: Windows x64 DLL, REAPER 6+
 ### HUI (ports 1–3)
 
 HUI is a Mackie/Digidesign 1997 protocol. Each port handles 8 channels.
-Port 1 = channels 1–8, Port 2 = channels 9–16, Port 3 = channels 17–24.
+Port 1 = channels 1–8, Port 2 = channels 9–16, Port 3 = channels 17–24,
+Port 4 = channels 25–32 (purpose on DM2000 TBD — likely master/CR section).
 
 **Keepalive ping (critical):**
 - DM2000 sends: `90 00 7F` on each port every ~1 second
@@ -314,7 +316,7 @@ The UI simplification: one "starting port" dropdown. If user selects port N:
 
 ## Known issues and caveats
 
-- DM2000 V2 firmware: DAW uses 3 ports (V1 used 4) — only 3-port mode implemented
+- DM2000 uses 4 consecutive HUI ports (hardware-verified; documentation previously said 3); port 4 channels (25–32) are opened and ping-echoed but their purpose on this console is not yet mapped
 - Fader taper is CALIBRATED and applied (see protocol section): the console's
   wire value saturates at the printed +5 mark, so REAPER volumes above +5 dB
   all park the motor at +5 — a hardware limit of the DM2000's HUI value range,
