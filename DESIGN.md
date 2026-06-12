@@ -10,7 +10,7 @@ recall). No existing tool does this; this is the first open-source DM2000
 csurf for REAPER.
 
 Repository: `git.pg.edu.pl/p829296` / `github.com/mormegil6`
-License: The Unlicense (public domain)
+License: LGPL v3
 Build target: Windows x64 DLL, REAPER 6+
 
 ---
