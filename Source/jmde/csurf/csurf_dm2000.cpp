@@ -1,32 +1,52 @@
 #include "csurf.h"
 
-// HUI faders are 14-bit on the wire (MSB<<7 | LSB); the DM2000's effective
-// resolution is coarser but the encoding is the same
+// DM2000 fader taper, hardware-calibrated against the printed dB scale
+// (mark-by-mark MIDI-OX captures, 2026-06-12). Values are 14-bit (MSB<<7)|LSB
+// with the ~9-bit resolution in the top bits, but the dB mapping follows the
+// console's own printed scale, NOT REAPER's slider taper. The wire value
+// saturates at the printed +5 mark -- every physical position above +5 sends
+// 16352 -- so +5 is the console's usable maximum in both directions.
+static const double g_taper_db[]  = { -150.0, -50.0, -40.0, -30.0,   0.0,   5.0 };
+static const int    g_taper_val[] = {      0,  1056,  2304,  3200, 14112, 16352 };
+#define TAPER_N (sizeof(g_taper_val) / sizeof(g_taper_val[0]))
+
 static double int14ToVol(unsigned char msb, unsigned char lsb)
 {
     int val = lsb | (msb << 7);
-    double pos = ((double)val * 1000.0) / 16383.0;
-    pos = SLIDER2DB(pos);
-    return DB2VAL(pos);
+    if (val <= g_taper_val[0]) return 0.0; // bottom = -inf
+    if (val >= g_taper_val[TAPER_N - 1]) return DB2VAL(g_taper_db[TAPER_N - 1]);
+
+    unsigned int i = 1;
+    while (i < TAPER_N - 1 && val > g_taper_val[i]) i++;
+    double db = g_taper_db[i - 1] + (g_taper_db[i] - g_taper_db[i - 1]) *
+        (double)(val - g_taper_val[i - 1]) / (double)(g_taper_val[i] - g_taper_val[i - 1]);
+    return DB2VAL(db);
 }
 
 static int volToInt14(double vol)
 {
-    double d = (DB2SLIDER(VAL2DB(vol)) * 16383.0 / 1000.0);
-    if (d < 0.0) d = 0.0;
-    else if (d > 16383.0) d = 16383.0;
+    double db = VAL2DB(vol);
+    if (db <= g_taper_db[0]) return g_taper_val[0];
+    if (db >= g_taper_db[TAPER_N - 1]) return g_taper_val[TAPER_N - 1];
 
-    return (int)(d + 0.5);
+    unsigned int i = 1;
+    while (i < TAPER_N - 1 && db > g_taper_db[i]) i++;
+    double v = g_taper_val[i - 1] + (g_taper_val[i] - g_taper_val[i - 1]) *
+        (db - g_taper_db[i - 1]) / (g_taper_db[i] - g_taper_db[i - 1]);
+    return (int)(v + 0.5);
 }
 
 static unsigned char peakToMeter(double pk)
 {
-    if (pk >= 1.0) return 0x0E; // clip
+    // the DM2000's red OVER segment IS level 0x0C -- it ignores the 0x0E "clip"
+    // code from the HUI docs (hardware-verified: 0x0E never lit the red LED).
+    // Send 0x0C only strictly above 0 dBFS so red matches REAPER's indication.
+    if (pk > 1.0) return 0x0C;
 
-    // map -60..0 dB onto meter levels 0x00..0x0C
+    // map -60..0 dB onto segments 0x00..0x0B, keeping 0x0C exclusive to clip
     int l = (int)((VAL2DB(pk) + 60.0) * (12.0 / 60.0) + 0.5);
     if (l < 0) l = 0;
-    else if (l > 0x0C) l = 0x0C;
+    else if (l > 0x0B) l = 0x0B;
     return (unsigned char)l;
 }
 
@@ -55,8 +75,12 @@ class CSurf_DM2000 : public IReaperControlSurface
     int m_pan_lastpos[24];
     unsigned int m_pan_lasttouch[24];
     unsigned char m_meter_lastlvl[24];
+    unsigned char m_meter_hist[24][2][3]; // per-channel/side level history: peak hold over 3 polls
+    int m_meter_histpos;
     DWORD m_meter_lastrun;
     int m_bank_offset;
+    int m_wheel_mode;                // 0=jog (edit cursor), 1=scrub, 2=shuttle (coarse)
+    bool m_arrow_zoom;               // ENTER toggles arrows between scroll and zoom
 
 public:
   CSurf_DM2000(int indev1, int outdev1, int indev2, int outdev2, int indev3, int outdev3, int *errStats)
@@ -76,7 +100,11 @@ public:
     memset(m_pan_lastpos, 0xff, sizeof(m_pan_lastpos));
     memset(m_pan_lasttouch, 0, sizeof(m_pan_lasttouch));
     memset(m_meter_lastlvl, 0xff, sizeof(m_meter_lastlvl));
+    memset(m_meter_hist, 0, sizeof(m_meter_hist));
+    m_meter_histpos = 0;
     m_meter_lastrun = 0;
+    m_wheel_mode = 0;
+    m_arrow_zoom = false;
 
     for (int i = 0; i < 3; ++i)
     {
@@ -117,8 +145,35 @@ public:
 
   void CloseNoReset()
   {
+      // HUI has no "goodbye" message -- the console flags DAW Off-line by itself
+      // once the ping echo stops -- but clear our state so the remote layer does
+      // not keep showing a frozen mix: meters off, LEDs off, pan rings cleared,
+      // scribbles blanked, faders driven to -inf.
       for (int i = 0; i < 24; ++i)
+      {
+          if (m_midiouts[i / 8])
+          {
+              int ch = i & 7;
+              m_midiouts[i / 8]->Send(0xB0, ch, 0, -1);             // fader MSB = 0 (-inf)
+              m_midiouts[i / 8]->Send(0xB0, 0x20 + ch, 0, -1);      // fader LSB = 0
+              m_midiouts[i / 8]->Send(0xA0, i & 7, 0x00, -1);       // meter L off
+              m_midiouts[i / 8]->Send(0xA0, i & 7, 0x10, -1);       // meter R off
+              m_midiouts[i / 8]->Send(0xB0, 0x10 + (i & 7), 0, -1); // pan ring off
+          }
+          SendChannelLED(i, 1, false);
+          SendChannelLED(i, 2, false);
+          SendChannelLED(i, 3, false);
+          SendChannelLED(i, 7, false);
           SendTrackTitle(i, "");
+      }
+      SendTransportLED(3, false);
+      SendTransportLED(4, false);
+      SendTransportLED(5, false);
+
+      // REAPER's MIDI outputs queue internally (CreateThreadedMIDIOutput is a
+      // passthrough on Windows); deleting them immediately drops whatever the
+      // driver hasn't drained yet, leaving stale state on the console
+      Sleep(200);
 
       for (int i = 0; i < 3; ++i)
       {
@@ -149,6 +204,7 @@ public:
       if (now - m_meter_lastrun >= 100) // unsigned diff also handles timer wrap
       {
           m_meter_lastrun = now;
+          m_meter_histpos = (m_meter_histpos + 1) % 3;
           for (int i = 0; i < 24; ++i)
           {
               if (!m_midiouts[i / 8]) continue;
@@ -160,6 +216,15 @@ public:
               {
                   lvlL = peakToMeter(Track_GetPeakInfo(tr, 0));
                   lvlR = peakToMeter(Track_GetPeakInfo(tr, 1));
+              }
+
+              // peak hold: send the max of the last 3 polls to steady the display
+              m_meter_hist[i][0][m_meter_histpos] = lvlL;
+              m_meter_hist[i][1][m_meter_histpos] = lvlR;
+              for (int h = 0; h < 3; ++h)
+              {
+                  if (m_meter_hist[i][0][h] > lvlL) lvlL = m_meter_hist[i][0][h];
+                  if (m_meter_hist[i][1][h] > lvlR) lvlR = m_meter_hist[i][1][h];
               }
 
               unsigned char packed = (unsigned char)((lvlL << 4) | lvlR);
@@ -319,13 +384,15 @@ private:
         m_midiouts[id / 8]->Send(0xB0, 0x2C, (state ? 0x40 : 0x00) | sw, -1);
     }
 
-    // transport section lives on the first HUI unit (port 1), zone 0x0E
-    void SendTransportLED(int sw, bool state)
+    // LED in a global (non-channel) zone; these controls live on the first HUI unit (port 1)
+    void SendGlobalLED(int zone, int sw, bool state)
     {
         if (!m_midiouts[0]) return;
-        m_midiouts[0]->Send(0xB0, 0x0C, 0x0E, -1);
+        m_midiouts[0]->Send(0xB0, 0x0C, zone, -1);
         m_midiouts[0]->Send(0xB0, 0x2C, (state ? 0x40 : 0x00) | sw, -1);
     }
+
+    void SendTransportLED(int sw, bool state) { SendGlobalLED(0x0E, sw, state); }
 
     void OnMIDIEvent(MIDI_event_t *evt, int port)
     {
@@ -360,13 +427,22 @@ private:
             int ch = data1 - 0x20;
             MediaTrack *tr = TrackFromCh(port * 8 + ch);
             if (tr)
-                CSurf_SetSurfaceVolume(tr, CSurf_OnVolumeChange(tr, int14ToVol(m_fader_msb[port][ch], data2), false), this);
+                // ignoresurf=NULL on purpose: the DM2000 keeps an internal model of
+                // the DAW's fader positions and springs the motor back to it on touch
+                // release, so our own moves must be echoed back (Pro Tools does this)
+                CSurf_SetSurfaceVolume(tr, CSurf_OnVolumeChange(tr, int14ToVol(m_fader_msb[port][ch], data2), false), NULL);
         }
-        else if (data1 == 0x0D)                  // jog wheel: bits 0-5 = speed (1-6), bit 6 = counter-clockwise
+        else if (data1 == 0x0D)                  // jog wheel: bits 0-5 = speed (1-6), bit 6 = direction
         {
+            // Direction verified on hardware: bit 6 SET moves forward (the initial report had it reversed)
             int speed = data2 & 0x3F;
             if (speed)
-                CSurf_ScrubAmt(speed * ((data2 & 0x40) ? -0.05 : 0.05));
+            {
+                double dir = (data2 & 0x40) ? 1.0 : -1.0;
+                if (m_wheel_mode == 1)      CSurf_ScrubAmt(dir * speed * 0.05);       // SCRUB: audible scrub
+                else if (m_wheel_mode == 2) MoveEditCursor(dir * speed * 1.0, false); // SHUTTLE: coarse, 1s/click
+                else                        MoveEditCursor(dir * speed * 0.1, false); // jog: 0.1s/click
+            }
         }
         else if (data1 >= 0x40 && data1 < 0x48)  // pan v-pot delta: bits 0-5 = amount, bit 6 = right
         {
@@ -404,6 +480,10 @@ private:
                     case 1: CSurf_SetSurfaceSelected(tr, CSurf_OnSelectedChange(tr, -1), NULL); break; // SELECT
                     case 2: CSurf_SetSurfaceMute(tr, CSurf_OnMuteChange(tr, -1), NULL); break; // MUTE
                     case 3: CSurf_SetSurfaceSolo(tr, CSurf_OnSoloChange(tr, -1), NULL); break; // SOLO
+                    case 5: // pan knob press -> center pan
+                        CSurf_SetSurfacePan(tr, CSurf_OnPanChange(tr, 0.0, false), NULL);
+                        m_pan_lasttouch[gch] = timeGetTime();
+                        break;
                     case 7: CSurf_OnRecArmChange(tr, -1); break;                               // REC/RDY
                 }
             }
@@ -431,6 +511,37 @@ private:
                 case 5: CSurf_OnRecord(); break;
             }
         }
+        else if (zone == 0x0D && press)          // cursor cluster + wheel-mode keys (hardware-verified)
+        {
+            switch (sw)
+            {
+                case 4: CSurf_OnArrow(0, m_arrow_zoom); break; // up
+                case 0: CSurf_OnArrow(1, m_arrow_zoom); break; // down
+                case 1: CSurf_OnArrow(2, m_arrow_zoom); break; // left
+                case 3: CSurf_OnArrow(3, m_arrow_zoom); break; // right
+                case 2:                                        // INC -> next marker
+                    SendMessage(g_hwnd, WM_COMMAND, ID_MARKER_NEXT, 0);
+                    break;
+                case 5:                                        // SCRUB: wheel scrubs audio
+                    m_wheel_mode = (m_wheel_mode == 1) ? 0 : 1;
+                    SendGlobalLED(0x0D, 5, m_wheel_mode == 1);
+                    SendGlobalLED(0x0D, 6, false);
+                    break;
+                case 6:                                        // SHUTTLE: wheel moves coarse
+                    m_wheel_mode = (m_wheel_mode == 2) ? 0 : 2;
+                    SendGlobalLED(0x0D, 6, m_wheel_mode == 2);
+                    SendGlobalLED(0x0D, 5, false);
+                    break;
+            }
+        }
+        else if (zone == 0x1B && sw == 7 && press) // DEC -> previous marker
+        {
+            SendMessage(g_hwnd, WM_COMMAND, ID_MARKER_PREV, 0);
+        }
+        else if (zone == 0x14 && sw == 0 && press) // ENTER: arrows scroll <-> zoom
+        {
+            m_arrow_zoom = !m_arrow_zoom;
+        }
     }
 
     void AdjustBankOffset(int amt)
@@ -447,6 +558,7 @@ private:
         memset(m_vol_lastpos, 0xff, sizeof(m_vol_lastpos));
         memset(m_pan_lastpos, 0xff, sizeof(m_pan_lastpos));
         memset(m_meter_lastlvl, 0xff, sizeof(m_meter_lastlvl));
+        memset(m_meter_hist, 0, sizeof(m_meter_hist));
         memset(m_fader_touch, 0, sizeof(m_fader_touch));
         TrackList_UpdateAllExternalSurfaces(); // repaint faders/LEDs for the new bank
         SetTrackListChange();                  // blank scribbles on channels past the last track
