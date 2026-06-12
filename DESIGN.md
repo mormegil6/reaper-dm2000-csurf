@@ -44,14 +44,21 @@ Two sequential CC messages, channel 0–7 on that port:
 B0  ch    vv  — fader MSB (controller 0x00–0x07 = channels 0–7)
 B0  20+ch vv  — fader LSB (controller 0x20–0x27); triggers the volume update
 ```
-14-bit value reconstruction: `(MSB << 7) | LSB`, range 0–16383.
-Volume conversion (matches REAPER's 0–1000 slider scale):
-```cpp
-double int14ToVol(unsigned char msb, unsigned char lsb) {
-    int val = lsb | (msb << 7);
-    return DB2VAL(SLIDER2DB((double)val * 1000.0 / 16383.0));
-}
-```
+Value reconstruction: `(MSB << 7) | LSB`, full scale 0–16383 (MSB reaches 0x7F;
+LSB only carries bits 5–6, so the ~9-bit effective resolution sits in the top
+bits). The dB mapping follows the console's **printed scale**, NOT REAPER's
+slider taper — calibrated mark-by-mark (MIDI-OX, 2026-06-12):
+| printed mark | wire value |
+|---|---|
+| +5 (= console max; saturates above) | 16352 |
+| 0 | 14112 |
+| −30 | 3200 |
+| −40 | 2304 |
+| −50 | 1056 |
+| −∞ (bottom) | 0 |
+0→−30 is near-linear (≈364 units/dB); both calibration captures agree within
+~0.5 dB. Conversion is piecewise-linear between anchors (`g_taper_db[]` /
+`g_taper_val[]` in csurf_dm2000.cpp), used by both directions.
 
 **Fader position (host → DM2000):**
 Same controller pair, sent to the correct port (`channel / 8`) and channel within port:
@@ -59,6 +66,20 @@ Same controller pair, sent to the correct port (`channel / 8`) and channel withi
 B0  ch    msb  — MSB first  (controller 0x00–0x07)
 B0  20+ch lsb  — LSB second (controller 0x20–0x27)
 ```
+Both directions use the same calibrated taper table (`volToInt14` is the
+inverse of `int14ToVol`). REAPER volumes above +5 dB clamp to 16352 — the
+console's value range physically tops out at the printed +5 mark, so REAPER
++5..+12 all park the motor there.
+
+**Echo requirement (hardware-verified 2026-06-12):** the DM2000 keeps an
+internal model of the DAW's fader positions and springs the motor back to that
+model on touch release. Every fader move received from the console must
+therefore be echoed back to it (Pro Tools behaves the same way) — the surface
+passes `ignoresurf=NULL` so its own `SetSurfaceVolume` runs for its own moves.
+
+**Shutdown:** HUI has no "goodbye" message — the console flags DAW Off-line by
+itself ~2 s after the ping echo stops. On close the DLL drives all faders to
+−∞ (wire value 0), then clears meters, LEDs, pan rings, and scribble strips.
 
 **Switch matrix (DM2000 → host):**
 All button activity arrives as a two-message pair:
@@ -70,9 +91,12 @@ B0  2F  vv    — value: bits 0–3 = switch number, bit 6 = press (0x40), 0 = r
 Zone assignments:
 | Zone | Meaning | Switches used |
 |------|---------|---------------|
-| 0–7  | Channel strip (zone = channel 0–7 on this port) | 0=fader touch/release, 1=SELECT, 2=MUTE, 3=SOLO, 7=REC/RDY |
+| 0–7  | Channel strip (zone = channel 0–7 on this port) | 0=fader touch/release, 1=SELECT, 2=MUTE, 3=SOLO, 5=pan knob press → center pan, 7=REC/RDY |
 | 0x0A | Bank/channel navigation | 0=ch◄, 1=bank◄, 2=ch►, 3=bank► |
+| 0x0D | Cursor cluster + wheel modes (hardware-verified) | 0=down, 1=left, 2=INC → next marker, 3=right, 4=up, 5=SCRUB, 6=SHUTTLE |
 | 0x0E | Transport | 1=REW, 2=FFWD, 3=STOP, 4=PLAY, 5=REC |
+| 0x14 | ENTER (hardware-verified) | 0=press → toggle scroll/zoom |
+| 0x1B | DEC (hardware-verified) | 7=press → previous marker |
 
 **Pan v-pots (DM2000 → host):**
 Relative deltas, NOT switch-matrix messages:
@@ -88,9 +112,14 @@ B0  10+ch vv  — LED ring position 1–11
 **Jog/scrub wheel (DM2000 → host):**
 Direct CC, NOT a switch-matrix zone:
 ```
-B0  0D  vv    — bits 0–5 = speed (1–6 observed), bit 6 set = counter-clockwise
+B0  0D  vv    — bits 0–5 = speed (1–6 observed), bit 6 SET = forward (hardware-verified)
 ```
-Handled via `CSurf_ScrubAmt(speed * ±0.05)`.
+Three modes, selected by the SCRUB/SHUTTLE keys (zone 0x0D sw 5/6, LEDs driven,
+mutually exclusive): default jog = `MoveEditCursor(speed * ±0.1s)`; SHUTTLE =
+coarse `MoveEditCursor(speed * ±1s)`; SCRUB = `CSurf_ScrubAmt(speed * ±0.05)`.
+Plain `CSurf_ScrubAmt()` as the only handler did nothing in normal operation
+(hardware-verified), hence the edit-cursor default. ENTER (zone 0x14 sw 0)
+toggles the cursor arrows between scroll and zoom (`CSurf_OnArrow`).
 
 **Switch/LED feedback (host → DM2000):**
 LEDs use a different CC pair to avoid confusion with the incoming zone-select:
@@ -107,7 +136,13 @@ Polyphonic key pressure, one message per meter side:
 ```
 A0  ch  vv    — ch = strip 0–7; vv: high nibble = side (0=L, 1=R), low nibble = level
 ```
-Levels 0x00–0x0C (≈ –60..0 dB), 0x0E = clip. Polled every 100ms in `Run()`.
+Signal levels use segments 0x00–0x0B (≈ –60..0 dB). **The DM2000's red OVER
+segment is level 0x0C** and it is sent only when the peak is **strictly above**
+0 dBFS, matching REAPER's red. Both facts are hardware-verified: sending 0x0C
+for hot-but-legal signals lit the red ~2.5 dB early, and the HUI docs' "0x0E =
+clip" code is **ignored by the DM2000** (red never lit while clipping). Polled
+every 100ms in `Run()`, with a 3-cycle peak hold (max of the last 3 polls) to
+keep steady signals from flickering.
 (An earlier draft described a `B0 0D / B0 2D` CC pair — refuted: 0x0D is the jog
 wheel CC, and HUI metering is poly pressure. If hardware testing shows no meter
 movement, capture what Pro Tools sends to the console and adjust.)
@@ -189,7 +224,8 @@ Tasks:
 - [x] Pan position feedback: `SetSurfacePan()` → HUI pan ring messages (`B0 10+ch`); knob input on `B0 40+ch` relative deltas
 - [x] Selected channel highlight
 - [x] Track name truncated to 4 chars on scribble strip via HUI (`F0 00 00 66 05 00 10 <ch> <4 chars> F7`, per port)
-- [x] Jog/scrub wheel: CC 0x0D, value 0x01–0x06=clockwise / 0x41–0x46=counter-clockwise (bits 0–5 = speed), calls `CSurf_ScrubAmt()` scaled by speed
+- [x] Jog/scrub wheel: CC 0x0D, bits 0–5 = speed, bit 6 set = forward; jog/SHUTTLE/SCRUB modes (see protocol section)
+- [x] Cursor arrows (scroll/zoom via ENTER toggle), DEC/INC = prev/next marker
 
 **Test criteria for Layer 2:**
 - Play audio → DM2000 channel strip meters move
@@ -279,6 +315,11 @@ The UI simplification: one "starting port" dropdown. If user selects port N:
 ## Known issues and caveats
 
 - DM2000 V2 firmware: DAW uses 3 ports (V1 used 4) — only 3-port mode implemented
+- Fader taper is CALIBRATED and applied (see protocol section): the console's
+  wire value saturates at the printed +5 mark, so REAPER volumes above +5 dB
+  all park the motor at +5 — a hardware limit of the DM2000's HUI value range,
+  not a bug. (The first calibration capture's provisional table was superseded
+  by the explicit mark-by-mark capture of 2026-06-12.)
 - HUI fader resolution: ~9-bit (512 steps), coarse below -20dB — by design, not a bug
 - Pro Tools target locks USB port 1 on the DM2000 — if port 1 is unavailable, check DM2000 SETUP
 - REAPER must not have the DM2000 ports open as regular MIDI devices (disable in REAPER MIDI prefs)
