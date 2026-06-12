@@ -77,13 +77,26 @@ setup (attaching to reaper.exe, breakpoints, etc.).
 - Transport (play/stop/record/rewind/forward) with LEDs
 - Bank switching (channel ±1, bank ±24)
 
-### Layer 2 — Channel strip feedback: complete
+### Layer 2 — Channel strip feedback: complete (hardware-tested)
 
-- [x] Pan: knob input (relative v-pot deltas) and ring-LED feedback
+- [x] Pan: knob input (relative v-pot deltas), ring-LED feedback, knob press centers pan
 - [x] Selected channel highlight
-- [x] Jog wheel scrub (speed-scaled, 1–6)
+- [x] Jog wheel moves the edit cursor (speed-scaled, 1–6)
 - [x] 4-char track names on scribble strips (HUI SysEx)
-- [x] VU meters on channel strips (100ms peak polling)
+- [x] VU meters on channel strips (100ms peak polling, 3-cycle peak hold,
+      red OVER only above 0 dBFS — matches REAPER's clip indication)
+
+### DM2000-specific behavior (hardware-verified — details in DESIGN.md)
+
+- **Fader taper is calibrated to the console's printed scale**: REAPER dB and
+  the printed marks agree along the throw (piecewise-linear table from
+  mark-by-mark MIDI captures).
+- **The console's fader value range tops out at the printed +5 mark** — REAPER
+  volumes from +5 to +12 dB all park the motor at +5. Hardware limit, not a bug.
+- The console keeps an internal model of DAW fader positions and springs motors
+  back to it on release; the DLL echoes every received fader move to keep that
+  model in sync.
+- On close, the DLL drives all faders to −∞, then clears meters, LEDs, pan rings, and scribbles.
 
 ### Layer 3 — Native SysEx (port 8): scaffolding only
 
