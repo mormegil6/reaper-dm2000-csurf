@@ -1,14 +1,16 @@
-# Yamaha DM2000 + REAPER csurf DLL — Design Document
+# Yamaha DM2000 + REAPER csurf DLL - Design Document
 
 ## Project overview
 
 A native REAPER control surface DLL (`reaper_csurf_dm2000`) that gives full
 bidirectional integration between the Yamaha DM2000 digital console and REAPER.
-The DLL speaks HUI on USB ports 1–3 (24 faders, transport, mute/solo/rec-arm)
-and Yamaha native SysEx on USB port 8 (scribble strips, meter bridge, scene
-recall). No existing tool does this; this is the first open-source DM2000
-csurf for REAPER.
+The DLL speaks HUI on USB ports 1–4 (24 faders, transport, mute/solo/rec-arm,
+automation modes) and Yamaha native SysEx on USB port 8 (scribble strips,
+meter bridge, scene recall). No existing tool does this; this is the first
+open-source DM2000 csurf for REAPER.
 
+Version: v0.1
+Homepage: bmroz.eu/projects/dm2000-csurf
 Repository: `git.pg.edu.pl/p829296` / `github.com/mormegil6`
 License: LGPL v3
 Build target: Windows x64 DLL, REAPER 6+
@@ -29,11 +31,12 @@ Build target: Windows x64 DLL, REAPER 6+
 
 ## Protocol reference
 
-### HUI (ports 1–3)
+### HUI (ports 1–4)
 
 HUI is a Mackie/Digidesign 1997 protocol. Each port handles 8 channels.
 Port 1 = channels 1–8, Port 2 = channels 9–16, Port 3 = channels 17–24,
-Port 4 = channels 25–32 (purpose on DM2000 TBD — likely master/CR section).
+Port 4 = channels 25–32 (hardware-verified active; channel-strip purpose on
+port 4 not yet mapped - likely master/CR/effects return section).
 
 **Keepalive ping (critical):**
 - DM2000 sends: `90 00 7F` on each port every ~1 second
@@ -43,13 +46,13 @@ Port 4 = channels 25–32 (purpose on DM2000 TBD — likely master/CR section).
 **Fader position (DM2000 → host):**
 Two sequential CC messages, channel 0–7 on that port:
 ```
-B0  ch    vv  — fader MSB (controller 0x00–0x07 = channels 0–7)
-B0  20+ch vv  — fader LSB (controller 0x20–0x27); triggers the volume update
+B0  ch    vv  - fader MSB (controller 0x00–0x07 = channels 0–7)
+B0  20+ch vv  - fader LSB (controller 0x20–0x27); triggers the volume update
 ```
 Value reconstruction: `(MSB << 7) | LSB`, full scale 0–16383 (MSB reaches 0x7F;
 LSB only carries bits 5–6, so the ~9-bit effective resolution sits in the top
 bits). The dB mapping follows the console's **printed scale**, NOT REAPER's
-slider taper — calibrated mark-by-mark (MIDI-OX, 2026-06-12):
+slider taper - calibrated mark-by-mark (MIDI-OX, 2026-06-12):
 | printed mark | wire value |
 |---|---|
 | +5 (= console max; saturates above) | 16352 |
@@ -65,29 +68,29 @@ slider taper — calibrated mark-by-mark (MIDI-OX, 2026-06-12):
 **Fader position (host → DM2000):**
 Same controller pair, sent to the correct port (`channel / 8`) and channel within port:
 ```
-B0  ch    msb  — MSB first  (controller 0x00–0x07)
-B0  20+ch lsb  — LSB second (controller 0x20–0x27)
+B0  ch    msb  - MSB first  (controller 0x00–0x07)
+B0  20+ch lsb  - LSB second (controller 0x20–0x27)
 ```
 Both directions use the same calibrated taper table (`volToInt14` is the
-inverse of `int14ToVol`). REAPER volumes above +5 dB clamp to 16352 — the
+inverse of `int14ToVol`). REAPER volumes above +5 dB clamp to 16352 - the
 console's value range physically tops out at the printed +5 mark, so REAPER
 +5..+12 all park the motor there.
 
 **Echo requirement (hardware-verified 2026-06-12):** the DM2000 keeps an
 internal model of the DAW's fader positions and springs the motor back to that
 model on touch release. Every fader move received from the console must
-therefore be echoed back to it (Pro Tools behaves the same way) — the surface
+therefore be echoed back to it (Pro Tools behaves the same way) - the surface
 passes `ignoresurf=NULL` so its own `SetSurfaceVolume` runs for its own moves.
 
-**Shutdown:** HUI has no "goodbye" message — the console flags DAW Off-line by
+**Shutdown:** HUI has no "goodbye" message - the console flags DAW Off-line by
 itself ~2 s after the ping echo stops. On close the DLL drives all faders to
 −∞ (wire value 0), then clears meters, LEDs, pan rings, and scribble strips.
 
 **Switch matrix (DM2000 → host):**
 All button activity arrives as a two-message pair:
 ```
-B0  0F  zone  — zone select (sets current zone for this port)
-B0  2F  vv    — value: bits 0–3 = switch number, bit 6 = press (0x40), 0 = release
+B0  0F  zone  - zone select (sets current zone for this port)
+B0  2F  vv    - value: bits 0–3 = switch number, bit 6 = press (0x40), 0 = release
 ```
 
 Zone assignments:
@@ -103,18 +106,18 @@ Zone assignments:
 **Pan v-pots (DM2000 → host):**
 Relative deltas, NOT switch-matrix messages:
 ```
-B0  40+ch vv  — bits 0–5 = amount, bit 6 set = clockwise (pan right)
+B0  40+ch vv  - bits 0–5 = amount, bit 6 set = clockwise (pan right)
 ```
 
 **Pan feedback (host → DM2000):**
 ```
-B0  10+ch vv  — LED ring position 1–11
+B0  10+ch vv  - LED ring position 1–11
 ```
 
 **Jog/scrub wheel (DM2000 → host):**
 Direct CC, NOT a switch-matrix zone:
 ```
-B0  0D  vv    — bits 0–5 = speed (1–6 observed), bit 6 SET = forward (hardware-verified)
+B0  0D  vv    - bits 0–5 = speed (1–6 observed), bit 6 SET = forward (hardware-verified)
 ```
 Three modes, selected by the SCRUB/SHUTTLE keys (zone 0x0D sw 5/6, LEDs driven,
 mutually exclusive): default jog = `MoveEditCursor(speed * ±0.1s)`; SHUTTLE =
@@ -126,8 +129,8 @@ toggles the cursor arrows between scroll and zoom (`CSurf_OnArrow`).
 **Switch/LED feedback (host → DM2000):**
 LEDs use a different CC pair to avoid confusion with the incoming zone-select:
 ```
-B0  0C  target  — target select (0–7 = channel strip, 0x0E = transport row)
-B0  2C  vv      — value: bits 0–3 = switch number, bit 6 = on (0x40), 0 = off
+B0  0C  target  - target select (0–7 = channel strip, 0x0E = transport row)
+B0  2C  vv      - value: bits 0–3 = switch number, bit 6 = on (0x40), 0 = off
 ```
 
 Channel LEDs (switch numbers): 1=SELECT, 2=MUTE, 3=SOLO, 7=REC/RDY
@@ -136,7 +139,7 @@ Transport LEDs (target 0x0E, switch numbers): 3=STOP, 4=PLAY, 5=REC
 **HUI meter (host → DM2000):**
 Polyphonic key pressure, one message per meter side:
 ```
-A0  ch  vv    — ch = strip 0–7; vv: high nibble = side (0=L, 1=R), low nibble = level
+A0  ch  vv    - ch = strip 0–7; vv: high nibble = side (0=L, 1=R), low nibble = level
 ```
 Signal levels use segments 0x00–0x0B (≈ –60..0 dB). **The DM2000's red OVER
 segment is level 0x0C** and it is sent only when the peak is **strictly above**
@@ -145,7 +148,7 @@ for hot-but-legal signals lit the red ~2.5 dB early, and the HUI docs' "0x0E =
 clip" code is **ignored by the DM2000** (red never lit while clipping). Polled
 every 100ms in `Run()`, with a 3-cycle peak hold (max of the last 3 polls) to
 keep steady signals from flickering.
-(An earlier draft described a `B0 0D / B0 2D` CC pair — refuted: 0x0D is the jog
+(An earlier draft described a `B0 0D / B0 2D` CC pair - refuted: 0x0D is the jog
 wheel CC, and HUI metering is poly pressure. If hardware testing shows no meter
 movement, capture what Pro Tools sends to the console and adjust.)
 
@@ -164,21 +167,28 @@ F0 43 1n 3E 06  tt ee pp cc  DD...DD  F7
 - `tt` = data type (01=edit buffer, 02=patch, 03=setup, 04=backup, 10=function call,
   20=key remote, 21=remote meter, 22=remote time counter, 23=automix status)
 - `ee` = element no. (expands to two bytes when 0), `pp` = parameter no., `cc` = channel no.
-- **13.4.5 (p. 379): "Consult your dealer for parameter address details."** — the
+- **13.4.5 (p. 379): "Consult your dealer for parameter address details."** - the
   edit-buffer element/parameter numbers are NOT published by Yamaha.
 
 **Keepalive observed on port 8:**
-`F0 43 17 3E 06 7F F7` — DM2000 sends this ~1/sec. No response required.
+`F0 43 17 3E 06 7F F7` - DM2000 sends this ~1/sec. No response required.
 
-**Channel names via SysEx: NOT documented (verified 2026-06-12).**
-The manual's Appendix C (pp. 369–385) contains **no channel-name message**. The only
-title-setting SysEx is the Function-call "title" message (13.4.15, p. 381,
-`F0 43 1n 3E 7F 10 4f mh ml <16 bytes> F7`), which renames LIBRARY entries
-(scene/EQ/channel-library slots), not mixing channels. Channel names presumably
-live at unpublished edit-buffer addresses (see 13.4.5 above) or inside opaque
-bulk-dump payloads. **Path forward:** capture what Studio Manager sends when
-renaming a channel (MIDI-OX on the DM2000 USB ports), then replay that format.
-Manual: `https://jp.yamaha.com/files/download/other_assets/7/334227/dm2000v2_en_om_g0.pdf`
+**Channel names via SysEx: CAPTURED 2026-06-12 via loopMIDI + Studio Manager.**
+Studio Manager sends one 14-byte message per character:
+```
+F0 43 17 3E 06 02 04 [pos] [ch] 00 00 00 [ASCII] F7
+```
+- type=0x02, element=0x04 = channel input name
+- pos = character index (0–3 confirmed; 0–7 tried in implementation)
+- ch = channel 0-indexed (0=ch1 .. 23=ch24)
+- data = 4-byte Yamaha 7-bit encoding; last byte is the ASCII code (others 0x00)
+
+Studio Manager used pos=0..3 (4-char names matching HUI); whether the DM2000
+scribble strip displays more than 4 characters when pos=4..7 is sent requires
+hardware testing - the implementation sends all 8 positions.
+
+Also captured: Studio Manager's Remote Meter subscription request (sent to port 8):
+`F0 43 37 3E 06 21 00 [sub] 00 00 18 F7` (sub=0x00 current, sub=0x05 peak; 0x18=24 channels)
 
 **Meter bridge:**
 Bulk Dump types 32–34 = Key Remote, Remote Meter, Remote Counter.
@@ -192,16 +202,16 @@ Allows REAPER marker positions to trigger DM2000 scene changes.
 
 ## Implementation layers
 
-### Layer 1 — HUI core (current focus)
+### Layer 1 - HUI core
 
-**Status: in progress**
+**Status: complete**
 
 Files: `Source\jmde\csurf\csurf_dm2000.cpp`
 
 Tasks:
-- [x] Skeleton: class registration, 3-port MIDI open/close, Run() loop
+- [x] Skeleton: class registration, 4-port MIDI open/close, Run() loop
 - [x] HUI ping response (`90 00 7F` echo)
-- [x] Config dialog: single "starting port" dropdown (consecutive ports)
+- [x] Config dialog: "starting port" dropdown (4 consecutive ports) + separate SysEx output port selector
 - [x] Fader touch detect: switch-matrix switch 0 sets touch state; fader CC pair (`B0 ch` / `B0 20+ch`) calls `CSurf_OnVolumeChange()`
 - [x] Fader feedback: implement `SetSurfaceVolume()` to send fader position to surface
 - [x] Mute buttons: channel zone switch 2, call `CSurf_OnMuteChange()`
@@ -210,6 +220,7 @@ Tasks:
 - [x] Rec-arm buttons: channel zone switch 7
 - [x] Transport: play/stop/record/rewind/forward
 - [x] Bank switching: left/right arrows to shift which 24 tracks are visible
+- [x] Automation modes: AUTOMIX section (zone 0x18, 7 buttons) mapped to REAPER global automation override; LED feedback on all 3 HUI ports
 
 **Test criteria for Layer 1:**
 - Move fader on DM2000 → REAPER track volume changes
@@ -219,7 +230,7 @@ Tasks:
 - Play/stop from DM2000 transport → REAPER responds
 - All 24 channels accessible via bank switching
 
-### Layer 2 — Channel strip feedback
+### Layer 2 - Channel strip feedback
 
 Tasks:
 - [x] VU meters on channel strips via HUI meter messages (100ms poll of `Track_GetPeakInfo()`, –60..0 dB → 0x00–0x0C, 0x0E clip)
@@ -233,15 +244,14 @@ Tasks:
 - Play audio → DM2000 channel strip meters move
 - Pan knob on DM2000 → REAPER pan changes and vice versa
 
-### Layer 3 — Native SysEx extensions
+### Layer 3 - Native SysEx extensions
 
 Tasks:
-- [ ] Full track names (up to 8 chars) via Yamaha SysEx to scribble strips
-  - **BLOCKED:** channel-name addresses are unpublished (manual 13.4.5: "consult
-    your dealer"); requires sniffing Studio Manager rename traffic first — see
-    "Channel names via SysEx" in the protocol section. Port-8 output and
-    `SendSysEx()` are already in place.
-- [ ] Meter bridge (top LED array) via SysEx bulk meter messages
+- [x] Full track names via Yamaha SysEx to scribble strips
+  - Format captured 2026-06-12 (see "Channel names via SysEx" in protocol section)
+  - Implemented in `SendTrackTitle()`: sends pos=0..7 on port 8 alongside HUI 4-char names
+  - Hardware test result: display shows 4 chars only - scribble strip is physically 4-char wide in DAW mode; native SysEx updates console memory but HUI controls the visible strip
+- [x] Meter bridge - already driven by HUI `A0 ch (side<<4)|level` messages (Layer 2); the DM2000 has no separate channel-strip VU display, so HUI meters ARE the meter bridge. No native SysEx needed.
 - [ ] Scene recall: map REAPER markers → DM2000 scenes via SysEx
 
 **Test criteria for Layer 3:**
@@ -249,7 +259,7 @@ Tasks:
 - DM2000 scene button triggers REAPER marker jump and vice versa
 - Meter bridge shows signal during playback
 
-### Layer 4 — Extended features (future)
+### Layer 4 - Extended features (future)
 
 - EQ parameter control via selected channel knobs
 - Dynamics (compressor/gate) parameter control
@@ -263,7 +273,7 @@ Tasks:
 ## REAPER API reference (key calls)
 
 ```cpp
-// Called by REAPER when track volume changes — update surface
+// Called by REAPER when track volume changes - update surface
 void SetSurfaceVolume(MediaTrack *trackid, double volume);
 
 // Called by REAPER when track pan changes
@@ -307,10 +317,11 @@ int val14 = (int)(DB2SLIDER(VAL2DB(vol)) * 16383.0 / 1000.0 + 0.5);
 
 ## Config string format
 
-Stored as: `in1 out1 in2 out2 in3 out3` (6 integers, MIDI device indices, -1=none)
+Stored as: `in1 out1 in2 out2 in3 out3 in4 out4 sysex_out` (9 integers, MIDI device indices, -1=none)
 
-The UI simplification: one "starting port" dropdown. If user selects port N:
-- in1=N, out1=N, in2=N+1, out2=N+1, in3=N+2, out3=N+2
+The UI has two controls:
+- "Starting port" dropdown: selects 4 consecutive HUI port pairs. If user selects port N: in1=N, out1=N, in2=N+1, out2=N+1, in3=N+2, out3=N+2, in4=N+3, out4=N+3
+- "SysEx output" dropdown: selects the MIDI output for native Yamaha SysEx (USB port 8 of the DM2000). Stored as sysex_out. Defaults to None (-1). Older config strings with 8 values parse fine; sysex_out defaults to -1.
 
 ---
 
@@ -319,13 +330,23 @@ The UI simplification: one "starting port" dropdown. If user selects port N:
 - DM2000 uses 4 consecutive HUI ports (hardware-verified; documentation previously said 3); port 4 channels (25–32) are opened and ping-echoed but their purpose on this console is not yet mapped
 - Fader taper is CALIBRATED and applied (see protocol section): the console's
   wire value saturates at the printed +5 mark, so REAPER volumes above +5 dB
-  all park the motor at +5 — a hardware limit of the DM2000's HUI value range,
+  all park the motor at +5 - a hardware limit of the DM2000's HUI value range,
   not a bug. (The first calibration capture's provisional table was superseded
   by the explicit mark-by-mark capture of 2026-06-12.)
-- HUI fader resolution: ~9-bit (512 steps), coarse below -20dB — by design, not a bug
-- Pro Tools target locks USB port 1 on the DM2000 — if port 1 is unavailable, check DM2000 SETUP
+- HUI fader resolution: ~9-bit (512 steps), coarse below -20dB - by design, not a bug
+- Pro Tools target locks USB port 1 on the DM2000 - if port 1 is unavailable, check DM2000 SETUP
 - REAPER must not have the DM2000 ports open as regular MIDI devices (disable in REAPER MIDI prefs)
-- DLL is locked by REAPER while running — always close REAPER before rebuilding
+- DLL is locked by REAPER while running - always close REAPER before rebuilding
+
+---
+
+## Known limitations
+
+- **Channels 25–32 (port 4) not mapped**: port 4 is opened and ping-echoed (keeps DM2000 online), but no channel-strip controls on port 4 are wired to REAPER tracks. The DM2000's physical layout for channels 25–32 is not yet determined (likely master bus / effects returns).
+- **macOS not supported**: the csurf DLL is Windows x64 only. A macOS port is planned.
+- **8-char scribble strip names not achievable**: hardware test confirms the display is 4-char wide in DAW mode. Native SysEx pos=4..7 updates console memory but is not visible.
+- **Scene recall not implemented**: SysEx format is a guess; requires a Studio Manager or front-panel capture to confirm addresses before implementing.
+- **Joystick / display knobs / dynamics knobs not implemented**: queued for Layer 4.
 
 ---
 
