@@ -62,28 +62,31 @@ static unsigned char panToChar(double pan)
 
 class CSurf_DM2000 : public IReaperControlSurface
 {
-    int m_midi_in_devs[3];
-    int m_midi_out_devs[3];
-    midi_Output *m_midiouts[3];
-    midi_Input *m_midiins[3];
+    int m_midi_in_devs[4];
+    int m_midi_out_devs[4];
+    midi_Output *m_midiouts[4];
+    midi_Input *m_midiins[4];
     midi_Output *m_midiout8;         // DM2000 USB port 8: native Yamaha SysEx (output only)
 
-    int m_zone[3];                   // last switch-matrix zone select (B0 0F zz) per port
-    unsigned char m_fader_msb[3][8]; // pending fader value MSB per port/channel
-    char m_fader_touch[24];
-    int m_vol_lastpos[24];
-    int m_pan_lastpos[24];
-    unsigned int m_pan_lasttouch[24];
-    unsigned char m_meter_lastlvl[24];
-    unsigned char m_meter_hist[24][2][3]; // per-channel/side level history: peak hold over 3 polls
+    int m_zone[4];                   // last switch-matrix zone select (B0 0F zz) per port
+    unsigned char m_fader_msb[4][8]; // pending fader value MSB per port/channel
+    char m_fader_touch[32];
+    int m_vol_lastpos[32];
+    int m_pan_lastpos[32];
+    unsigned int m_pan_lasttouch[32];
+    unsigned char m_meter_lastlvl[32];
+    unsigned char m_meter_hist[32][2][3]; // per-channel/side level history: peak hold over 3 polls
     int m_meter_histpos;
     DWORD m_meter_lastrun;
     int m_bank_offset;
     int m_wheel_mode;                // 0=jog (edit cursor), 1=scrub, 2=shuttle (coarse)
     bool m_arrow_zoom;               // ENTER toggles arrows between scroll and zoom
+    int m_held_arrow;                // -1=none, 0-3=CSurf_OnArrow direction being held
+    DWORD m_arrow_held_since;        // timestamp of the press that started the hold
+    DWORD m_arrow_last_repeat;       // timestamp of the last auto-repeat fire
 
 public:
-  CSurf_DM2000(int indev1, int outdev1, int indev2, int outdev2, int indev3, int outdev3, int *errStats)
+  CSurf_DM2000(int indev1, int outdev1, int indev2, int outdev2, int indev3, int outdev3, int indev4, int outdev4, int *errStats)
   {
     m_midi_in_devs[0] = indev1;
     m_midi_out_devs[0] = outdev1;
@@ -91,9 +94,11 @@ public:
     m_midi_out_devs[1] = outdev2;
     m_midi_in_devs[2] = indev3;
     m_midi_out_devs[2] = outdev3;
+    m_midi_in_devs[3] = indev4;
+    m_midi_out_devs[3] = outdev4;
 
     m_bank_offset = 0;
-    m_zone[0] = m_zone[1] = m_zone[2] = -1;
+    m_zone[0] = m_zone[1] = m_zone[2] = m_zone[3] = -1;
     memset(m_fader_msb, 0, sizeof(m_fader_msb));
     memset(m_fader_touch, 0, sizeof(m_fader_touch));
     memset(m_vol_lastpos, 0xff, sizeof(m_vol_lastpos));
@@ -105,8 +110,11 @@ public:
     m_meter_lastrun = 0;
     m_wheel_mode = 0;
     m_arrow_zoom = false;
+    m_held_arrow = -1;
+    m_arrow_held_since = 0;
+    m_arrow_last_repeat = 0;
 
-    for (int i = 0; i < 3; ++i)
+    for (int i = 0; i < 4; ++i)
     {
         m_midiins[i] = m_midi_in_devs[i] >= 0 ? CreateMIDIInput(m_midi_in_devs[i]) : NULL;
         m_midiouts[i] = m_midi_out_devs[i] >= 0 ? CreateThreadedMIDIOutput(CreateMIDIOutput(m_midi_out_devs[i], false, NULL)) : NULL;
@@ -139,7 +147,7 @@ public:
   const char *GetConfigString() // string of configuration data
   {
     static char configtmp[512];
-    sprintf(configtmp, "%d %d %d %d %d %d", m_midi_in_devs[0], m_midi_out_devs[0], m_midi_in_devs[1], m_midi_out_devs[1], m_midi_in_devs[2], m_midi_out_devs[2]);
+    sprintf(configtmp, "%d %d %d %d %d %d %d %d", m_midi_in_devs[0], m_midi_out_devs[0], m_midi_in_devs[1], m_midi_out_devs[1], m_midi_in_devs[2], m_midi_out_devs[2], m_midi_in_devs[3], m_midi_out_devs[3]);
     return configtmp;
   }
 
@@ -149,7 +157,7 @@ public:
       // once the ping echo stops -- but clear our state so the remote layer does
       // not keep showing a frozen mix: meters off, LEDs off, pan rings cleared,
       // scribbles blanked, faders driven to -inf.
-      for (int i = 0; i < 24; ++i)
+      for (int i = 0; i < 32; ++i)
       {
           if (m_midiouts[i / 8])
           {
@@ -175,7 +183,7 @@ public:
       // driver hasn't drained yet, leaving stale state on the console
       Sleep(200);
 
-      for (int i = 0; i < 3; ++i)
+      for (int i = 0; i < 4; ++i)
       {
           delete m_midiouts[i];
           delete m_midiins[i];
@@ -188,7 +196,7 @@ public:
 
   void Run()
   {
-      for (int i = 0; i < 3; ++i)
+      for (int i = 0; i < 4; ++i)
       {
           if (m_midiins[i])
           {
@@ -201,11 +209,22 @@ public:
       }
 
       DWORD now = timeGetTime();
+
+      // arrow auto-repeat: fire after 400ms hold, then every 80ms
+      if (m_held_arrow >= 0 && now - m_arrow_held_since > 400)
+      {
+          if (now - m_arrow_last_repeat > 80)
+          {
+              CSurf_OnArrow(m_held_arrow, m_arrow_zoom);
+              m_arrow_last_repeat = now;
+          }
+      }
+
       if (now - m_meter_lastrun >= 100) // unsigned diff also handles timer wrap
       {
           m_meter_lastrun = now;
           m_meter_histpos = (m_meter_histpos + 1) % 3;
-          for (int i = 0; i < 24; ++i)
+          for (int i = 0; i < 32; ++i)
           {
               if (!m_midiouts[i / 8]) continue;
 
@@ -242,13 +261,13 @@ public:
   void SetTrackListChange()
   {
       // blank scribble strips on surface channels that no longer map to a track
-      for (int i = 0; i < 24; ++i)
+      for (int i = 0; i < 32; ++i)
           if (!TrackFromCh(i)) SendTrackTitle(i, "");
   }
   void SetSurfaceVolume(MediaTrack *trackid, double volume)
   {
       int id = CSurf_TrackToID(trackid, false) - 1 - m_bank_offset;
-      if (id < 0 || id >= 24 || !m_midiouts[id / 8]) return;
+      if (id < 0 || id >= 32 || !m_midiouts[id / 8]) return;
 
       int volint = volToInt14(volume);
       if (m_vol_lastpos[id] != volint)
@@ -262,7 +281,7 @@ public:
   void SetSurfacePan(MediaTrack *trackid, double pan)
   {
       int id = CSurf_TrackToID(trackid, false) - 1 - m_bank_offset;
-      if (id < 0 || id >= 24 || !m_midiouts[id / 8]) return;
+      if (id < 0 || id >= 32 || !m_midiouts[id / 8]) return;
 
       unsigned char panch = panToChar(pan);
       if (m_pan_lastpos[id] != panch)
@@ -273,19 +292,23 @@ public:
   }
   void SetSurfaceMute(MediaTrack *trackid, bool mute)
   {
-      SendChannelLED(CSurf_TrackToID(trackid, false) - 1 - m_bank_offset, 2, mute);
+      int id = CSurf_TrackToID(trackid, false) - 1 - m_bank_offset;
+      if (id >= 0 && id < 32) SendChannelLED(id, 2, mute);
   }
   void SetSurfaceSelected(MediaTrack *trackid, bool selected)
   {
-      SendChannelLED(CSurf_TrackToID(trackid, false) - 1 - m_bank_offset, 1, selected);
+      int id = CSurf_TrackToID(trackid, false) - 1 - m_bank_offset;
+      if (id >= 0 && id < 32) SendChannelLED(id, 1, selected);
   }
   void SetSurfaceSolo(MediaTrack *trackid, bool solo)
   {
-      SendChannelLED(CSurf_TrackToID(trackid, false) - 1 - m_bank_offset, 3, solo);
+      int id = CSurf_TrackToID(trackid, false) - 1 - m_bank_offset;
+      if (id >= 0 && id < 32) SendChannelLED(id, 3, solo);
   }
   void SetSurfaceRecArm(MediaTrack *trackid, bool recarm)
   {
-      SendChannelLED(CSurf_TrackToID(trackid, false) - 1 - m_bank_offset, 7, recarm);
+      int id = CSurf_TrackToID(trackid, false) - 1 - m_bank_offset;
+      if (id >= 0 && id < 32) SendChannelLED(id, 7, recarm);
   }
   void SetPlayState(bool play, bool pause, bool rec)
   {
@@ -302,7 +325,7 @@ public:
   bool GetTouchState(MediaTrack *trackid, int isPan)
   {
       int id = CSurf_TrackToID(trackid, false) - 1 - m_bank_offset;
-      if (id < 0 || id >= 24) return false;
+      if (id < 0 || id >= 32) return false;
       if (isPan == 1)
       {
           DWORD now = timeGetTime();
@@ -332,7 +355,7 @@ private:
     // F0 00 00 66 05 00 10 <ch> <4 chars> F7
     void SendTrackTitle(int id, const char *title)
     {
-        if (id < 0 || id >= 24 || !m_midiouts[id / 8]) return;
+        if (id < 0 || id >= 32 || !m_midiouts[id / 8]) return;
 
         int len = title ? (int)strlen(title) : 0;
 
@@ -379,7 +402,7 @@ private:
     // host->surface switch LED: zone select on 0x0C, switch|state on 0x2C
     void SendChannelLED(int id, int sw, bool state)
     {
-        if (id < 0 || id >= 24 || !m_midiouts[id / 8]) return;
+        if (id < 0 || id >= 32 || !m_midiouts[id / 8]) return;
         m_midiouts[id / 8]->Send(0xB0, 0x0C, id & 7, -1);
         m_midiouts[id / 8]->Send(0xB0, 0x2C, (state ? 0x40 : 0x00) | sw, -1);
     }
@@ -511,14 +534,19 @@ private:
                 case 5: CSurf_OnRecord(); break;
             }
         }
+        else if (zone == 0x0D && !press && (sw == 4 || sw == 0 || sw == 1 || sw == 3))
+        {
+            m_held_arrow = -1;                   // arrow released: cancel auto-repeat
+        }
         else if (zone == 0x0D && press)          // cursor cluster + wheel-mode keys (hardware-verified)
         {
             switch (sw)
             {
-                case 4: CSurf_OnArrow(0, m_arrow_zoom); break; // up
-                case 0: CSurf_OnArrow(1, m_arrow_zoom); break; // down
-                case 1: CSurf_OnArrow(2, m_arrow_zoom); break; // left
-                case 3: CSurf_OnArrow(3, m_arrow_zoom); break; // right
+                // arrows: fire immediately and arm auto-repeat in Run()
+                case 4: CSurf_OnArrow(0, m_arrow_zoom); m_held_arrow = 0; m_arrow_held_since = timeGetTime(); break; // up
+                case 0: CSurf_OnArrow(1, m_arrow_zoom); m_held_arrow = 1; m_arrow_held_since = timeGetTime(); break; // down
+                case 1: CSurf_OnArrow(2, m_arrow_zoom); m_held_arrow = 2; m_arrow_held_since = timeGetTime(); break; // left
+                case 3: CSurf_OnArrow(3, m_arrow_zoom); m_held_arrow = 3; m_arrow_held_since = timeGetTime(); break; // right
                 case 2:                                        // INC -> next marker
                     SendMessage(g_hwnd, WM_COMMAND, ID_MARKER_NEXT, 0);
                     break;
@@ -555,6 +583,7 @@ private:
         if (offs == m_bank_offset) return;
 
         m_bank_offset = offs;
+        m_held_arrow = -1;
         memset(m_vol_lastpos, 0xff, sizeof(m_vol_lastpos));
         memset(m_pan_lastpos, 0xff, sizeof(m_pan_lastpos));
         memset(m_meter_lastlvl, 0xff, sizeof(m_meter_lastlvl));
@@ -565,7 +594,7 @@ private:
     }
 };
 
-static void parseParms(const char *str, int parms[6])
+static void parseParms(const char *str, int parms[8])
 {
     parms[0] = -1;
     parms[1] = -1;
@@ -573,12 +602,14 @@ static void parseParms(const char *str, int parms[6])
     parms[3] = -1;
     parms[4] = -1;
     parms[5] = -1;
+    parms[6] = -1;
+    parms[7] = -1;
 
     const char *p = str;
     if (p)
     {
         int x = 0;
-        while (x < 6)
+        while (x < 8)
         {
             while (*p == ' ') p++;
             if ((*p < '0' || *p > '9') && *p != '-') break;
@@ -590,10 +621,10 @@ static void parseParms(const char *str, int parms[6])
 
 static IReaperControlSurface *createFunc(const char *type_string, const char *configString, int *errStats)
 {
-    int parms[6];
+    int parms[8];
     parseParms(configString, parms);
 
-    return new CSurf_DM2000(parms[0], parms[1], parms[2], parms[3], parms[4], parms[5], errStats);
+    return new CSurf_DM2000(parms[0], parms[1], parms[2], parms[3], parms[4], parms[5], parms[6], parms[7], errStats);
 }
 
 static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -602,17 +633,17 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         case WM_INITDIALOG:
         {
-            int parms[6];
+            int parms[8];
             parseParms((const char *)lParam, parms);
 
             int n = GetNumMIDIInputs();
             int x = SendDlgItemMessage(hwndDlg, IDC_COMBO_PORTGROUP, CB_ADDSTRING, 0, (LPARAM)"None");
             SendDlgItemMessage(hwndDlg, IDC_COMBO_PORTGROUP, CB_SETITEMDATA, x, -1);
             SendDlgItemMessage(hwndDlg, IDC_COMBO_PORTGROUP, CB_SETCURSEL, x, 0);
-            for (int j = 0; j + 2 < n; ++j)
+            for (int j = 0; j + 3 < n; ++j)
             {
                 char first[256], last[256];
-                if (GetMIDIInputName(j, first, sizeof(first)) && GetMIDIInputName(j + 2, last, sizeof(last)))
+                if (GetMIDIInputName(j, first, sizeof(first)) && GetMIDIInputName(j + 3, last, sizeof(last)))
                 {
                     char buf[600];
                     sprintf(buf, "%s ... %s", first, last);
@@ -628,7 +659,7 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
             {
                 char tmp[512];
 
-                int indevs[3] = { -1, -1, -1 }, outdevs[3] = { -1, -1, -1 };
+                int indevs[4] = { -1, -1, -1, -1 }, outdevs[4] = { -1, -1, -1, -1 };
                 int start = -1;
                 int r = SendDlgItemMessage(hwndDlg, IDC_COMBO_PORTGROUP, CB_GETCURSEL, 0, 0);
                 if (r != CB_ERR) start = SendDlgItemMessage(hwndDlg, IDC_COMBO_PORTGROUP, CB_GETITEMDATA, r, 0);
@@ -654,14 +685,14 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                         }
                     }
 
-                    for (int i = 0; i < 3; ++i)
+                    for (int i = 0; i < 4; ++i)
                     {
                         indevs[i] = start + i;
                         outdevs[i] = outstart + i;
                     }
                 }
 
-                sprintf(tmp, "%d %d %d %d %d %d", indevs[0], outdevs[0], indevs[1], outdevs[1], indevs[2], outdevs[2]);
+                sprintf(tmp, "%d %d %d %d %d %d %d %d", indevs[0], outdevs[0], indevs[1], outdevs[1], indevs[2], outdevs[2], indevs[3], outdevs[3]);
                 lstrcpyn((char *)lParam, tmp, wParam);
             }
         break;
