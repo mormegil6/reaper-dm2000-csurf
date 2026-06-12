@@ -12,6 +12,10 @@
 #define IDC_EDIT1                       1007
 #define IDC_EDIT2                       1008
 #define IDC_COMBO_PORTGROUP             1010
+#define IDC_COMBO_SYSEX                 1011
+#define IDC_EDIT_INIPATH                1012
+#define IDC_BTN_OPENFOLDER              1013
+#define IDC_BTN_EDITFILE                1014
 #define IDC_EDIT1_LBL                   1276
 #define IDC_EDIT2_LBL                   1277
 #define IDC_EDIT2_LBL2                  1278
