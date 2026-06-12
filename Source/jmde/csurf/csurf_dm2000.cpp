@@ -1,4 +1,6 @@
 #include "csurf.h"
+#include <shellapi.h>
+#include <shlobj.h>
 
 // DM2000 fader taper, hardware-calibrated against the printed dB scale
 // (mark-by-mark MIDI-OX captures, 2026-06-12). Values are 14-bit (MSB<<7)|LSB
@@ -66,7 +68,8 @@ class CSurf_DM2000 : public IReaperControlSurface
     int m_midi_out_devs[4];
     midi_Output *m_midiouts[4];
     midi_Input *m_midiins[4];
-    midi_Output *m_midiout8;         // DM2000 USB port 8: native Yamaha SysEx (output only)
+    int m_midi_out_sysex_dev;
+    midi_Output *m_midiout8;         // DM2000 native SysEx output (user-configured, typically USB port 8)
 
     int m_zone[4];                   // last switch-matrix zone select (B0 0F zz) per port
     unsigned char m_fader_msb[4][8]; // pending fader value MSB per port/channel
@@ -81,12 +84,13 @@ class CSurf_DM2000 : public IReaperControlSurface
     int m_bank_offset;
     int m_wheel_mode;                // 0=jog (edit cursor), 1=scrub, 2=shuttle (coarse)
     bool m_arrow_zoom;               // ENTER toggles arrows between scroll and zoom
+    int m_auto_mode;                 // 0=trim/bypass, 1=read, 2=touch, 3=write, 4=latch, 5=latch preview
     int m_held_arrow;                // -1=none, 0-3=CSurf_OnArrow direction being held
     DWORD m_arrow_held_since;        // timestamp of the press that started the hold
     DWORD m_arrow_last_repeat;       // timestamp of the last auto-repeat fire
 
 public:
-  CSurf_DM2000(int indev1, int outdev1, int indev2, int outdev2, int indev3, int outdev3, int indev4, int outdev4, int *errStats)
+  CSurf_DM2000(int indev1, int outdev1, int indev2, int outdev2, int indev3, int outdev3, int indev4, int outdev4, int sysex_out_dev, int *errStats)
   {
     m_midi_in_devs[0] = indev1;
     m_midi_out_devs[0] = outdev1;
@@ -110,6 +114,7 @@ public:
     m_meter_lastrun = 0;
     m_wheel_mode = 0;
     m_arrow_zoom = false;
+    m_auto_mode  = 1;
     m_held_arrow = -1;
     m_arrow_held_since = 0;
     m_arrow_last_repeat = 0;
@@ -129,12 +134,9 @@ public:
             m_midiins[i]->start();
     }
 
-    // DM2000 USB port 8 carries native Yamaha SysEx regardless of the Remote Layer.
-    // With DAW = USB 1-3 (the documented setup) and the driver enumerating the 8
-    // ports consecutively, port 8's output index is the first DAW output + 7.
-    // Optional feature: failure to open is not reported in errStats.
-    m_midiout8 = m_midi_out_devs[0] >= 0
-        ? CreateThreadedMIDIOutput(CreateMIDIOutput(m_midi_out_devs[0] + 7, false, NULL)) : NULL;
+    m_midi_out_sysex_dev = sysex_out_dev;
+    m_midiout8 = sysex_out_dev >= 0
+        ? CreateThreadedMIDIOutput(CreateMIDIOutput(sysex_out_dev, false, NULL)) : NULL;
   }
 
   ~CSurf_DM2000()
@@ -147,7 +149,7 @@ public:
   const char *GetConfigString() // string of configuration data
   {
     static char configtmp[512];
-    sprintf(configtmp, "%d %d %d %d %d %d %d %d", m_midi_in_devs[0], m_midi_out_devs[0], m_midi_in_devs[1], m_midi_out_devs[1], m_midi_in_devs[2], m_midi_out_devs[2], m_midi_in_devs[3], m_midi_out_devs[3]);
+    sprintf(configtmp, "%d %d %d %d %d %d %d %d %d", m_midi_in_devs[0], m_midi_out_devs[0], m_midi_in_devs[1], m_midi_out_devs[1], m_midi_in_devs[2], m_midi_out_devs[2], m_midi_in_devs[3], m_midi_out_devs[3], m_midi_out_sysex_dev);
     return configtmp;
   }
 
@@ -334,7 +336,11 @@ public:
       }
       return !!m_fader_touch[id];
   }
-  void SetAutoMode(int mode) {}
+  void SetAutoMode(int mode)
+  {
+      m_auto_mode = mode;
+      SendAutomixLEDs(mode);
+  }
   void ResetCachedVolPanStates()
   {
       memset(m_vol_lastpos, 0xff, sizeof(m_vol_lastpos));
@@ -371,18 +377,20 @@ private:
         memcpy(msg->midi_message, sysex, sizeof(sysex));
         m_midiouts[id / 8]->SendMsg(msg, -1);
 
-        /* Layer 3 -- 8-char names via native Yamaha SysEx on port 8: BLOCKED, do not enable.
-        ** Verified against the DM2000V2 Owner's Manual (dm2000v2_en_om.pdf, MIDI Data Format,
-        ** physical p.379): parameter changes are F0 43 1n 3E 06 <tt ee pp cc> <data> F7
-        ** (data type / element / parameter / channel -- NOT the "UU UM UL" scheme this comment
-        ** previously described), and section 13.4.5 says only "Consult your dealer for
-        ** parameter address details" -- the edit-buffer addresses are unpublished, and no
-        ** channel-name message is documented anywhere in Appendix C (the Function-call
-        ** "title" message, p.381, renames LIBRARY entries, not mixing channels).
-        ** Blind data-type-01 writes would modify unknown edit-buffer parameters on the
-        ** console. To implement this, first capture what Studio Manager sends when renaming
-        ** a channel (MIDI-OX on the DM2000 USB ports), then encode that here via SendSysEx().
-        */
+        // Layer 3: native channel name on port 8, hardware-captured 2026-06-12.
+        // Studio Manager sends: F0 43 17 3E 06 02 04 [pos] [ch] 00 00 00 [ASCII] F7
+        // Studio Manager used pos=0..3; we send 0..7 to probe 8-char display support.
+        if (m_midiout8)
+        {
+            for (int pos = 0; pos < 8; ++pos)
+            {
+                unsigned char c = (pos < len) ? (title[pos] & 0x7F) : 0x20;
+                unsigned char buf[] = { 0xF0, 0x43, 0x17, 0x3E, 0x06, 0x02, 0x04,
+                                        (unsigned char)pos, (unsigned char)(id & 0x7F),
+                                        0x00, 0x00, 0x00, c, 0xF7 };
+                SendSysEx(buf, sizeof(buf));
+            }
+        }
     }
 
     // native Yamaha SysEx out on USB port 8 (Layer 3 features: 8-char names,
@@ -417,13 +425,38 @@ private:
 
     void SendTransportLED(int sw, bool state) { SendGlobalLED(0x0E, sw, state); }
 
+    // light the one AUTOMIX button for the current mode; zone 0x18 is broadcast on all 3 ports
+    void SendAutomixLEDs(int mode)
+    {
+        // sw: 5=enable/bypass, 7=return/read, 3=touch, 1=rec/write, 2=auto-rec/latch, 6=relative/latchpreview
+        int litsw = -1;
+        switch (mode)
+        {
+            case 0: litsw = 5; break;
+            case 1: litsw = 7; break;
+            case 2: litsw = 3; break;
+            case 3: litsw = 1; break;
+            case 4: litsw = 2; break;
+            case 5: litsw = 6; break;
+        }
+        for (int p = 0; p < 3; ++p)
+        {
+            if (!m_midiouts[p]) continue;
+            for (int s = 0; s < 8; ++s)
+            {
+                m_midiouts[p]->Send(0xB0, 0x0C, 0x18, -1);
+                m_midiouts[p]->Send(0xB0, 0x2C, (s == litsw ? 0x40 : 0x00) | s, -1);
+            }
+        }
+    }
+
     void OnMIDIEvent(MIDI_event_t *evt, int port)
     {
         unsigned char status = evt->midi_message[0] & 0xF0;
         unsigned char data1  = evt->midi_message[1];
         unsigned char data2  = evt->midi_message[2];
 
-        // HUI keepalive ping — must echo back or surface goes offline
+        // HUI keepalive ping - must echo back or surface goes offline
         if (status == 0x90 && data1 == 0x00 && data2 == 0x7F)
         {
             if (m_midiouts[port])
@@ -570,6 +603,27 @@ private:
         {
             m_arrow_zoom = !m_arrow_zoom;
         }
+        else if (zone == 0x18 && press && port == 0) // AUTOMIX -- fires on all 3 ports; deduplicate via port 0
+        {
+            int newMode = -1;
+            switch (sw)
+            {
+                case 5: newMode = (m_auto_mode == 0) ? 1 : 0; break; // enable: toggle trim <-> read
+                case 7: newMode = 1; break; // return -> read
+                case 3: newMode = 2; break; // touch sense -> touch
+                case 1: newMode = 3; break; // rec -> write
+                case 2: newMode = 4; break; // auto-rec -> latch
+                case 6: newMode = 5; break; // relative -> latch preview
+                case 0: SendMessage(g_hwnd, WM_COMMAND, IDC_EDIT_UNDO, 0); break; // abort/undo -> undo
+                // case 4 (display): no-op
+            }
+            if (newMode >= 0)
+            {
+                CSurf_SetAutoMode(newMode, this); // sets REAPER mode, notifies other surfaces (not us)
+                m_auto_mode = newMode;
+                SendAutomixLEDs(newMode);
+            }
+        }
     }
 
     void AdjustBankOffset(int amt)
@@ -594,22 +648,31 @@ private:
     }
 };
 
-static void parseParms(const char *str, int parms[8])
+static void GetIniPath(char *buf, int bufsz)
 {
-    parms[0] = -1;
-    parms[1] = -1;
-    parms[2] = -1;
-    parms[3] = -1;
-    parms[4] = -1;
-    parms[5] = -1;
-    parms[6] = -1;
-    parms[7] = -1;
+    // prefer REAPER's own GetResourcePath (not in the csurf SDK headers, so look it up at runtime)
+    typedef const char *(*GRP_t)();
+    HMODULE hReaper = GetModuleHandleA("reaper.exe");
+    GRP_t fn = hReaper ? (GRP_t)GetProcAddress(hReaper, "GetResourcePath") : NULL;
+    if (fn)
+        sprintf_s(buf, bufsz, "%s\\dm2000_keys.ini", fn());
+    else
+    {
+        char appdata[MAX_PATH] = "";
+        SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, appdata);
+        sprintf_s(buf, bufsz, "%s\\REAPER\\dm2000_keys.ini", appdata);
+    }
+}
+
+static void parseParms(const char *str, int parms[9])
+{
+    for (int i = 0; i < 9; ++i) parms[i] = -1;
 
     const char *p = str;
     if (p)
     {
         int x = 0;
-        while (x < 8)
+        while (x < 9)
         {
             while (*p == ' ') p++;
             if ((*p < '0' || *p > '9') && *p != '-') break;
@@ -621,10 +684,10 @@ static void parseParms(const char *str, int parms[8])
 
 static IReaperControlSurface *createFunc(const char *type_string, const char *configString, int *errStats)
 {
-    int parms[8];
+    int parms[9];
     parseParms(configString, parms);
 
-    return new CSurf_DM2000(parms[0], parms[1], parms[2], parms[3], parms[4], parms[5], parms[6], parms[7], errStats);
+    return new CSurf_DM2000(parms[0], parms[1], parms[2], parms[3], parms[4], parms[5], parms[6], parms[7], parms[8], errStats);
 }
 
 static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -633,9 +696,10 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         case WM_INITDIALOG:
         {
-            int parms[8];
+            int parms[9];
             parseParms((const char *)lParam, parms);
 
+            // port group combo: consecutive 4-port groups from MIDI inputs
             int n = GetNumMIDIInputs();
             int x = SendDlgItemMessage(hwndDlg, IDC_COMBO_PORTGROUP, CB_ADDSTRING, 0, (LPARAM)"None");
             SendDlgItemMessage(hwndDlg, IDC_COMBO_PORTGROUP, CB_SETITEMDATA, x, -1);
@@ -651,6 +715,62 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                     SendDlgItemMessage(hwndDlg, IDC_COMBO_PORTGROUP, CB_SETITEMDATA, a, j);
                     if (j == parms[0]) SendDlgItemMessage(hwndDlg, IDC_COMBO_PORTGROUP, CB_SETCURSEL, a, 0);
                 }
+            }
+
+            // SysEx output combo: all MIDI outputs, None = -1
+            int nout = GetNumMIDIOutputs();
+            int y = SendDlgItemMessage(hwndDlg, IDC_COMBO_SYSEX, CB_ADDSTRING, 0, (LPARAM)"None");
+            SendDlgItemMessage(hwndDlg, IDC_COMBO_SYSEX, CB_SETITEMDATA, y, -1);
+            SendDlgItemMessage(hwndDlg, IDC_COMBO_SYSEX, CB_SETCURSEL, y, 0);
+            for (int j = 0; j < nout; ++j)
+            {
+                char name[256];
+                if (GetMIDIOutputName(j, name, sizeof(name)))
+                {
+                    int a = SendDlgItemMessage(hwndDlg, IDC_COMBO_SYSEX, CB_ADDSTRING, 0, (LPARAM)name);
+                    SendDlgItemMessage(hwndDlg, IDC_COMBO_SYSEX, CB_SETITEMDATA, a, j);
+                    if (j == parms[8]) SendDlgItemMessage(hwndDlg, IDC_COMBO_SYSEX, CB_SETCURSEL, a, 0);
+                }
+            }
+
+            // keys file path
+            char iniPath[MAX_PATH];
+            GetIniPath(iniPath, sizeof(iniPath));
+            SetDlgItemTextA(hwndDlg, IDC_EDIT_INIPATH, iniPath);
+        }
+        break;
+        case WM_COMMAND:
+        {
+            int id = LOWORD(wParam);
+            if (id == IDC_BTN_OPENFOLDER)
+            {
+                char iniPath[MAX_PATH];
+                GetIniPath(iniPath, sizeof(iniPath));
+                // open the containing folder in Explorer
+                char folder[MAX_PATH];
+                strcpy_s(folder, sizeof(folder), iniPath);
+                char *sep = strrchr(folder, '\\');
+                if (sep) *sep = '\0';
+                ShellExecuteA(hwndDlg, "explore", folder, NULL, NULL, SW_SHOWNORMAL);
+            }
+            else if (id == IDC_BTN_EDITFILE)
+            {
+                char iniPath[MAX_PATH];
+                GetIniPath(iniPath, sizeof(iniPath));
+                // create with default content if missing
+                FILE *f;
+                if (fopen_s(&f, iniPath, "r") != 0 || !f)
+                {
+                    if (fopen_s(&f, iniPath, "w") == 0 && f)
+                    {
+                        fputs("; dm2000_keys.ini - USER DEFINED KEYS mapping\n"
+                              "; One entry per key: <zone_hex>_<sw> = <reaper_action_id>\n"
+                              "; Example: 13_0 = 40029\n", f);
+                        fclose(f);
+                    }
+                }
+                else fclose(f);
+                ShellExecuteA(hwndDlg, "open", iniPath, NULL, NULL, SW_SHOWNORMAL);
             }
         }
         break;
@@ -692,7 +812,11 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                     }
                 }
 
-                sprintf(tmp, "%d %d %d %d %d %d %d %d", indevs[0], outdevs[0], indevs[1], outdevs[1], indevs[2], outdevs[2], indevs[3], outdevs[3]);
+                int sysex_out = -1;
+                int rs = SendDlgItemMessage(hwndDlg, IDC_COMBO_SYSEX, CB_GETCURSEL, 0, 0);
+                if (rs != CB_ERR) sysex_out = SendDlgItemMessage(hwndDlg, IDC_COMBO_SYSEX, CB_GETITEMDATA, rs, 0);
+
+                sprintf(tmp, "%d %d %d %d %d %d %d %d %d", indevs[0], outdevs[0], indevs[1], outdevs[1], indevs[2], outdevs[2], indevs[3], outdevs[3], sysex_out);
                 lstrcpyn((char *)lParam, tmp, wParam);
             }
         break;

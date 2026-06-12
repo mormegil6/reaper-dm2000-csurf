@@ -93,15 +93,23 @@ BEGIN
                     BS_AUTOCHECKBOX | WS_TABSTOP,4,78,102,10
 END
 
-IDD_SURFACEEDIT_DM2000 DIALOG DISCARDABLE  0, 0, 268, 42
+IDD_SURFACEEDIT_DM2000 DIALOG DISCARDABLE  0, 0, 268, 100
 STYLE DS_CENTER | WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
     RTEXT           "Starting port:",IDC_STATIC,15,6,64,8
     COMBOBOX        IDC_COMBO_PORTGROUP,81,4,181,105,CBS_DROPDOWNLIST | WS_VSCROLL |
                     WS_TABSTOP
-    LTEXT           "Uses the selected MIDI port plus the next two. Must match the 3 consecutive USB ports set in DM2000 SETUP > MIDI/HOST > DAW.",
-                    IDC_STATIC,15,21,247,18
+    RTEXT           "SysEx output:",IDC_STATIC,15,24,64,8
+    COMBOBOX        IDC_COMBO_SYSEX,81,22,181,105,CBS_DROPDOWNLIST | WS_VSCROLL |
+                    WS_TABSTOP
+    LTEXT           "HUI: 4 consecutive ports from selection. SysEx: USB port 8 of the DM2000 (optional, for channel names).",
+                    IDC_STATIC,15,40,247,14
+    RTEXT           "Keys file:",IDC_STATIC,15,62,64,8
+    EDITTEXT        IDC_EDIT_INIPATH,81,60,181,12,ES_READONLY | ES_AUTOHSCROLL
+    PUSHBUTTON      "Open folder",IDC_BTN_OPENFOLDER,81,75,58,12
+    PUSHBUTTON      "Edit",IDC_BTN_EDITFILE,143,75,36,12
+    CTEXT           "Yamaha DM2000 csurf v0.1 - bmroz.eu/projects/dm2000-csurf",IDC_STATIC,15,90,247,8
 END
 
 /////////////////////////////////////////////////////////////////////////////
