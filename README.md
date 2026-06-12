@@ -23,7 +23,7 @@ reference, layer plan, and task tracking.
   MIDI port pairs)
 - Console setup:
   - Remote Layer target: **Pro Tools**
-  - `SETUP → MIDI/HOST SETUP → DAW = USB 1–3`
+  - `SETUP → MIDI/HOST SETUP → DAW = USB 1–4`
 - Windows x64, REAPER 6 or later
 - Note: "DAW Off-line" on the DM2000 display is normal until REAPER is running
   with the surface configured (the DLL answers the console's keepalive ping)
@@ -62,8 +62,8 @@ setup (attaching to reaper.exe, breakpoints, etc.).
 2. `Preferences → Control/OSC/web → Add → "Yamaha DM2000"`.
 3. In the surface settings, pick the **starting port** group — with the
    default console setup that is the entry reading
-   `Yamaha DM2000-1 ... Yamaha DM2000-3`. The DLL uses the selected port plus
-   the next two (matching `DAW = USB 1–3` on the console), and locates the
+   `Yamaha DM2000-1 ... Yamaha DM2000-4`. The DLL uses the selected port plus
+   the next three (matching `DAW = USB 1–4` on the console), and locates the
    matching output ports by name.
 4. OK, then restart REAPER if the DLL was just rebuilt.
 
