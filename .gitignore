@@ -1,0 +1,10 @@
+.aider*
+
+# build artifacts
+x64/
+.vs/
+*.user
+*.dll
+*.pdb
+*.aps
+Builds/VisualStudio2019/reaper_csurf/

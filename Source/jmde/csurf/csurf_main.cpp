@@ -8,7 +8,7 @@
 #include "csurf.h"
 
 extern reaper_csurf_reg_t csurf_bcf_reg,csurf_faderport_reg,csurf_hui_reg,
-     csurf_mcu_reg,csurf_mcuex_reg,csurf_tranzport_reg,csurf_alphatrack_reg,csurf_01X_reg;
+     csurf_mcu_reg,csurf_mcuex_reg,csurf_tranzport_reg,csurf_alphatrack_reg,csurf_01X_reg,csurf_dm2000_reg;
 
 REAPER_PLUGIN_HINSTANCE g_hInst; // used for dialogs, if any
 HWND g_hwnd;
@@ -239,6 +239,7 @@ REAPER_PLUGIN_DLL_EXPORT int REAPER_PLUGIN_ENTRYPOINT(REAPER_PLUGIN_HINSTANCE hI
   rec->Register("csurf",&csurf_tranzport_reg);
   rec->Register("csurf",&csurf_alphatrack_reg);
   rec->Register("csurf",&csurf_01X_reg);
+  rec->Register("csurf",&csurf_dm2000_reg);
 
   return 1;
 
