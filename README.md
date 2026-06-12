@@ -56,18 +56,15 @@ setup (attaching to reaper.exe, breakpoints, etc.).
 
 ## REAPER configuration
 
-1. Disable the DM2000's MIDI ports as regular MIDI devices in
-   `Preferences → Audio → MIDI Devices` (the surface opens them itself;
-   conflicts cause erratic behavior).
-2. `Preferences → Control/OSC/web → Add → "Yamaha DM2000"`.
-3. In the surface settings, pick the **starting port** group - with the
+1. `Preferences → Control/OSC/web → Add → "Yamaha DM2000"`.
+2. In the surface settings, pick the **starting port** group - with the
    default console setup that is the entry reading
    `Yamaha DM2000-1 ... Yamaha DM2000-4`. The DLL opens 4 consecutive ports
    (matching `DAW = USB 1-4` on the console).
-4. Optionally select a **SysEx output** port - pick the DM2000's USB port 8
+3. Optionally select a **SysEx output** port - pick the DM2000's USB port 8
    output for native channel names on the scribble strips (shows up as
    `Yamaha DM2000-8` or similar in the dropdown). Leave as None if not needed.
-5. OK, then restart REAPER if the DLL was just rebuilt.
+4. OK, then restart REAPER if the DLL was just rebuilt.
 
 ## Feature status
 
