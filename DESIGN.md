@@ -102,12 +102,15 @@ B0  2C  vv      — value: bits 0–3 = switch number, bit 6 = on (0x40), 0 = of
 Channel LEDs (switch numbers): 1=SELECT, 2=MUTE, 3=SOLO, 7=REC/RDY
 Transport LEDs (target 0x0E, switch numbers): 3=STOP, 4=PLAY, 5=REC
 
-**HUI meter (host → DM2000, optional):**
-Sends signal level to channel strip LEDs:
+**HUI meter (host → DM2000):**
+Polyphonic key pressure, one message per meter side:
 ```
-B0  0D  cc    — channel select
-B0  2D  vv    — level (0x00–0x0C = signal levels, 0x0E = clip)
+A0  ch  vv    — ch = strip 0–7; vv: high nibble = side (0=L, 1=R), low nibble = level
 ```
+Levels 0x00–0x0C (≈ –60..0 dB), 0x0E = clip. Polled every 100ms in `Run()`.
+(An earlier draft described a `B0 0D / B0 2D` CC pair — refuted: 0x0D is the jog
+wheel CC, and HUI metering is poly pressure. If hardware testing shows no meter
+movement, capture what Pro Tools sends to the console and adjust.)
 
 ### Yamaha native SysEx (port 8)
 

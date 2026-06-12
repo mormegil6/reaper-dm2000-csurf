@@ -19,6 +19,17 @@ static int volToInt14(double vol)
     return (int)(d + 0.5);
 }
 
+static unsigned char peakToMeter(double pk)
+{
+    if (pk >= 1.0) return 0x0E; // clip
+
+    // map -60..0 dB onto meter levels 0x00..0x0C
+    int l = (int)((VAL2DB(pk) + 60.0) * (12.0 / 60.0) + 0.5);
+    if (l < 0) l = 0;
+    else if (l > 0x0C) l = 0x0C;
+    return (unsigned char)l;
+}
+
 static unsigned char panToChar(double pan)
 {
     pan = (pan + 1.0) * 63.5;
@@ -142,31 +153,22 @@ public:
           {
               if (!m_midiouts[i / 8]) continue;
 
-              // trackless channels fall through with lvl=0 so their meter clears
-              unsigned char lvl = 0;
+              // trackless channels fall through with level 0 so their meter clears
+              unsigned char lvlL = 0, lvlR = 0;
               MediaTrack *tr = TrackFromCh(i);
               if (tr)
               {
-                  double pk = Track_GetPeakInfo(tr, 0);
-                  double pk2 = Track_GetPeakInfo(tr, 1);
-                  if (pk2 > pk) pk = pk2;
-
-                  if (pk >= 1.0) lvl = 0x0E; // clip
-                  else
-                  {
-                      // map -60..0 dB onto meter levels 0x00..0x0C
-                      int l = (int)((VAL2DB(pk) + 60.0) * (12.0 / 60.0) + 0.5);
-                      if (l < 0) l = 0;
-                      else if (l > 0x0C) l = 0x0C;
-                      lvl = (unsigned char)l;
-                  }
+                  lvlL = peakToMeter(Track_GetPeakInfo(tr, 0));
+                  lvlR = peakToMeter(Track_GetPeakInfo(tr, 1));
               }
 
-              if (m_meter_lastlvl[i] != lvl)
+              unsigned char packed = (unsigned char)((lvlL << 4) | lvlR);
+              if (m_meter_lastlvl[i] != packed)
               {
-                  m_meter_lastlvl[i] = lvl;
-                  m_midiouts[i / 8]->Send(0xB0, 0x0D, i & 7, -1);
-                  m_midiouts[i / 8]->Send(0xB0, 0x2D, lvl, -1);
+                  m_meter_lastlvl[i] = packed;
+                  // HUI meters: poly key pressure, value = (side << 4) | level
+                  m_midiouts[i / 8]->Send(0xA0, i & 7, lvlL, -1);        // left
+                  m_midiouts[i / 8]->Send(0xA0, i & 7, 0x10 | lvlR, -1); // right
               }
           }
       }
