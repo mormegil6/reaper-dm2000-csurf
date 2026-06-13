@@ -317,11 +317,12 @@ int val14 = (int)(DB2SLIDER(VAL2DB(vol)) * 16383.0 / 1000.0 + 0.5);
 
 ## Config string format
 
-Stored as: `in1 out1 in2 out2 in3 out3 in4 out4 sysex_out` (9 integers, MIDI device indices, -1=none)
+Stored as: `in1 out1 in2 out2 in3 out3 in4 out4` (8 integers, MIDI device indices, -1=none)
 
-The UI has two controls:
+The UI has one control:
 - "Starting port" dropdown: selects 4 consecutive HUI port pairs. If user selects port N: in1=N, out1=N, in2=N+1, out2=N+1, in3=N+2, out3=N+2, in4=N+3, out4=N+3
-- "SysEx output" dropdown: selects the MIDI output for native Yamaha SysEx (USB port 8 of the DM2000). Stored as sysex_out. Defaults to None (-1). Older config strings with 8 values parse fine; sysex_out defaults to -1.
+
+Note: earlier versions stored a 9th value (sysex_out); it is now ignored on load. The SysEx port (m_midiout8) is reserved for scene recall (Layer 3) and will be re-exposed in the UI when that feature is implemented.
 
 ---
 
