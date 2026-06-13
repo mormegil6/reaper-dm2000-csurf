@@ -57,14 +57,12 @@ setup (attaching to reaper.exe, breakpoints, etc.).
 ## REAPER configuration
 
 1. `Preferences → Control/OSC/web → Add → "Yamaha DM2000"`.
-2. In the surface settings, pick the **starting port** group - with the
-   default console setup that is the entry reading
-   `Yamaha DM2000-1 ... Yamaha DM2000-4`. The DLL opens 4 consecutive ports
-   (matching `DAW = USB 1-4` on the console).
-3. Optionally select a **SysEx output** port - pick the DM2000's USB port 8
-   output for native channel names on the scribble strips (shows up as
-   `Yamaha DM2000-8` or similar in the dropdown). Leave as None if not needed.
-4. OK, then restart REAPER if the DLL was just rebuilt.
+2. In the surface settings, pick the **port group** - with the default console
+   setup that is the entry reading `Yamaha DM2000-1 ... Yamaha DM2000-4`.
+   The DLL opens 4 consecutive HUI ports from that selection.
+3. OK, then restart REAPER if the DLL was just rebuilt.
+
+![Config dialog](doc/config-dialog.png)
 
 ## Feature status
 
