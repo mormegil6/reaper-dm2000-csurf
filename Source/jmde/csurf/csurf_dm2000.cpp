@@ -798,6 +798,13 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 lstrcpyn((char *)lParam, tmp, wParam);
             }
         break;
+        case WM_CTLCOLOREDIT:
+            if (GetDlgCtrlID((HWND)lParam) == IDC_EDIT_INIPATH)
+            {
+                SetBkColor((HDC)wParam, RGB(255, 255, 255));
+                return (INT_PTR)GetStockObject(WHITE_BRUSH);
+            }
+        break;
         case WM_NOTIFY:
         {
             NMHDR *hdr = (NMHDR *)lParam;
