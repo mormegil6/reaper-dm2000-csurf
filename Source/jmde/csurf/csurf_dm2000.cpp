@@ -1,6 +1,7 @@
 #include "csurf.h"
 #include <shellapi.h>
 #include <shlobj.h>
+#include <commctrl.h>
 
 // DM2000 fader taper, hardware-calibrated against the printed dB scale
 // (mark-by-mark MIDI-OX captures, 2026-06-12). Values are 14-bit (MSB<<7)|LSB
@@ -68,8 +69,7 @@ class CSurf_DM2000 : public IReaperControlSurface
     int m_midi_out_devs[4];
     midi_Output *m_midiouts[4];
     midi_Input *m_midiins[4];
-    int m_midi_out_sysex_dev;
-    midi_Output *m_midiout8;         // DM2000 native SysEx output (user-configured, typically USB port 8)
+    midi_Output *m_midiout8;         // DM2000 native SysEx output (port 8); reserved for scene recall
 
     int m_zone[4];                   // last switch-matrix zone select (B0 0F zz) per port
     unsigned char m_fader_msb[4][8]; // pending fader value MSB per port/channel
@@ -90,7 +90,7 @@ class CSurf_DM2000 : public IReaperControlSurface
     DWORD m_arrow_last_repeat;       // timestamp of the last auto-repeat fire
 
 public:
-  CSurf_DM2000(int indev1, int outdev1, int indev2, int outdev2, int indev3, int outdev3, int indev4, int outdev4, int sysex_out_dev, int *errStats)
+  CSurf_DM2000(int indev1, int outdev1, int indev2, int outdev2, int indev3, int outdev3, int indev4, int outdev4, int *errStats)
   {
     m_midi_in_devs[0] = indev1;
     m_midi_out_devs[0] = outdev1;
@@ -134,9 +134,7 @@ public:
             m_midiins[i]->start();
     }
 
-    m_midi_out_sysex_dev = sysex_out_dev;
-    m_midiout8 = sysex_out_dev >= 0
-        ? CreateThreadedMIDIOutput(CreateMIDIOutput(sysex_out_dev, false, NULL)) : NULL;
+    m_midiout8 = NULL;
   }
 
   ~CSurf_DM2000()
@@ -149,7 +147,7 @@ public:
   const char *GetConfigString() // string of configuration data
   {
     static char configtmp[512];
-    sprintf(configtmp, "%d %d %d %d %d %d %d %d %d", m_midi_in_devs[0], m_midi_out_devs[0], m_midi_in_devs[1], m_midi_out_devs[1], m_midi_in_devs[2], m_midi_out_devs[2], m_midi_in_devs[3], m_midi_out_devs[3], m_midi_out_sysex_dev);
+    sprintf(configtmp, "%d %d %d %d %d %d %d %d", m_midi_in_devs[0], m_midi_out_devs[0], m_midi_in_devs[1], m_midi_out_devs[1], m_midi_in_devs[2], m_midi_out_devs[2], m_midi_in_devs[3], m_midi_out_devs[3]);
     return configtmp;
   }
 
@@ -687,7 +685,7 @@ static IReaperControlSurface *createFunc(const char *type_string, const char *co
     int parms[9];
     parseParms(configString, parms);
 
-    return new CSurf_DM2000(parms[0], parms[1], parms[2], parms[3], parms[4], parms[5], parms[6], parms[7], parms[8], errStats);
+    return new CSurf_DM2000(parms[0], parms[1], parms[2], parms[3], parms[4], parms[5], parms[6], parms[7], errStats);
 }
 
 static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -714,22 +712,6 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                     int a = SendDlgItemMessage(hwndDlg, IDC_COMBO_PORTGROUP, CB_ADDSTRING, 0, (LPARAM)buf);
                     SendDlgItemMessage(hwndDlg, IDC_COMBO_PORTGROUP, CB_SETITEMDATA, a, j);
                     if (j == parms[0]) SendDlgItemMessage(hwndDlg, IDC_COMBO_PORTGROUP, CB_SETCURSEL, a, 0);
-                }
-            }
-
-            // SysEx output combo: all MIDI outputs, None = -1
-            int nout = GetNumMIDIOutputs();
-            int y = SendDlgItemMessage(hwndDlg, IDC_COMBO_SYSEX, CB_ADDSTRING, 0, (LPARAM)"None");
-            SendDlgItemMessage(hwndDlg, IDC_COMBO_SYSEX, CB_SETITEMDATA, y, -1);
-            SendDlgItemMessage(hwndDlg, IDC_COMBO_SYSEX, CB_SETCURSEL, y, 0);
-            for (int j = 0; j < nout; ++j)
-            {
-                char name[256];
-                if (GetMIDIOutputName(j, name, sizeof(name)))
-                {
-                    int a = SendDlgItemMessage(hwndDlg, IDC_COMBO_SYSEX, CB_ADDSTRING, 0, (LPARAM)name);
-                    SendDlgItemMessage(hwndDlg, IDC_COMBO_SYSEX, CB_SETITEMDATA, a, j);
-                    if (j == parms[8]) SendDlgItemMessage(hwndDlg, IDC_COMBO_SYSEX, CB_SETCURSEL, a, 0);
                 }
             }
 
@@ -812,13 +794,19 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                     }
                 }
 
-                int sysex_out = -1;
-                int rs = SendDlgItemMessage(hwndDlg, IDC_COMBO_SYSEX, CB_GETCURSEL, 0, 0);
-                if (rs != CB_ERR) sysex_out = SendDlgItemMessage(hwndDlg, IDC_COMBO_SYSEX, CB_GETITEMDATA, rs, 0);
-
-                sprintf(tmp, "%d %d %d %d %d %d %d %d %d", indevs[0], outdevs[0], indevs[1], outdevs[1], indevs[2], outdevs[2], indevs[3], outdevs[3], sysex_out);
+                sprintf(tmp, "%d %d %d %d %d %d %d %d", indevs[0], outdevs[0], indevs[1], outdevs[1], indevs[2], outdevs[2], indevs[3], outdevs[3]);
                 lstrcpyn((char *)lParam, tmp, wParam);
             }
+        break;
+        case WM_NOTIFY:
+        {
+            NMHDR *hdr = (NMHDR *)lParam;
+            if (hdr->code == NM_CLICK || hdr->code == NM_RETURN)
+            {
+                NMLINK *link = (NMLINK *)lParam;
+                ShellExecuteW(hwndDlg, L"open", link->item.szUrl, NULL, NULL, SW_SHOWNORMAL);
+            }
+        }
         break;
     }
     return 0;
