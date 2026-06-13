@@ -321,7 +321,7 @@ public:
       SendTransportLED(4, play);            // PLAY
       SendTransportLED(5, rec);             // REC
   }
-  void SetRepeatState(bool rep) {}
+  void SetRepeatState(bool rep) { SendGlobalLED(0x0E, 7, rep); }
 
   void SetTrackTitle(MediaTrack *trackid, const char *title)
   {
@@ -459,6 +459,17 @@ private:
         unsigned char data1  = evt->midi_message[1];
         unsigned char data2  = evt->midi_message[2];
 
+        // Program Change on any port: DM2000 GENERAL port scene recall.
+        // User must assign GENERAL to one of the 4 DAW USB ports on the console.
+        // PC 0-8 map to REAPER markers 1-9; higher PCs fall through as no-ops
+        // until a proper scene-to-marker table is implemented.
+        if (status == 0xC0)
+        {
+            if (data1 <= 8)
+                SendMessage(g_hwnd, WM_COMMAND, ID_GOTO_MARKER1 + data1, 0);
+            return;
+        }
+
         // HUI keepalive ping - must echo back or surface goes offline
         if (status == 0x90 && data1 == 0x00 && data2 == 0x7F)
         {
@@ -563,11 +574,14 @@ private:
         {
             switch (sw)
             {
+                case 0: CSurf_GoStart(); break;  // RTZ — sw position unverified, logical guess
                 case 1: CSurf_OnRew(1); break;
                 case 2: CSurf_OnFwd(1); break;
                 case 3: CSurf_OnStop(); break;
                 case 4: CSurf_OnPlay(); break;
                 case 5: CSurf_OnRecord(); break;
+                case 6: CSurf_GoEnd(); break;    // END — unverified
+                case 7: SendMessage(g_hwnd, WM_COMMAND, IDC_REPEAT, 0); break; // LOOP — unverified
             }
         }
         else if (zone == 0x0D && !press && (sw == 4 || sw == 0 || sw == 1 || sw == 3))
