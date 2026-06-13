@@ -71,7 +71,8 @@ setup (attaching to reaper.exe, breakpoints, etc.).
 - 4-port MIDI open/close, keepalive ping echo, config dialog
 - Faders both directions, touch detect (touch automation works)
 - Mute / solo / rec-arm / select buttons with LED feedback
-- Transport (play/stop/record/rewind/forward) with LEDs
+- Transport (play/stop/record/rewind/forward, RTZ, END, LOOP) with LEDs; RTZ/END/LOOP switch
+  positions are unverified - verify with MIDI-OX before relying on them
 - Bank switching (channel +-1, bank +-24)
 - Automation modes: AUTOMIX section buttons control REAPER's global automation override (read/touch/write/latch/latch preview/bypass), with LED feedback
 
@@ -83,6 +84,9 @@ setup (attaching to reaper.exe, breakpoints, etc.).
 - [x] 4-char track names on scribble strips (HUI SysEx)
 - [x] VU meters on channel strips (100ms peak polling, 3-cycle peak hold,
       red OVER only above 0 dBFS - matches REAPER's clip indication)
+- [~] Transport extensions: RTZ, END, LOOP buttons wired; LOOP LED feedback via
+      `SetRepeatState`. Switch positions are software guesses - verify with MIDI-OX
+      before relying on RTZ/END/LOOP in a session.
 
 ### DM2000-specific behavior (hardware-verified - details in DESIGN.md)
 
@@ -101,7 +105,9 @@ setup (attaching to reaper.exe, breakpoints, etc.).
 - SysEx output port is user-configured (config dialog SysEx dropdown)
 - [x] Channel names via native SysEx - format captured 2026-06-12; sends pos=0..7 alongside HUI 4-char names; hardware-tested: scribble strip remains 4-char wide in DAW mode (physical limit)
 - [x] Meter bridge - driven by existing HUI meter messages (Layer 2); no native SysEx needed
-- [ ] Scene recall <-> REAPER markers (SysEx address not yet confirmed)
+- [~] Scene recall: PC receive implemented (DM2000 scene change → REAPER marker jump for
+      scenes 1-9); set GENERAL port to a DAW USB port on the console. PC send and SysEx
+      scene dump not yet implemented.
 
 ### Layer 4 - future
 
@@ -116,7 +122,9 @@ USER DEFINED KEYS. See [DESIGN.md](DESIGN.md).
 - **macOS not supported** - Windows x64 only for now; a macOS port is planned.
 - **Scribble strips show 4 characters only** - hardware-verified; the display is
   4-char wide in DAW mode regardless of what native SysEx sends.
-- **Scene recall not implemented** - SysEx address unconfirmed; queued for v0.2.
+- **Scene recall partial** - PC receive is implemented (DM2000 scene recall sends PC on the
+  GENERAL port → REAPER jumps to the matching marker); user must set GENERAL to a DAW USB
+  port. PC send and SysEx scene dump not yet implemented.
 
 ## License
 

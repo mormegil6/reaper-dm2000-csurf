@@ -99,7 +99,7 @@ Zone assignments:
 | 0–7  | Channel strip (zone = channel 0–7 on this port) | 0=fader touch/release, 1=SELECT, 2=MUTE, 3=SOLO, 5=pan knob press → center pan, 7=REC/RDY |
 | 0x0A | Bank/channel navigation | 0=ch◄, 1=bank◄, 2=ch►, 3=bank► |
 | 0x0D | Cursor cluster + wheel modes (hardware-verified) | 0=down, 1=left, 2=INC → next marker, 3=right, 4=up, 5=SCRUB, 6=SHUTTLE |
-| 0x0E | Transport | 1=REW, 2=FFWD, 3=STOP, 4=PLAY, 5=REC |
+| 0x0E | Transport | 0=RTZ (unverified sw#), 1=REW, 2=FFWD, 3=STOP, 4=PLAY, 5=REC, 6=END (unverified sw#), 7=LOOP (unverified sw#) |
 | 0x14 | ENTER (hardware-verified) | 0=press → toggle scroll/zoom |
 | 0x1B | DEC (hardware-verified) | 7=press → previous marker |
 
@@ -134,7 +134,7 @@ B0  2C  vv      - value: bits 0–3 = switch number, bit 6 = on (0x40), 0 = off
 ```
 
 Channel LEDs (switch numbers): 1=SELECT, 2=MUTE, 3=SOLO, 7=REC/RDY
-Transport LEDs (target 0x0E, switch numbers): 3=STOP, 4=PLAY, 5=REC
+Transport LEDs (target 0x0E, switch numbers): 3=STOP, 4=PLAY, 5=REC, 7=LOOP (wired via SetRepeatState)
 
 **HUI meter (host → DM2000):**
 Polyphonic key pressure, one message per meter side:
@@ -172,6 +172,31 @@ F0 43 1n 3E 06  tt ee pp cc  DD...DD  F7
 
 **Keepalive observed on port 8:**
 `F0 43 17 3E 06 7F F7` - DM2000 sends this ~1/sec. No response required.
+
+### GENERAL MIDI port (Program Change / CC)
+
+The DM2000 has a separate GENERAL MIDI port (configurable: `SETUP → MIDI/HOST SETUP → GENERAL`).
+It carries Program Change, CC (EQ ATT, faders, pans), and NRPN independently of the DAW/HUI ports.
+
+**Program Change - scene recall (Owner's Manual ch.18, p.215):**
+Bidirectional: DM2000 sends PC on scene change, and responds to incoming PC to recall a scene.
+PC 0 = scene 1, PC 1 = scene 2, etc. (zero-indexed). Both directions use the same mapping.
+
+Current implementation: PC receive on any of the 4 DAW HUI ports is handled (PC 0-8 jumps
+to REAPER marker 1-9). The user must set GENERAL to one of the 4 DAW USB ports on the console
+for this to work. PC send (REAPER → DM2000) and full scene dump via SysEx are not yet implemented.
+
+**CC table (Owner's Manual Appendix C, pp.353-368):**
+16 MIDI channels, CC 0-119 per channel. Ch1-4 = input faders/mute/pan for inputs 1-96;
+Ch5-8 = EQ ATT/EQ ON; Ch9-16 = surround parameters. Controllable via GENERAL port.
+NRPN: parameter number on 62h/63h, data on 06h/26h.
+
+**Remote Meter SysEx type 0x21 (Owner's Manual Appendix C):**
+The DM2000 can push peak meter data to the host on port 8. Studio Manager subscription message
+captured: `F0 43 37 3E 06 21 00 [sub] 00 00 18 F7` (sub=0x00 current, sub=0x05 peak; 0x18=24 ch).
+Not yet implemented on the receive side.
+
+---
 
 **Channel names via SysEx: CAPTURED 2026-06-12 via loopMIDI + Studio Manager.**
 Studio Manager sends one 14-byte message per character:
@@ -218,7 +243,10 @@ Tasks:
 - [x] Mute LEDs: implement `SetSurfaceMute()` to update surface LEDs
 - [x] Solo buttons: channel zone switch 3
 - [x] Rec-arm buttons: channel zone switch 7
-- [x] Transport: play/stop/record/rewind/forward
+- [x] Transport: play/stop/record/rewind/forward with LEDs
+- [~] Transport extensions: RTZ (zone 0x0E sw=0), END (sw=6), LOOP (sw=7) added; switch numbers
+      are unverified guesses - verify with MIDI-OX before relying on them. `SetRepeatState` wired
+      to LOOP LED (zone 0x0E, target 0x0E, sw=7).
 - [x] Bank switching: left/right arrows to shift which 24 tracks are visible
 - [x] Automation modes: AUTOMIX section (zone 0x18, 7 buttons) mapped to REAPER global automation override; LED feedback on all 3 HUI ports
 
@@ -252,11 +280,16 @@ Tasks:
   - Implemented in `SendTrackTitle()`: sends pos=0..7 on port 8 alongside HUI 4-char names
   - Hardware test result: display shows 4 chars only - scribble strip is physically 4-char wide in DAW mode; native SysEx updates console memory but HUI controls the visible strip
 - [x] Meter bridge - already driven by HUI `A0 ch (side<<4)|level` messages (Layer 2); the DM2000 has no separate channel-strip VU display, so HUI meters ARE the meter bridge. No native SysEx needed.
-- [ ] Scene recall: map REAPER markers → DM2000 scenes via SysEx
+- [~] Scene recall:
+  - [x] PC receive: PC 0-8 on any DAW port jumps to REAPER marker 1-9. Requires GENERAL port
+        on the console set to one of the 4 DAW USB ports.
+  - [ ] PC send: REAPER marker → send PC to DM2000 to recall matching scene. Needs a 5th
+        port or reusing port 4; not yet implemented.
+  - [ ] Full SysEx scene dump/restore: address block unconfirmed; needs capture.
 
 **Test criteria for Layer 3:**
 - Track named "Bass Guitar" shows "Bass Gui" on DM2000 display
-- DM2000 scene button triggers REAPER marker jump and vice versa
+- DM2000 scene recall (via PC on GENERAL port) triggers REAPER marker jump
 - Meter bridge shows signal during playback
 
 ### Layer 4 - Extended features (future)
@@ -296,6 +329,10 @@ CSurf_OnStop();
 CSurf_OnRecord();
 CSurf_OnFwd(seekplay);
 CSurf_OnRew(seekplay);
+CSurf_GoStart();   // RTZ
+CSurf_GoEnd();     // go to end of project
+// ID_GOTO_MARKER1 = 40161: SendMessage(g_hwnd, WM_COMMAND, ID_GOTO_MARKER1 + n, 0)  (n=0 → marker 1)
+// IDC_REPEAT = 1068: SendMessage(g_hwnd, WM_COMMAND, IDC_REPEAT, 0)  (toggle loop)
 
 // Track lookup:
 CSurf_TrackFromID(id, false);   // id=1 is first track, 0 is master
@@ -346,7 +383,9 @@ Note: earlier versions stored a 9th value (sysex_out); it is now ignored on load
 - **Channels 25–32 (port 4) not mapped**: port 4 is opened and ping-echoed (keeps DM2000 online), but no channel-strip controls on port 4 are wired to REAPER tracks. The DM2000's physical layout for channels 25–32 is not yet determined (likely master bus / effects returns).
 - **macOS not supported**: the csurf DLL is Windows x64 only. A macOS port is planned.
 - **8-char scribble strip names not achievable**: hardware test confirms the display is 4-char wide in DAW mode. Native SysEx pos=4..7 updates console memory but is not visible.
-- **Scene recall not implemented**: SysEx format is a guess; requires a Studio Manager or front-panel capture to confirm addresses before implementing.
+- **Scene recall partial**: PC receive implemented (PC 0-8 → REAPER marker 1-9); user must
+  set GENERAL port to a DAW USB port on the console. PC send and SysEx scene dump not yet
+  implemented; SysEx address unconfirmed.
 - **Joystick / display knobs / dynamics knobs not implemented**: queued for Layer 4.
 
 ---
