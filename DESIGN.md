@@ -9,7 +9,7 @@ automation modes) and Yamaha native SysEx on USB port 8 (scribble strips,
 meter bridge, scene recall). No existing tool does this; this is the first
 open-source DM2000 csurf for REAPER.
 
-Version: v0.1
+Version: v0.2
 Homepage: bmroz.eu/projects/dm2000-csurf
 Repository: `git.pg.edu.pl/p829296` / `github.com/mormegil6`
 License: LGPL v3
