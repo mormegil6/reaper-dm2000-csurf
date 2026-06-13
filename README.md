@@ -62,7 +62,7 @@ setup (attaching to reaper.exe, breakpoints, etc.).
    The DLL opens 4 consecutive HUI ports from that selection.
 3. OK, then restart REAPER if the DLL was just rebuilt.
 
-![Config dialog](doc/config-dialog.png)
+<p align="center"><img src="doc/config-dialog.png" alt="Config dialog"></p>
 
 ## Feature status
 
