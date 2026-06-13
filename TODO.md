@@ -4,7 +4,7 @@ Tasks tracked here to avoid scrolling chat history.
 
 ---
 
-## Your tasks (hardware / captures)
+## Hardware / on-site
 
 - [ ] **Fader recalibration** - use DM2000 Editor to set exact dB values, capture
       HUI wire values in MIDI-OX. Replace the 6 hand-matched printed-mark points
@@ -21,7 +21,7 @@ Tasks tracked here to avoid scrolling chat history.
 
 ---
 
-## My tasks (code - no hardware needed)
+## Software
 
 - [ ] **LOCATE MEMORY 1-8** - zone map captured (0x10 / 0x0F), wiring to
       REAPER marker jump not yet written.
@@ -38,9 +38,6 @@ Tasks tracked here to avoid scrolling chat history.
       Win32 resource/dialog API with minimal code changes), replace ShellExecuteA
       with `open` verb. No code rewrite needed, mostly a build system task.
 
----
+- [ ] **Scene recall** - blocked on SysEx capture above.
 
-## Blocked on hardware capture
-
-- [ ] **Scene recall** - needs SysEx capture first (see Your tasks above)
-- [ ] **Fader taper** - recalibration pending (see Your tasks above)
+- [ ] **Fader taper** - blocked on recalibration capture above.
