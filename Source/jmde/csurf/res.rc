@@ -93,7 +93,7 @@ BEGIN
                     BS_AUTOCHECKBOX | WS_TABSTOP,4,78,102,10
 END
 
-IDD_SURFACEEDIT_DM2000 DIALOG DISCARDABLE  0, 0, 300, 94
+IDD_SURFACEEDIT_DM2000 DIALOG DISCARDABLE  0, 0, 300, 100
 STYLE DS_CENTER | WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
@@ -103,11 +103,10 @@ BEGIN
     LTEXT           "Opens 4 consecutive HUI ports from the selected group.",
                     IDC_STATIC,8,21,284,8
     RTEXT           "User Keys file:",IDC_STATIC,4,37,75,8
-    EDITTEXT        IDC_EDIT_INIPATH,81,35,212,12,ES_READONLY | ES_AUTOHSCROLL
+    EDITTEXT        IDC_EDIT_INIPATH,81,35,212,12,ES_AUTOHSCROLL
     PUSHBUTTON      "Open folder",IDC_BTN_OPENFOLDER,81,51,58,12
-    PUSHBUTTON      "Edit",IDC_BTN_EDITFILE,143,51,36,12
-    CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,8,76,284,1
-    CONTROL         "Yamaha DM2000 csurf v0.1  -  <a href=""https://bmroz.eu/projects/dm2000-csurf"">bmroz.eu/projects/dm2000-csurf</a>",IDC_STATIC,"SysLink",0x50000000,8,81,284,10
+    CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,8,84,284,1
+    CONTROL         "Yamaha DM2000 csurf v0.1  -  <a href=""https://bmroz.eu/projects/dm2000-csurf"">bmroz.eu/projects/dm2000-csurf</a>",IDC_STATIC,"SysLink",0x50000001,8,89,284,10
 END
 
 /////////////////////////////////////////////////////////////////////////////
