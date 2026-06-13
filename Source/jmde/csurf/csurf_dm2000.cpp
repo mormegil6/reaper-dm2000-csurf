@@ -85,12 +85,13 @@ class CSurf_DM2000 : public IReaperControlSurface
     int m_wheel_mode;                // 0=jog (edit cursor), 1=scrub, 2=shuttle (coarse)
     bool m_arrow_zoom;               // ENTER toggles arrows between scroll and zoom
     int m_auto_mode;                 // 0=trim/bypass, 1=read, 2=touch, 3=write, 4=latch, 5=latch preview
+    char m_ini_path[MAX_PATH];       // user-configured path to dm2000_keys.ini (empty = default)
     int m_held_arrow;                // -1=none, 0-3=CSurf_OnArrow direction being held
     DWORD m_arrow_held_since;        // timestamp of the press that started the hold
     DWORD m_arrow_last_repeat;       // timestamp of the last auto-repeat fire
 
 public:
-  CSurf_DM2000(int indev1, int outdev1, int indev2, int outdev2, int indev3, int outdev3, int indev4, int outdev4, int *errStats)
+  CSurf_DM2000(int indev1, int outdev1, int indev2, int outdev2, int indev3, int outdev3, int indev4, int outdev4, const char *iniPath, int *errStats)
   {
     m_midi_in_devs[0] = indev1;
     m_midi_out_devs[0] = outdev1;
@@ -115,6 +116,7 @@ public:
     m_wheel_mode = 0;
     m_arrow_zoom = false;
     m_auto_mode  = 1;
+    sprintf_s(m_ini_path, sizeof(m_ini_path), "%s", iniPath ? iniPath : "");
     m_held_arrow = -1;
     m_arrow_held_since = 0;
     m_arrow_last_repeat = 0;
@@ -147,7 +149,10 @@ public:
   const char *GetConfigString() // string of configuration data
   {
     static char configtmp[512];
-    sprintf(configtmp, "%d %d %d %d %d %d %d %d", m_midi_in_devs[0], m_midi_out_devs[0], m_midi_in_devs[1], m_midi_out_devs[1], m_midi_in_devs[2], m_midi_out_devs[2], m_midi_in_devs[3], m_midi_out_devs[3]);
+    if (m_ini_path[0])
+        sprintf(configtmp, "%d %d %d %d %d %d %d %d|%s", m_midi_in_devs[0], m_midi_out_devs[0], m_midi_in_devs[1], m_midi_out_devs[1], m_midi_in_devs[2], m_midi_out_devs[2], m_midi_in_devs[3], m_midi_out_devs[3], m_ini_path);
+    else
+        sprintf(configtmp, "%d %d %d %d %d %d %d %d", m_midi_in_devs[0], m_midi_out_devs[0], m_midi_in_devs[1], m_midi_out_devs[1], m_midi_in_devs[2], m_midi_out_devs[2], m_midi_in_devs[3], m_midi_out_devs[3]);
     return configtmp;
   }
 
@@ -662,30 +667,34 @@ static void GetIniPath(char *buf, int bufsz)
     }
 }
 
-static void parseParms(const char *str, int parms[9])
+static void parseParms(const char *str, int parms[8], char *iniPath, int iniPathSz)
 {
-    for (int i = 0; i < 9; ++i) parms[i] = -1;
+    for (int i = 0; i < 8; ++i) parms[i] = -1;
+    if (iniPath) iniPath[0] = '\0';
 
     const char *p = str;
     if (p)
     {
         int x = 0;
-        while (x < 9)
+        while (x < 8 && *p)
         {
             while (*p == ' ') p++;
-            if ((*p < '0' || *p > '9') && *p != '-') break;
+            if (*p == '|' || ((*p < '0' || *p > '9') && *p != '-')) break;
             parms[x++] = atoi(p);
-            while (*p && *p != ' ') p++;
+            while (*p && *p != ' ' && *p != '|') p++;
         }
+        if (*p == '|' && iniPath)
+            sprintf_s(iniPath, iniPathSz, "%s", p + 1);
     }
 }
 
 static IReaperControlSurface *createFunc(const char *type_string, const char *configString, int *errStats)
 {
-    int parms[9];
-    parseParms(configString, parms);
+    int parms[8];
+    char iniPath[MAX_PATH] = "";
+    parseParms(configString, parms, iniPath, sizeof(iniPath));
 
-    return new CSurf_DM2000(parms[0], parms[1], parms[2], parms[3], parms[4], parms[5], parms[6], parms[7], errStats);
+    return new CSurf_DM2000(parms[0], parms[1], parms[2], parms[3], parms[4], parms[5], parms[6], parms[7], iniPath, errStats);
 }
 
 static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -694,8 +703,10 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         case WM_INITDIALOG:
         {
-            int parms[9];
-            parseParms((const char *)lParam, parms);
+            int parms[8];
+            char iniPath[MAX_PATH] = "";
+            parseParms((const char *)lParam, parms, iniPath, sizeof(iniPath));
+            if (!iniPath[0]) GetIniPath(iniPath, sizeof(iniPath));
 
             // port group combo: consecutive 4-port groups from MIDI inputs
             int n = GetNumMIDIInputs();
@@ -715,9 +726,6 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 }
             }
 
-            // keys file path
-            char iniPath[MAX_PATH];
-            GetIniPath(iniPath, sizeof(iniPath));
             SetDlgItemTextA(hwndDlg, IDC_EDIT_INIPATH, iniPath);
         }
         break;
@@ -727,39 +735,19 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
             if (id == IDC_BTN_OPENFOLDER)
             {
                 char iniPath[MAX_PATH];
-                GetIniPath(iniPath, sizeof(iniPath));
-                // open the containing folder in Explorer
+                GetDlgItemTextA(hwndDlg, IDC_EDIT_INIPATH, iniPath, sizeof(iniPath));
                 char folder[MAX_PATH];
                 strcpy_s(folder, sizeof(folder), iniPath);
                 char *sep = strrchr(folder, '\\');
                 if (sep) *sep = '\0';
                 ShellExecuteA(hwndDlg, "explore", folder, NULL, NULL, SW_SHOWNORMAL);
             }
-            else if (id == IDC_BTN_EDITFILE)
-            {
-                char iniPath[MAX_PATH];
-                GetIniPath(iniPath, sizeof(iniPath));
-                // create with default content if missing
-                FILE *f;
-                if (fopen_s(&f, iniPath, "r") != 0 || !f)
-                {
-                    if (fopen_s(&f, iniPath, "w") == 0 && f)
-                    {
-                        fputs("; dm2000_keys.ini - USER DEFINED KEYS mapping\n"
-                              "; One entry per key: <zone_hex>_<sw> = <reaper_action_id>\n"
-                              "; Example: 13_0 = 40029\n", f);
-                        fclose(f);
-                    }
-                }
-                else fclose(f);
-                ShellExecuteA(hwndDlg, "open", iniPath, NULL, NULL, SW_SHOWNORMAL);
-            }
         }
         break;
         case WM_USER + 1024:
             if (wParam > 1 && lParam)
             {
-                char tmp[512];
+                char tmp[MAX_PATH + 64];
 
                 int indevs[4] = { -1, -1, -1, -1 }, outdevs[4] = { -1, -1, -1, -1 };
                 int start = -1;
@@ -794,7 +782,12 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                     }
                 }
 
-                sprintf(tmp, "%d %d %d %d %d %d %d %d", indevs[0], outdevs[0], indevs[1], outdevs[1], indevs[2], outdevs[2], indevs[3], outdevs[3]);
+                char iniPath[MAX_PATH] = "";
+                GetDlgItemTextA(hwndDlg, IDC_EDIT_INIPATH, iniPath, sizeof(iniPath));
+                if (iniPath[0])
+                    sprintf(tmp, "%d %d %d %d %d %d %d %d|%s", indevs[0], outdevs[0], indevs[1], outdevs[1], indevs[2], outdevs[2], indevs[3], outdevs[3], iniPath);
+                else
+                    sprintf(tmp, "%d %d %d %d %d %d %d %d", indevs[0], outdevs[0], indevs[1], outdevs[1], indevs[2], outdevs[2], indevs[3], outdevs[3]);
                 lstrcpyn((char *)lParam, tmp, wParam);
             }
         break;
