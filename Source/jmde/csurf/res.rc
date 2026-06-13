@@ -93,21 +93,21 @@ BEGIN
                     BS_AUTOCHECKBOX | WS_TABSTOP,4,78,102,10
 END
 
-IDD_SURFACEEDIT_DM2000 DIALOG DISCARDABLE  0, 0, 290, 88
+IDD_SURFACEEDIT_DM2000 DIALOG DISCARDABLE  0, 0, 300, 94
 STYLE DS_CENTER | WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
-    RTEXT           "Starting port:",IDC_STATIC,15,7,68,8
-    COMBOBOX        IDC_COMBO_PORTGROUP,85,5,193,105,CBS_DROPDOWNLIST | WS_VSCROLL |
+    RTEXT           "Port group:",IDC_STATIC,8,7,71,8
+    COMBOBOX        IDC_COMBO_PORTGROUP,81,5,212,105,CBS_DROPDOWNLIST | WS_VSCROLL |
                     WS_TABSTOP
-    LTEXT           "Opens 4 consecutive HUI ports from the selected starting port.",
-                    IDC_STATIC,15,21,263,8
-    RTEXT           "User Keys file:",IDC_STATIC,15,37,68,8
-    EDITTEXT        IDC_EDIT_INIPATH,85,35,193,12,ES_READONLY | ES_AUTOHSCROLL
-    PUSHBUTTON      "Open folder",IDC_BTN_OPENFOLDER,85,51,58,12
-    PUSHBUTTON      "Edit",IDC_BTN_EDITFILE,147,51,36,12
-    CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,15,70,263,1
-    CONTROL         "Yamaha DM2000 csurf v0.1  -  <a href=""https://bmroz.eu/projects/dm2000-csurf"">bmroz.eu/projects/dm2000-csurf</a>",IDC_STATIC,"SysLink",0x50000000,15,74,263,10
+    LTEXT           "Opens 4 consecutive HUI ports from the selected group.",
+                    IDC_STATIC,8,21,284,8
+    RTEXT           "User Keys file:",IDC_STATIC,4,37,75,8
+    EDITTEXT        IDC_EDIT_INIPATH,81,35,212,12,ES_READONLY | ES_AUTOHSCROLL
+    PUSHBUTTON      "Open folder",IDC_BTN_OPENFOLDER,81,51,58,12
+    PUSHBUTTON      "Edit",IDC_BTN_EDITFILE,143,51,36,12
+    CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,8,76,284,1
+    CONTROL         "Yamaha DM2000 csurf v0.1  -  <a href=""https://bmroz.eu/projects/dm2000-csurf"">bmroz.eu/projects/dm2000-csurf</a>",IDC_STATIC,"SysLink",0x50000000,8,81,284,10
 END
 
 /////////////////////////////////////////////////////////////////////////////
