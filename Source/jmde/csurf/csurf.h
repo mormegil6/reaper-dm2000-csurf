@@ -23,6 +23,11 @@ extern midi_Output *(*CreateMIDIOutput)(int dev, bool streamMode, int *msoffset1
 extern bool (*GetMIDIOutputName)(int dev, char *nameout, int nameoutlen);
 extern bool (*GetMIDIInputName)(int dev, char *nameout, int nameoutlen);
 
+// Optional REAPER API: resolved non-fatally in csurf_main (never blocks load if
+// absent). The DM2000 surface uses it to locate dm2000_keys.ini, and it is the
+// only portable way to find the resource path on macOS (no GetModuleHandle there).
+extern const char *(*GetResourcePath)();
+
 
 extern int (*CSurf_TrackToID)(MediaTrack *track, bool mcpView);
 extern MediaTrack *(*CSurf_TrackFromID)(int idx, bool mcpView);

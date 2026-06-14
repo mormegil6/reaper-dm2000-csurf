@@ -49,9 +49,10 @@ Tasks tracked here to avoid scrolling chat history.
 - [ ] **Transport extensions: RTZ, END, LOOP** - added to zone 0x0E sw=0/6/7;
       switch numbers unverified. `SetRepeatState` wired to LOOP LED.
 
-- [ ] **Scene recall PC receive** - implemented: PC 0-8 on any DAW port jumps to
-      REAPER marker 1-9. Requires GENERAL port to be set to a DAW USB port on
-      the console. PC 9+ not yet handled (needs a scene-to-marker table).
+- [ ] **Scene recall PC receive** - implemented: PC 1-9 on any DAW port jump to
+      REAPER markers 1-9 (1-indexed per manual p.218). Requires GENERAL port to be
+      set to a DAW USB port on the console. PC 10+ not yet handled (needs a
+      scene-to-marker table).
 
 - [ ] **Scene recall PC send** - REAPER → DM2000: when playback crosses a marker,
       send PC to DM2000 to recall the matching scene. Requires knowing which port
@@ -71,10 +72,12 @@ Tasks tracked here to avoid scrolling chat history.
       the GENERAL port (channels 1-16, CC table on pp. 353-368). Layer 4 feature;
       requires GENERAL port open and a selected-channel UI concept.
 
-- [ ] **macOS port** - REAPER csurf API is cross-platform. Plan: CMake build
-      targeting `.dylib`, SWELL for the dialog (ships with REAPER SDK, replaces
-      Win32 resource/dialog API with minimal code changes), replace ShellExecuteA
-      with `open` verb. No code rewrite needed, mostly a build system task.
+- [~] **macOS port** - SWELL Makefile (`Builds/Make/Makefile`) + portability shims
+      written; universal arm64+x86_64 dylib. All Windows-only code guarded behind
+      `#ifdef _WIN32` (includes, GetResourcePath, ShellExecute, WM_CTLCOLOREDIT,
+      SysLink->SS_NOTIFY static, sprintf_s/strcpy_s). NOT yet compiled on a Mac.
+      Remaining: clone WDL to `Source/WDL`, `brew install php`, `make`, fix compile
+      residuals, verify dialog + surface in REAPER. Full steps in `MACOS_BUILD.md`.
 
 - [ ] **Scene recall full** - basic PC path implemented above; blocked on
       SysEx for full scene dump/restore and on GENERAL port config for send direction.

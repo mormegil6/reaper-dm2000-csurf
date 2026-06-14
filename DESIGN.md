@@ -180,10 +180,11 @@ It carries Program Change, CC (EQ ATT, faders, pans), and NRPN independently of 
 
 **Program Change - scene recall (Owner's Manual ch.18, p.215):**
 Bidirectional: DM2000 sends PC on scene change, and responds to incoming PC to recall a scene.
-PC 0 = scene 1, PC 1 = scene 2, etc. (zero-indexed). Both directions use the same mapping.
+Default table (manual p.218): scene N sends PC N (1-indexed - PC 1 = scene 1, PC 2 = scene 2, etc.).
+Both directions use the same mapping.
 
-Current implementation: PC receive on any of the 4 DAW HUI ports is handled (PC 0-8 jumps
-to REAPER marker 1-9). The user must set GENERAL to one of the 4 DAW USB ports on the console
+Current implementation: PC receive on any of the 4 DAW HUI ports is handled (PC 1-9 jump to
+REAPER markers 1-9). The user must set GENERAL to one of the 4 DAW USB ports on the console
 for this to work. PC send (REAPER → DM2000) and full scene dump via SysEx are not yet implemented.
 
 **CC table (Owner's Manual Appendix C, pp.353-368):**
@@ -281,8 +282,8 @@ Tasks:
   - Hardware test result: display shows 4 chars only - scribble strip is physically 4-char wide in DAW mode; native SysEx updates console memory but HUI controls the visible strip
 - [x] Meter bridge - already driven by HUI `A0 ch (side<<4)|level` messages (Layer 2); the DM2000 has no separate channel-strip VU display, so HUI meters ARE the meter bridge. No native SysEx needed.
 - [~] Scene recall:
-  - [x] PC receive: PC 0-8 on any DAW port jumps to REAPER marker 1-9. Requires GENERAL port
-        on the console set to one of the 4 DAW USB ports.
+  - [x] PC receive: PC 1-9 on any DAW port jump to REAPER markers 1-9 (1-indexed per manual p.218).
+        Requires GENERAL port on the console set to one of the 4 DAW USB ports.
   - [ ] PC send: REAPER marker → send PC to DM2000 to recall matching scene. Needs a 5th
         port or reusing port 4; not yet implemented.
   - [ ] Full SysEx scene dump/restore: address block unconfirmed; needs capture.
@@ -300,6 +301,45 @@ Tasks:
 - [ ] Surround panner joystick: requires native Yamaha SysEx on USB port 4 (not HUI); V2 firmware only; implement after Layer 3 is complete
 - Talkback button integration
 - USER DEFINED KEYS mapping
+
+### macOS port (in progress)
+
+Build system: a hand-written SWELL Makefile (`Builds/Make/Makefile`), the convention
+Cockos uses for its own REAPER extensions (SWS, ReaPack). NOT CMake - the earlier
+DESIGN draft said CMake, but the Makefile is lower-risk, matches the upstream
+reaper_csurf scaffold this descends from, and leaves the Visual Studio Windows
+build untouched. See `MACOS_BUILD.md` for the full build/verify procedure.
+
+Model: REAPER hosts SWELL. The extension compiles against SWELL's Win32-shaped
+headers (`swell.h`, pulled in by `reaper_plugin.h` on non-Windows) and links exactly
+ONE SWELL source - `swell-modstub.mm` with `-DSWELL_PROVIDED_BY_APP` - which binds
+every SWELL call to REAPER's own implementation at load time. The full SWELL library
+is NOT built.
+
+Universal binary: `clang++ -arch x86_64 -arch arm64 -mmacosx-version-min=10.9`
+(single fat dylib; the arm64 11.0 floor is enforced only at runtime on Apple Silicon,
+which is always >= 11.0). For oldest-Intel coverage the two arches can instead be
+built separately (x86_64 @ 10.9, arm64 @ 11.0) and joined with `lipo -create`.
+
+Resource generation: `php swell_resgen.php res.rc` transpiles the Win32 `.rc` into
+`res.rc_mac_dlg` / `res.rc_mac_menu`, already `#include`d in csurf_main.cpp under
+`#ifndef _WIN32`. PHP is a build prerequisite on the Mac.
+
+Windows-only code made portable (all behind `#ifdef _WIN32`, Windows path unchanged):
+- `<shellapi.h>/<shlobj.h>/<commctrl.h>` includes guarded; SWELL supplies the rest
+- ini path: `GetResourcePath` (resolved via `rec->GetFunc`, non-fatal) replaces the
+  `GetModuleHandle("reaper.exe")` trick on macOS (SWELL has no GetModuleHandle)
+- folder/URL open: SWELL's own `ShellExecute` (it routes to NSWorkspace)
+- `WM_CTLCOLOREDIT`/`WHITE_BRUSH` whitening guarded out (undefined in SWELL; Mac
+  edit fields are white by default)
+- SysLink hyperlink: SWELL has no SysLink, so the footer becomes an `SS_NOTIFY`
+  clickable static on macOS, routed through `WM_COMMAND` to `ShellExecute`; the
+  genuine SysLink + `NMLINK` handler stays under `#ifdef _WIN32`
+- `sprintf_s`/`strcpy_s`/`SetDlgItemTextA`/`GetDlgItemTextA` shimmed in
+  `dm2000_compat.h` (empty on Windows); `lstrcpyn` is provided by SWELL
+
+WDL is not vendored; the Mac build expects it cloned to `Source/WDL` so the existing
+relative includes resolve. Not referenced by the VS project, so Windows is unaffected.
 
 ---
 
@@ -381,11 +421,14 @@ Note: earlier versions stored a 9th value (sysex_out); it is now ignored on load
 ## Known limitations
 
 - **Channels 25–32 (port 4) not mapped**: port 4 is opened and ping-echoed (keeps DM2000 online), but no channel-strip controls on port 4 are wired to REAPER tracks. The DM2000's physical layout for channels 25–32 is not yet determined (likely master bus / effects returns).
-- **macOS not supported**: the csurf DLL is Windows x64 only. A macOS port is planned.
+- **macOS port in progress**: SWELL Makefile (`Builds/Make/Makefile`), universal
+  arm64+x86_64 dylib, all Windows-only code guarded behind `#ifdef _WIN32`. Not yet
+  compiled/verified on a Mac - see `MACOS_BUILD.md`. Windows x64 remains the only
+  tested target.
 - **8-char scribble strip names not achievable**: hardware test confirms the display is 4-char wide in DAW mode. Native SysEx pos=4..7 updates console memory but is not visible.
-- **Scene recall partial**: PC receive implemented (PC 0-8 → REAPER marker 1-9); user must
-  set GENERAL port to a DAW USB port on the console. PC send and SysEx scene dump not yet
-  implemented; SysEx address unconfirmed.
+- **Scene recall partial**: PC receive implemented (PC 1-9 → REAPER markers 1-9, 1-indexed per
+  manual p.218); user must set GENERAL port to a DAW USB port on the console. PC send and SysEx
+  scene dump not yet implemented; SysEx address unconfirmed.
 - **Joystick / display knobs / dynamics knobs not implemented**: queued for Layer 4.
 
 ---
