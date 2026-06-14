@@ -92,6 +92,7 @@ class CSurf_DM2000 : public IReaperControlSurface
     int m_held_arrow;                // -1=none, 0-3=CSurf_OnArrow direction being held
     DWORD m_arrow_held_since;        // timestamp of the press that started the hold
     DWORD m_arrow_last_repeat;       // timestamp of the last auto-repeat fire
+    char m_tc_lastbuf[16];           // last timecode string sent to counter display (change detection)
 
 public:
   CSurf_DM2000(int indev1, int outdev1, int indev2, int outdev2, int indev3, int outdev3, int indev4, int outdev4, const char *iniPath, int *errStats)
@@ -123,6 +124,7 @@ public:
     m_held_arrow = -1;
     m_arrow_held_since = 0;
     m_arrow_last_repeat = 0;
+    m_tc_lastbuf[0] = '\0';
 
     for (int i = 0; i < 4; ++i)
     {
@@ -185,6 +187,7 @@ public:
       SendTransportLED(3, false);
       SendTransportLED(4, false);
       SendTransportLED(5, false);
+      SendCounter("        "); // blank the LED counter display
 
       // REAPER's MIDI outputs queue internally (CreateThreadedMIDIOutput is a
       // passthrough on Windows); deleting them immediately drops whatever the
@@ -231,6 +234,7 @@ public:
       if (now - m_meter_lastrun >= 100) // unsigned diff also handles timer wrap
       {
           m_meter_lastrun = now;
+          SendCounter();
           m_meter_histpos = (m_meter_histpos + 1) % 3;
           for (int i = 0; i < 32; ++i)
           {
@@ -397,6 +401,56 @@ private:
                 SendSysEx(buf, sizeof(buf));
             }
         }
+    }
+
+    // HUI counter (LED timecode) display.
+    // Format: F0 00 00 66 05 00 11 <8 ASCII chars> F7  -- UNVERIFIED on DM2000.
+    // Pro Tools sends the current project-format position string here.
+    // If the display shows garbage: try 7-segment encoding instead of ASCII.
+    // If nothing appears: verify command byte 0x11 with MIDI-OX on port 1.
+    void SendCounter(const char *text = nullptr)
+    {
+        if (!m_midiouts[0]) return;
+
+        char tbuf[64] = "        "; // 8 spaces = blank display
+        if (!text)
+        {
+            double pos = (GetPlayState() & 1) ? GetPlayPosition() : GetCursorPosition();
+            format_timestr_pos(pos, tbuf, sizeof(tbuf), -1);
+        }
+
+        // truncate/pad to exactly 8 display positions
+        char disp[9];
+        int slen = (int)strlen(text ? text : tbuf);
+        if (slen >= 8)
+        {
+            // take the last 8 chars so HH: is dropped when zero
+            memcpy(disp, (text ? text : tbuf) + slen - 8, 8);
+        }
+        else
+        {
+            memset(disp, ' ', 8);
+            memcpy(disp + (8 - slen), text ? text : tbuf, slen);
+        }
+        disp[8] = '\0';
+
+        if (memcmp(disp, m_tc_lastbuf, 9) == 0) return;
+        memcpy(m_tc_lastbuf, disp, 9);
+
+        unsigned char sysex[17] = {
+            0xF0, 0x00, 0x00, 0x66, 0x05, 0x00, 0x11,
+            (unsigned char)(disp[0] & 0x7F), (unsigned char)(disp[1] & 0x7F),
+            (unsigned char)(disp[2] & 0x7F), (unsigned char)(disp[3] & 0x7F),
+            (unsigned char)(disp[4] & 0x7F), (unsigned char)(disp[5] & 0x7F),
+            (unsigned char)(disp[6] & 0x7F), (unsigned char)(disp[7] & 0x7F),
+            0xF7
+        };
+        char msgbuf[sizeof(MIDI_event_t) + sizeof(sysex)];
+        MIDI_event_t *msg = (MIDI_event_t *)msgbuf;
+        msg->frame_offset = -1;
+        msg->size = sizeof(sysex);
+        memcpy(msg->midi_message, sysex, sizeof(sysex));
+        m_midiouts[0]->SendMsg(msg, -1);
     }
 
     // native Yamaha SysEx out on USB port 8 (Layer 3 features: 8-char names,
