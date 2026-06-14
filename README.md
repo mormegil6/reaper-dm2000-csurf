@@ -120,9 +120,9 @@ USER DEFINED KEYS. See [DESIGN.md](DESIGN.md).
   are wired there; the physical purpose of those strips on the DM2000 is not yet
   determined.
 - **macOS port in progress** - a universal (arm64 + x86_64) build via a SWELL
-  Makefile (`Builds/Make/`) exists with all Windows-only code guarded; it has not
-  yet been compiled/verified on a Mac. Windows x64 is the only tested target. See
-  [MACOS_BUILD.md](MACOS_BUILD.md).
+  Makefile (`Builds/Make/`) compiles and loads in REAPER; hardware verification
+  with a connected DM2000 is still pending. Windows x64 remains the only
+  hardware-tested target. See [MACOS_BUILD.md](MACOS_BUILD.md).
 - **Scribble strips show 4 characters only** - hardware-verified; the display is
   4-char wide in DAW mode regardless of what native SysEx sends.
 - **Scene recall partial** - PC receive is implemented (DM2000 scene recall sends PC on the

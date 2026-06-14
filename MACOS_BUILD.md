@@ -147,6 +147,7 @@ cd Builds/Make && make install     # -> ~/Library/Application Support/REAPER/Use
 Launch REAPER, then:
 
 1. Preferences -> Control/OSC/web -> Add. Confirm **Yamaha DM2000** is in the list.
+   *(Verified 2026-06-14: plugin loads and appears in the list.)*
 2. Add it; confirm the config dialog renders: port-group combo populated, User Keys
    edit field, "Open folder" button, etched divider, and the clickable bmroz.eu footer.
 3. Click the footer static -> default browser opens `https://bmroz.eu/projects/dm2000-csurf`.
@@ -156,6 +157,7 @@ Launch REAPER, then:
 6. With the DM2000 connected over USB, confirm the surface itself works (faders,
    transport, meters, scribble strips) - the surface logic is platform-independent, so
    once it loads it should behave exactly as on Windows.
+   *(Pending: hardware not yet available for verification as of 2026-06-14.)*
 
 ---
 

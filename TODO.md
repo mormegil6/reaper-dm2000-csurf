@@ -73,8 +73,9 @@ Tasks tracked here to avoid scrolling chat history.
       requires GENERAL port open and a selected-channel UI concept.
 
 - [~] **macOS port** - SWELL Makefile + portability shims written; compiled on Mac
-      (2026-06-14, two fixes needed — see MACOS_BUILD.md "Compile fixes" section).
-      Remaining: verify dialog + surface in REAPER (Step 5 of MACOS_BUILD.md).
+      (2026-06-14, two fixes needed — see MACOS_BUILD.md). Plugin loads in REAPER
+      and appears in the control surface list. Remaining: hardware verification
+      with DM2000 connected (faders, transport, meters).
 
 - [ ] **Scene recall full** - basic PC path implemented above; blocked on
       SysEx for full scene dump/restore and on GENERAL port config for send direction.
