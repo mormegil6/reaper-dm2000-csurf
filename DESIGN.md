@@ -422,9 +422,9 @@ Note: earlier versions stored a 9th value (sysex_out); it is now ignored on load
 
 - **Channels 25–32 (port 4) not mapped**: port 4 is opened and ping-echoed (keeps DM2000 online), but no channel-strip controls on port 4 are wired to REAPER tracks. The DM2000's physical layout for channels 25–32 is not yet determined (likely master bus / effects returns).
 - **macOS port in progress**: SWELL Makefile (`Builds/Make/Makefile`), universal
-  arm64+x86_64 dylib, all Windows-only code guarded behind `#ifdef _WIN32`. Not yet
-  compiled/verified on a Mac - see `MACOS_BUILD.md`. Windows x64 remains the only
-  tested target.
+  arm64+x86_64 dylib, all Windows-only code guarded behind `#ifdef _WIN32`. Compiles
+  and loads in REAPER on Mac (plugin appears in control surface list); hardware
+  verification with DM2000 connected is pending. See `MACOS_BUILD.md`.
 - **8-char scribble strip names not achievable**: hardware test confirms the display is 4-char wide in DAW mode. Native SysEx pos=4..7 updates console memory but is not visible.
 - **Scene recall partial**: PC receive implemented (PC 1-9 → REAPER markers 1-9, 1-indexed per
   manual p.218); user must set GENERAL port to a DAW USB port on the console. PC send and SysEx
