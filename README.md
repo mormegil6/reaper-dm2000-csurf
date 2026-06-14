@@ -151,8 +151,7 @@ USER DEFINED KEYS. See [DESIGN.md](DESIGN.md).
 
 ## License
 
-LGPL v3 (Cockos csurf sources are LGPL; user contributions are additionally
-released under The Unlicense). See [LICENSE](LICENSE).
+LGPL v3. See [LICENSE](LICENSE).
 
 ## Contact
 
