@@ -517,8 +517,7 @@ Prerequisites:
 ## Community resources
 
 - HUI protocol PDF: `github.com/openCS18/HUI-to-Mackie-Control-Wrapper`
-- DM2000 SysEx: Owner's Manual Appendix C (pp. 369–385)
-  `https://jp.yamaha.com/files/download/other_assets/7/334227/dm2000v2_en_om_g0.pdf`
+- DM2000 Owner's Manual V2: [jp.yamaha.com - DM2000V2 EN OM](https://jp.yamaha.com/files/download/other_assets/7/334227/dm2000v2_en_om_g0.pdf) - HUI/MIDI ch.18, SysEx appendix C (pp. 369–385)
 - REAPER SDK: `github.com/justinfrankel/reaper-sdk`
 - Scaffold: `github.com/Erriez/reaper_csurf_vs201x`
 - CheckCheckOneTwo Yamaha forum: `discourse.checkcheckonetwo.com/c/software/programming-for-the-yamaha-consoles/13`

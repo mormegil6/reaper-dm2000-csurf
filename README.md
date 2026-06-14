@@ -2,12 +2,13 @@
 
 # reaper_csurf_dm2000 - Yamaha DM2000 control surface for REAPER
 
-A native REAPER control surface DLL giving bidirectional integration between
-the Yamaha DM2000 digital console and REAPER: 24 touch-sensitive faders, pan
-knobs, mute/solo/rec-arm/select buttons with LED feedback, transport controls,
-automation mode switching, jog wheel, bank switching, and channel-name scribble
-strips. The DLL speaks HUI on the console's USB MIDI ports 1-4, with native
-Yamaha SysEx on a configurable port 8 output for channel names.
+A native REAPER control surface plugin (DLL/dylib) giving bidirectional
+integration between the Yamaha DM2000 digital console and REAPER: 24
+touch-sensitive faders, pan knobs, mute/solo/rec-arm/select buttons with LED
+feedback, transport controls, automation mode switching, jog wheel, bank
+switching, and channel-name scribble strips. The plugin speaks HUI on the
+console's USB MIDI ports 1-4, with native Yamaha SysEx on a configurable
+port 8 output for channel names.
 
 To our knowledge this is the first open-source DM2000 control surface for
 REAPER.
@@ -26,7 +27,9 @@ reference, layer plan, and task tracking.
   - `SETUP → MIDI/HOST SETUP → DAW = USB 1-4`
 - Windows x64 or macOS (arm64/x86_64), REAPER 6 or later
 - Note: "DAW Off-line" on the DM2000 display is normal until REAPER is running
-  with the surface configured (the DLL answers the console's keepalive ping)
+  with the surface configured (the plugin answers the console's keepalive ping)
+
+**DM2000 Owner's Manual (V2):** [jp.yamaha.com - DM2000V2 EN OM](https://jp.yamaha.com/files/download/other_assets/7/334227/dm2000v2_en_om_g0.pdf) - MIDI/HUI chapter 18, SysEx appendix C.
 
 ## Installation (pre-built)
 
@@ -79,7 +82,7 @@ WDL clone, `make`, binary verification, install).
 1. `Preferences → Control/OSC/web → Add → "Yamaha DM2000"`.
 2. In the surface settings, pick the **port group** - with the default console
    setup that is the entry reading `Yamaha DM2000-1 ... Yamaha DM2000-4`.
-   The DLL opens 4 consecutive HUI ports from that selection.
+   The plugin opens 4 consecutive HUI ports from that selection.
 3. OK.
 
 <p align="center"><img src="doc/config-dialog.png" alt="Config dialog"></p>
@@ -121,9 +124,9 @@ Full button/zone/MIDI reference: [DESIGN.md - Button / function / MIDI reference
 - **The console's fader value range tops out at the printed +5 mark** - REAPER
   volumes from +5 to +12 dB all park the motor at +5. Hardware limit, not a bug.
 - The console keeps an internal model of DAW fader positions and springs motors
-  back to it on release; the DLL echoes every received fader move to keep that
+  back to it on release; the plugin echoes every received fader move to keep that
   model in sync.
-- On close, the DLL drives all faders to -inf, then clears meters, LEDs, pan rings, and scribbles.
+- On close, the plugin drives all faders to -inf, then clears meters, LEDs, pan rings, and scribbles.
 
 ### Layer 3 - Native SysEx (port 8): partial
 
