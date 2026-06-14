@@ -268,10 +268,16 @@ Tasks:
 - [x] Track name truncated to 4 chars on scribble strip via HUI (`F0 00 00 66 05 00 10 <ch> <4 chars> F7`, per port)
 - [x] Jog/scrub wheel: CC 0x0D, bits 0–5 = speed, bit 6 set = forward; jog/SHUTTLE/SCRUB modes (see protocol section)
 - [x] Cursor arrows (scroll/zoom via ENTER toggle), DEC/INC = prev/next marker
+- [~] HUI counter (LED timecode) display: `F0 00 00 66 05 00 11 <8 ASCII chars> F7` sent
+      every 100ms from `Run()`; position from `GetPlayPosition()`/`GetCursorPosition()` +
+      `format_timestr_pos(..., -1)`, right-justified into 8 positions. Format/command byte
+      0x11 UNVERIFIED - check display shows correct position; if garbled, try 7-segment
+      encoding; if blank, capture what Pro Tools sends to port 1 with MIDI-OX.
 
 **Test criteria for Layer 2:**
 - Play audio → DM2000 channel strip meters move
 - Pan knob on DM2000 → REAPER pan changes and vice versa
+- Press play → DM2000 LED counter counts up matching REAPER position
 
 ### Layer 3 - Native SysEx extensions
 

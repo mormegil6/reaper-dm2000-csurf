@@ -46,6 +46,11 @@ Tasks tracked here to avoid scrolling chat history.
 
 - [x] **Transport: play, stop, rec, rew, fwd** - implemented and hardware-verified.
 
+- [~] **HUI counter display** - `F0 00 00 66 05 00 11 <8 ASCII chars> F7` sent every 100ms
+      in `Run()`. Command byte 0x11 and ASCII encoding are UNVERIFIED on the DM2000. Verify
+      by checking the LED counter during playback; if blank/garbled, capture what Pro Tools
+      sends to port 1 with MIDI-OX and adjust format.
+
 - [ ] **Transport extensions: RTZ, END, LOOP** - added to zone 0x0E sw=0/6/7;
       switch numbers unverified. `SetRepeatState` wired to LOOP LED.
 
