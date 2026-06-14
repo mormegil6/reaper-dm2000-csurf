@@ -61,7 +61,6 @@ msbuild Builds\VisualStudio2019\reaper_csurf.sln /p:Configuration=Debug /p:Platf
 ```
 
 The post-build step copies the DLL to `%APPDATA%\REAPER\UserPlugins\`.
-Restart REAPER to load it.
 
 Only the **VisualStudio2019** solution includes `csurf_dm2000.cpp`; the
 2013/2015/2017 solutions are left over from the scaffold and will not link.
@@ -81,7 +80,7 @@ WDL clone, `make`, binary verification, install).
 2. In the surface settings, pick the **port group** - with the default console
    setup that is the entry reading `Yamaha DM2000-1 ... Yamaha DM2000-4`.
    The DLL opens 4 consecutive HUI ports from that selection.
-3. OK, then restart REAPER if the DLL was just rebuilt.
+3. OK.
 
 <p align="center"><img src="doc/config-dialog.png" alt="Config dialog"></p>
 
