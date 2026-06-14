@@ -107,6 +107,9 @@ WDL clone, `make`, binary verification, install).
 - [x] Transport extensions: RTZ, END, LOOP buttons wired; LOOP LED feedback via
       `SetRepeatState`. Switch positions are software guesses - verify with MIDI-OX
       before relying on RTZ/END/LOOP in a session.
+- [ ] LED counter display: position sent every 100ms as HUI SysEx
+      (`F0 00 00 66 05 00 11 <8 chars> F7`). Implemented but unverified on
+      hardware - counter should track playback position; format may need adjustment.
 
 ### DM2000-specific behavior (hardware-verified - details in DESIGN.md)
 
