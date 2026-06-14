@@ -103,6 +103,61 @@ Zone assignments:
 | 0x14 | ENTER (hardware-verified) | 0=press → toggle scroll/zoom |
 | 0x1B | DEC (hardware-verified) | 7=press → previous marker |
 
+**Button / function / MIDI reference table:**
+
+"Verified" = confirmed on hardware with MIDI-OX or direct test. "Inferred" = protocol-consistent assignment not yet hardware-confirmed. "Unverified" = software guess; switch number may be wrong.
+
+| DM2000 physical control | Direction | HUI message | REAPER function | Status |
+|---|---|---|---|---|
+| Channel fader (ch N, port P) | DM2000→host | `B0+(P) 0+(N%8)` MSB then `B0+(P) 20+(N%8)` LSB | `CSurf_OnVolumeChange()` | Verified |
+| Channel fader (ch N, port P) | host→DM2000 | same CC pair | `SetSurfaceVolume()` | Verified |
+| Fader touch on/off | DM2000→host | zone N%8, sw 0, press/release | sets touch state for automation | Verified |
+| MUTE button (ch N) | DM2000→host | zone N%8, sw 2 | `CSurf_OnMuteChange()` | Verified |
+| MUTE LED | host→DM2000 | target N%8, sw 2 | `SetSurfaceMute()` | Verified |
+| SOLO button (ch N) | DM2000→host | zone N%8, sw 3 | `CSurf_OnSoloChange()` | Verified |
+| SOLO LED | host→DM2000 | target N%8, sw 3 | `SetSurfaceSolo()` | Verified |
+| REC/RDY button (ch N) | DM2000→host | zone N%8, sw 7 | `CSurf_OnRecArmChange()` | Verified |
+| REC/RDY LED | host→DM2000 | target N%8, sw 7 | `SetSurfaceRecArm()` | Verified |
+| SELECT button (ch N) | DM2000→host | zone N%8, sw 1 | `SetSurfaceSelected()` | Verified |
+| SELECT LED | host→DM2000 | target N%8, sw 1 | `SetSurfaceSelected()` | Verified |
+| Pan knob turn (ch N) | DM2000→host | `B0+(P) 40+(N%8) vv` | `CSurf_OnPanChange()` | Verified |
+| Pan knob press (ch N) | DM2000→host | zone N%8, sw 5 | center pan | Verified |
+| Pan ring LED (ch N) | host→DM2000 | `B0+(P) 10+(N%8) vv` | `SetSurfacePan()` | Verified |
+| VU meter (ch N, L/R) | host→DM2000 | `A0+(P) N%8 (side<<4)\|level` | `Track_GetPeakInfo()` poll | Verified |
+| CHANNEL ◄ / ► | DM2000→host | zone 0x0A, sw 0/2 | `CSurf_OnArrow(0/1)` bank±1 | Verified |
+| BANK ◄ / ► | DM2000→host | zone 0x0A, sw 1/3 | bank offset ±24 | Verified |
+| PLAY | DM2000→host | zone 0x0E, sw 4 | `CSurf_OnPlay()` | Verified |
+| STOP | DM2000→host | zone 0x0E, sw 3 | `CSurf_OnStop()` | Verified |
+| REC | DM2000→host | zone 0x0E, sw 5 | `CSurf_OnRecord()` | Verified |
+| REW | DM2000→host | zone 0x0E, sw 1 | `CSurf_OnRew()` | Verified |
+| FFWD | DM2000→host | zone 0x0E, sw 2 | `CSurf_OnFwd()` | Verified |
+| RTZ | DM2000→host | zone 0x0E, sw 0 | `CSurf_GoStart()` | Unverified (sw# guess) |
+| END | DM2000→host | zone 0x0E, sw 6 | `CSurf_GoEnd()` | Unverified (sw# guess) |
+| LOOP | DM2000→host | zone 0x0E, sw 7 | toggle loop (`IDC_REPEAT`) | Unverified (sw# guess) |
+| PLAY LED | host→DM2000 | target 0x0E, sw 4 | `SetPlayState()` | Verified |
+| STOP LED | host→DM2000 | target 0x0E, sw 3 | `SetPlayState()` | Verified |
+| REC LED | host→DM2000 | target 0x0E, sw 5 | `SetPlayState()` | Verified |
+| LOOP LED | host→DM2000 | target 0x0E, sw 7 | `SetRepeatState()` | Inferred |
+| Jog wheel | DM2000→host | `B0 0D vv` | `MoveEditCursor()` (default jog) | Verified |
+| SCRUB key | DM2000→host | zone 0x0D, sw 5 | switch to scrub mode | Verified |
+| SHUTTLE key | DM2000→host | zone 0x0D, sw 6 | switch to shuttle mode | Verified |
+| Cursor UP/DOWN/LEFT/RIGHT | DM2000→host | zone 0x0D, sw 4/0/1/3 | `CSurf_OnArrow()` scroll or zoom | Verified |
+| INC (►\|) | DM2000→host | zone 0x0D, sw 2 | next marker | Verified |
+| DEC (\|◄) | DM2000→host | zone 0x1B, sw 7 | previous marker | Verified |
+| ENTER | DM2000→host | zone 0x14, sw 0 | toggle cursor arrows scroll/zoom | Verified |
+| AUTOMIX READ | DM2000→host | zone 0x18, sw 1 | global automation = Read | Inferred |
+| AUTOMIX WRITE | DM2000→host | zone 0x18, sw 2 | global automation = Write | Inferred |
+| AUTOMIX TOUCH | DM2000→host | zone 0x18, sw 3 | global automation = Touch | Inferred |
+| AUTOMIX LATCH | DM2000→host | zone 0x18, sw 4 | global automation = Latch | Inferred |
+| Scribble strip (ch N) | host→DM2000 | `F0 00 00 66 05 00 10 N <4 chars> F7` (port P) | `SetTrackTitle()` 4-char | Verified |
+| LED counter display | host→DM2000 | `F0 00 00 66 05 00 11 <8 chars> F7` (port 1) | position from `format_timestr_pos()` | Unverified |
+| LOCATE MEMORY 1-8 | DM2000→host | zone 0x10 or 0x0F (unconfirmed) | jump to REAPER marker | Not implemented |
+| USER DEFINED KEYS | DM2000→host | zones unconfirmed | custom action via ini file | Not implemented |
+
+**Pan ring LED values:** 1=hard left, 6=centre, 11=hard right. `B0+(P) 10+(N%8) 0` = ring off.
+
+**Zone numbering:** zone = channel number within the port (0–7); port P = 0–3 (ports 1–4). Channel strip controls on port P channel C address global channel `P*8 + C` (0–31).
+
 **Pan v-pots (DM2000 → host):**
 Relative deltas, NOT switch-matrix messages:
 ```
