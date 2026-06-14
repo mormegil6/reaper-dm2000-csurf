@@ -43,7 +43,7 @@ VERMIN  = -mmacosx-version-min=10.9
 
 CXX      = clang++
 DEFS     = -DSWELL_PROVIDED_BY_APP
-INCS     = -I$(SRCDIR) -I$(JMDE) -I$(WDL) -I$(WDL)/swell
+INCS     = -I$(SRCDIR) -I$(JMDE) -I$(WDL) -I$(WDL)/swell -I../../Source
 CXXFLAGS = $(ARCHS) $(VERMIN) -fPIC -fvisibility=hidden -O2 -std=c++14 \
            -Wno-deprecated-declarations -Wno-write-strings $(DEFS) $(INCS)
 LDFLAGS  = $(ARCHS) $(VERMIN) -dynamiclib -framework Cocoa

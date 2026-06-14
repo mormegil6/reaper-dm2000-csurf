@@ -279,7 +279,7 @@ class CSurf_BabyHUI : public IReaperControlSurface
 
             if (evt->midi_message[2] >= 0x40 && allow_passthru)
             {
-              MIDI_event_t evt2={0,3,{evt->midi_message[0]^0x0f,((evt->midi_message[2]<<4)&0xf0)|m_babyhui_wt,0x40}};
+              MIDI_event_t evt2={0,3,{(unsigned char)(evt->midi_message[0]^0x0f), (unsigned char)(((evt->midi_message[2]<<4)&0xf0)|m_babyhui_wt), 0x40}};
               kbd_OnMidiEvent(&evt2,-1);
             }
 

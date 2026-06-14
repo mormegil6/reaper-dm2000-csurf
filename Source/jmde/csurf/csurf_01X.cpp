@@ -1025,7 +1025,7 @@ class CSurf_01X : public IReaperControlSurface
           else if (allow_passthru && evt->midi_message[2]>=0x40)
           {
             int a=evt->midi_message[1];
-            MIDI_event_t evt={0,3,{0xbf-(m_mackie_modifiers&15),a,0}};
+            MIDI_event_t evt={0,3,{(unsigned char)(0xbf-(m_mackie_modifiers&15)), (unsigned char)a, 0}};
             kbd_OnMidiEvent(&evt,-1);
           }
         }

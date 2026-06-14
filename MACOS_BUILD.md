@@ -93,7 +93,22 @@ cd Builds/Make
 make
 ```
 
-Expected first-pass culprits if it doesn't link cleanly:
+**Compile fixes already applied (2026-06-14):**
+
+Two issues were found and fixed during the first Mac compilation pass — both are already
+committed, so a clean clone will not hit them:
+
+1. **Include path for `WDL/db2val.h`** — Clang could not resolve `#include "WDL/db2val.h"`
+   because the Makefile's `$(WDL)` variable points to `Source/WDL` itself (not its parent).
+   Fixed by adding `-I../../Source` to `INCS` in `Builds/Make/Makefile`.
+
+2. **C++11 narrowing in scaffold files** — Clang (`-std=c++14`) rejects implicit int-to-`unsigned char`
+   narrowing inside brace-initialiser lists for `MIDI_event_t`. MSVC silently allows this;
+   Clang treats it as a hard error. Fixed with explicit `(unsigned char)` casts in five
+   scaffold files that are not DM2000-specific (`csurf_mcu.cpp`, `csurf_faderport.cpp`,
+   `csurf_babyhui.cpp`, `csurf_alphatrack.cpp`, `csurf_01X.cpp`).
+
+Expected remaining culprits if it doesn't link cleanly:
 
 - A Windows symbol used outside an `#ifdef _WIN32` that SWELL doesn't provide - wrap it
   or use the SWELL equivalent.

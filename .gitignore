@@ -14,3 +14,5 @@ Source/WDL/
 Source/jmde/csurf/res.rc_mac_dlg
 Source/jmde/csurf/res.rc_mac_menu
 Builds/Make/*.dylib
+Builds/Make/*.o
+Source/jmde/csurf/*.o
