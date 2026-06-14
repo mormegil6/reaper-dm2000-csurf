@@ -403,7 +403,7 @@ class CSurf_AlphaTrack : public IReaperControlSurface
           {
             int a=evt->midi_message[1]-0x36;
             if (m_tranz_shiftstate) a+= 4;
-            MIDI_event_t evt={0,3,{0xbf,a,0}};
+            MIDI_event_t evt={0,3,{0xbf,(unsigned char)a,0}};
             kbd_OnMidiEvent(&evt,-1);
           }
         break;

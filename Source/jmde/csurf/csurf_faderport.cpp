@@ -179,7 +179,7 @@ class CSurf_FaderPort : public IReaperControlSurface
         {
           int a=(evt->midi_message[1]-0xb)+8;
           if (m_faderport_buttonstates&2) a+=3;
-          MIDI_event_t evt={0,3,{0xbf,a,0}};
+          MIDI_event_t evt={0,3,{0xbf,(unsigned char)a,0}};
           kbd_OnMidiEvent(&evt,-1);
         }
       }

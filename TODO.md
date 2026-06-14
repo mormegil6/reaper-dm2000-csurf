@@ -72,12 +72,9 @@ Tasks tracked here to avoid scrolling chat history.
       the GENERAL port (channels 1-16, CC table on pp. 353-368). Layer 4 feature;
       requires GENERAL port open and a selected-channel UI concept.
 
-- [~] **macOS port** - SWELL Makefile (`Builds/Make/Makefile`) + portability shims
-      written; universal arm64+x86_64 dylib. All Windows-only code guarded behind
-      `#ifdef _WIN32` (includes, GetResourcePath, ShellExecute, WM_CTLCOLOREDIT,
-      SysLink->SS_NOTIFY static, sprintf_s/strcpy_s). NOT yet compiled on a Mac.
-      Remaining: clone WDL to `Source/WDL`, `brew install php`, `make`, fix compile
-      residuals, verify dialog + surface in REAPER. Full steps in `MACOS_BUILD.md`.
+- [~] **macOS port** - SWELL Makefile + portability shims written; compiled on Mac
+      (2026-06-14, two fixes needed — see MACOS_BUILD.md "Compile fixes" section).
+      Remaining: verify dialog + surface in REAPER (Step 5 of MACOS_BUILD.md).
 
 - [ ] **Scene recall full** - basic PC path implemented above; blocked on
       SysEx for full scene dump/restore and on GENERAL port config for send direction.
