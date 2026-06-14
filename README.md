@@ -28,7 +28,23 @@ reference, layer plan, and task tracking.
 - Note: "DAW Off-line" on the DM2000 display is normal until REAPER is running
   with the surface configured (the DLL answers the console's keepalive ping)
 
-## Building
+## Installation (pre-built)
+
+Download the latest release from the [Releases](../../releases) page.
+
+**Windows:** copy `reaper_csurf_dm2000_x64.dll` to `%APPDATA%\REAPER\UserPlugins\`.
+
+**macOS:** copy `reaper_csurf_dm2000.dylib` to `~/Library/Application Support/REAPER/UserPlugins/`.
+
+Restart REAPER after copying.
+
+> macOS note: the dylib is a universal binary (arm64 + x86_64). It has been compiled
+> and verified to load in REAPER; full hardware testing with a connected DM2000 is
+> still pending.
+
+## Building from source
+
+### Windows
 
 Prerequisites:
 
@@ -53,6 +69,11 @@ Only the **VisualStudio2019** solution includes `csurf_dm2000.cpp`; the
 This project is built on the [Erriez/reaper_csurf_vs201x](https://github.com/Erriez/reaper_csurf_vs201x)
 scaffold - see its README/wiki for a step-by-step Visual Studio debugging
 setup (attaching to reaper.exe, breakpoints, etc.).
+
+### macOS
+
+See [MACOS_BUILD.md](MACOS_BUILD.md) for the full procedure (prerequisites,
+WDL clone, `make`, binary verification, install).
 
 ## REAPER configuration
 
