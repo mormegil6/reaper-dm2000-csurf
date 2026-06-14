@@ -106,7 +106,11 @@ BEGIN
     EDITTEXT        IDC_EDIT_INIPATH,81,35,212,12,ES_AUTOHSCROLL
     PUSHBUTTON      "Open folder",IDC_BTN_OPENFOLDER,81,51,58,12
     CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,8,84,284,1
+#ifdef _WIN32
     CONTROL         "Yamaha DM2000 csurf v0.2  -  <a href=""https://bmroz.eu/projects/dm2000-csurf"">bmroz.eu/projects/dm2000-csurf</a>",IDC_STATIC,"SysLink",0x50000001,8,89,284,10
+#else
+    CONTROL         "Yamaha DM2000 csurf v0.2  -  bmroz.eu/projects/dm2000-csurf",IDC_DM2000_LINK,"Static",SS_NOTIFY | WS_VISIBLE,8,89,284,10
+#endif
 END
 
 /////////////////////////////////////////////////////////////////////////////

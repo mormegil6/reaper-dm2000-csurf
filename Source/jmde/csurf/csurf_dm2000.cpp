@@ -1,7 +1,10 @@
 #include "csurf.h"
+#ifdef _WIN32
 #include <shellapi.h>
 #include <shlobj.h>
 #include <commctrl.h>
+#endif
+#include "dm2000_compat.h"
 
 // DM2000 fader taper, hardware-calibrated against the printed dB scale
 // (mark-by-mark MIDI-OX captures, 2026-06-12). Values are 14-bit (MSB<<7)|LSB
@@ -668,6 +671,8 @@ private:
 
 static void GetIniPath(char *buf, int bufsz)
 {
+    buf[0] = '\0';
+#ifdef _WIN32
     // prefer REAPER's own GetResourcePath (not in the csurf SDK headers, so look it up at runtime)
     typedef const char *(*GRP_t)();
     HMODULE hReaper = GetModuleHandleA("reaper.exe");
@@ -680,6 +685,13 @@ static void GetIniPath(char *buf, int bufsz)
         SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, appdata);
         sprintf_s(buf, bufsz, "%s\\REAPER\\dm2000_keys.ini", appdata);
     }
+#else
+    // macOS: GetResourcePath (resolved via rec->GetFunc in csurf_main) returns
+    // ~/Library/Application Support/REAPER; the keys file lives alongside reaper.ini.
+    // No GetModuleHandle on SWELL, so this is the only portable resolver.
+    if (GetResourcePath)
+        sprintf_s(buf, bufsz, "%s/dm2000_keys.ini", GetResourcePath());
+#endif
 }
 
 static void parseParms(const char *str, int parms[8], char *iniPath, int iniPathSz)
@@ -753,10 +765,21 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 GetDlgItemTextA(hwndDlg, IDC_EDIT_INIPATH, iniPath, sizeof(iniPath));
                 char folder[MAX_PATH];
                 strcpy_s(folder, sizeof(folder), iniPath);
-                char *sep = strrchr(folder, '\\');
+                char *sep = strrchr(folder, DM2000_PATHSEP);
                 if (sep) *sep = '\0';
+#ifdef _WIN32
                 ShellExecuteA(hwndDlg, "explore", folder, NULL, NULL, SW_SHOWNORMAL);
+#else
+                // SWELL routes a bare directory path to NSWorkspace openFile (opens in Finder).
+                ShellExecute(hwndDlg, "open", folder, NULL, NULL, 0);
+#endif
             }
+#ifndef _WIN32
+            else if (id == IDC_DM2000_LINK)
+                // On macOS the footer is an SS_NOTIFY static (SWELL has no SysLink);
+                // its click arrives here as WM_COMMAND. SWELL ShellExecute opens the URL.
+                ShellExecute(hwndDlg, "open", "https://bmroz.eu/projects/dm2000-csurf", NULL, NULL, 0);
+#endif
         }
         break;
         case WM_USER + 1024:
@@ -806,6 +829,9 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 lstrcpyn((char *)lParam, tmp, wParam);
             }
         break;
+#ifdef _WIN32
+        // SWELL has no WHITE_BRUSH and its GetStockObject only knows NULL_BRUSH/NULL_PEN,
+        // so this would not compile on macOS; SWELL edit fields render white by default.
         case WM_CTLCOLOREDIT:
             if (GetDlgCtrlID((HWND)lParam) == IDC_EDIT_INIPATH)
             {
@@ -813,6 +839,8 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 return (INT_PTR)GetStockObject(WHITE_BRUSH);
             }
         break;
+        // SysLink + NMLINK exist only on Windows; on macOS the footer is an SS_NOTIFY
+        // static handled via WM_COMMAND/IDC_DM2000_LINK above (NMLINK is undefined in SWELL).
         case WM_NOTIFY:
         {
             NMHDR *hdr = (NMHDR *)lParam;
@@ -823,6 +851,7 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
             }
         }
         break;
+#endif
     }
     return 0;
 }

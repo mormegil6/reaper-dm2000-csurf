@@ -8,3 +8,9 @@ x64/
 *.pdb
 *.aps
 Builds/VisualStudio2019/reaper_csurf/
+
+# macOS build - not vendored; generated per-machine
+Source/WDL/
+Source/jmde/csurf/res.rc_mac_dlg
+Source/jmde/csurf/res.rc_mac_menu
+Builds/Make/*.dylib

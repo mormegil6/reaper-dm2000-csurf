@@ -22,6 +22,7 @@ midi_Input *(*CreateMIDIInput)(int dev);
 midi_Output *(*CreateMIDIOutput)(int dev, bool streamMode, int *msoffset100); 
 bool (*GetMIDIOutputName)(int dev, char *nameout, int nameoutlen);
 bool (*GetMIDIInputName)(int dev, char *nameout, int nameoutlen);
+const char *(*GetResourcePath)();
 
 void * (*projectconfig_var_addr)(void*proj, int idx);
 
@@ -229,6 +230,10 @@ REAPER_PLUGIN_DLL_EXPORT int REAPER_PLUGIN_ENTRYPOINT(REAPER_PLUGIN_HINSTANCE hI
 
 
   if (errcnt) return 0;
+
+  // Resolved separately from the IMPAPI block above so a REAPER that lacks it
+  // never increments errcnt and blocks load. Used by the DM2000 surface.
+  *(void **)&GetResourcePath = (void *)rec->GetFunc("GetResourcePath");
 
 
   rec->Register("csurf",&csurf_bcf_reg);
