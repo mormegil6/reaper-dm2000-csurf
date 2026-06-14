@@ -111,6 +111,8 @@ WDL clone, `make`, binary verification, install).
       (`F0 00 00 66 05 00 11 <8 chars> F7`). Implemented but unverified on
       hardware - counter should track playback position; format may need adjustment.
 
+Full button/zone/MIDI reference: [DESIGN.md - Button / function / MIDI reference table](DESIGN.md#button--function--midi-reference-table).
+
 ### DM2000-specific behavior (hardware-verified - details in DESIGN.md)
 
 - **Fader taper is calibrated to the console's printed scale**: REAPER dB and

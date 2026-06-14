@@ -103,7 +103,8 @@ Zone assignments:
 | 0x14 | ENTER (hardware-verified) | 0=press → toggle scroll/zoom |
 | 0x1B | DEC (hardware-verified) | 7=press → previous marker |
 
-**Button / function / MIDI reference table:**
+<details>
+<summary><strong>Button / function / MIDI reference table</strong> (click to expand)</summary>
 
 "Verified" = confirmed on hardware with MIDI-OX or direct test. "Inferred" = protocol-consistent assignment not yet hardware-confirmed. "Unverified" = software guess; switch number may be wrong.
 
@@ -157,6 +158,8 @@ Zone assignments:
 **Pan ring LED values:** 1=hard left, 6=centre, 11=hard right. `B0+(P) 10+(N%8) 0` = ring off.
 
 **Zone numbering:** zone = channel number within the port (0–7); port P = 0–3 (ports 1–4). Channel strip controls on port P channel C address global channel `P*8 + C` (0–31).
+
+</details>
 
 **Pan v-pots (DM2000 → host):**
 Relative deltas, NOT switch-matrix messages:
