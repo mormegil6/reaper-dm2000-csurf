@@ -461,12 +461,13 @@ private:
 
         // Program Change on any port: DM2000 GENERAL port scene recall.
         // User must assign GENERAL to one of the 4 DAW USB ports on the console.
-        // PC 0-8 map to REAPER markers 1-9; higher PCs fall through as no-ops
-        // until a proper scene-to-marker table is implemented.
+        // Default PC table (manual p.218): scene N sends PC N (1-indexed).
+        // PC 1-9 map to REAPER markers 1-9; PC 0 and higher PCs fall through
+        // as no-ops until a proper scene-to-marker table is implemented.
         if (status == 0xC0)
         {
-            if (data1 <= 8)
-                SendMessage(g_hwnd, WM_COMMAND, ID_GOTO_MARKER1 + data1, 0);
+            if (data1 >= 1 && data1 <= 9)
+                SendMessage(g_hwnd, WM_COMMAND, ID_GOTO_MARKER1 + data1 - 1, 0);
             return;
         }
 
