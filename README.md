@@ -1,4 +1,4 @@
-[![C++](https://img.shields.io/badge/C++-17-blue.svg)]() [![Windows](https://img.shields.io/badge/Windows-x64-0078D4.svg?logo=windows&logoColor=white)]() [![REAPER](https://img.shields.io/badge/REAPER-6+-darkgreen.svg)]() [![v0.2](https://img.shields.io/badge/version-v0.2-lightgrey.svg)](https://bmroz.eu/projects/dm2000-csurf) [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
+[![C++](https://img.shields.io/badge/C++-14-blue.svg)]() [![Windows](https://img.shields.io/badge/Windows-x64-0078D4.svg?logo=windows&logoColor=white)]() [![macOS](https://img.shields.io/badge/macOS-arm64%2Fx86__64-lightgrey.svg?logo=apple&logoColor=black)]() [![REAPER](https://img.shields.io/badge/REAPER-6+-darkgreen.svg)]() [![v0.2](https://img.shields.io/badge/version-v0.2-lightgrey.svg)](https://bmroz.eu/projects/dm2000-csurf) [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
 
 # reaper_csurf_dm2000 - Yamaha DM2000 control surface for REAPER
 
@@ -24,7 +24,7 @@ reference, layer plan, and task tracking.
 - Console setup:
   - Remote Layer target: **Pro Tools**
   - `SETUP → MIDI/HOST SETUP → DAW = USB 1-4`
-- Windows x64, REAPER 6 or later
+- Windows x64 or macOS (arm64/x86_64), REAPER 6 or later
 - Note: "DAW Off-line" on the DM2000 display is normal until REAPER is running
   with the surface configured (the DLL answers the console's keepalive ping)
 
