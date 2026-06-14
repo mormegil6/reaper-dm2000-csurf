@@ -23,6 +23,12 @@ Tasks tracked here to avoid scrolling chat history.
       those buttons while MIDI-OX monitors port 1, or confirm the zone 0x0E
       switch positions match implementation.
 
+- [ ] **Marker insertion button** - ENTER (zone 0x14 sw 0) is the prime HUI
+      candidate (Pro Tools uses it to create memory locations). Currently wired
+      to scroll/zoom toggle. Verify zone with MIDI-OX, then wire to REAPER action
+      40157 (Insert marker at current position) and move scroll/zoom toggle
+      elsewhere.
+
 - [ ] **LOCATE MEMORY 1-8 zone** - TODO says zone 0x10 / 0x0F was captured;
       needs hardware re-verification. Once confirmed, wire to
       `SendMessage(g_hwnd, WM_COMMAND, ID_GOTO_MARKER1 + n, 0)`.
