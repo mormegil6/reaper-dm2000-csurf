@@ -125,12 +125,12 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 |------|---------|---------------|
 | 0x0D | Cursor cluster + wheel modes | 0=down, 1=left, 2=INC, 3=right, 4=up, 5=SCRUB, 6=SHUTTLE |
 | 0x0E | Transport | 1=REW, 2=FFWD, 3=STOP, 4=PLAY, 5=REC |
-| 0x10 | RTZ / END / LOOP / QUICK PUNCH | 0=RTZ, 1=END, 2=LOOP, 3=QUICK PUNCH (sw4 unidentified) |
+| 0x10 | Locate row 1 (hw-verified 2026-06-15) | 0=AUDITION (no action), 1=PRE (no action), 2=IN (set loop in-point), 3=OUT (set loop out-point), 4=POST (insert region from time selection) |
 
 **Locate & markers**
 | Zone | Meaning | Switches used |
 |------|---------|---------------|
-| 0x0F | Locator row 2 | 0=ROLL BACK, 1=REHEARSAL, 2=MTR, 3=MASTER (sw4 unidentified) |
+| 0x0F | Locate row 2 (hw-verified 2026-06-15) | 0=RTZ, 1=END, 2=ONLINE (no action), 3=LOOP (toggle repeat), 4=QUICK PUNCH (insert marker); SET/REHEARSAL/MTR/MASTER do not transmit HUI - DM2000 internal only |
 | 0x13 | LOCATE MEMORY | sw1=LM1, sw3=LM2, sw6=LM3, sw2=LM4, sw4=LM5, sw7=LM6; sw5=companion event (always fires alongside, ignore) |
 | 0x14 | ENTER | 0=press -> cycle cursor arrows: scroll -> zoom -> bank-scroll |
 | 0x15 | LOCATE MEMORY 7-8 | sw0=LM7, sw1=LM8 (hw-captured 2026-06-15; fires alongside zone 0x13 sw5) |
@@ -176,14 +176,25 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 | REC | DM2000→host | zone 0x0E, sw 5 | `CSurf_OnRecord()` | Verified |
 | REW | DM2000→host | zone 0x0E, sw 1 | `CSurf_OnRew()` with auto-repeat (400ms delay, 80ms interval) | Verified |
 | FFWD | DM2000→host | zone 0x0E, sw 2 | `CSurf_OnFwd()` with auto-repeat (400ms delay, 80ms interval) | Verified |
-| RTZ | DM2000→host | zone 0x10, sw 0 | `CSurf_GoStart()` | Verified |
-| END | DM2000→host | zone 0x10, sw 1 | `CSurf_GoEnd()` | Verified |
-| LOOP | DM2000→host | zone 0x10, sw 2 | toggle loop (`IDC_REPEAT`) | Verified |
-| QUICK PUNCH | DM2000→host | zone 0x10, sw 3 | insert marker at edit cursor (action 40157) | Verified |
+| AUDITION | DM2000→host | zone 0x10, sw 0 | no action | Verified |
+| PRE | DM2000→host | zone 0x10, sw 1 | no action | Verified |
+| IN | DM2000→host | zone 0x10, sw 2 | set loop in-point (action 40222) | Verified |
+| OUT | DM2000→host | zone 0x10, sw 3 | set loop out-point (action 40223) | Verified |
+| POST | DM2000→host | zone 0x10, sw 4 | no action | Verified |
+| RTZ | DM2000→host | zone 0x0F, sw 0 | `CSurf_GoStart()` | Verified |
+| END | DM2000→host | zone 0x0F, sw 1 | `CSurf_GoEnd()` | Verified |
+| ONLINE | DM2000→host | zone 0x0F, sw 2 | no action (DM2000 internal, no REAPER equivalent) | Verified |
+| LOOP | DM2000→host | zone 0x0F, sw 3 | toggle loop (`IDC_REPEAT`) | Verified |
+| LOOP LED | host→DM2000 | target 0x0F, sw 3 | `SetRepeatState()` | Verified |
+| QUICK PUNCH | DM2000→host | zone 0x0F, sw 4 | insert marker at edit cursor (action 40157) | Verified |
+| SET | DM2000→host | — | does not transmit HUI - DM2000 internal only | Not mappable |
+| REHEARSAL | DM2000→host | — | does not transmit HUI | Not mappable |
+| MTR | DM2000→host | — | does not transmit HUI | Not mappable |
+| MASTER | DM2000→host | — | does not transmit HUI | Not mappable |
+| POST | DM2000→host | zone 0x10, sw 4 | insert region from time selection (action 40174) | Verified |
 | PLAY LED | host→DM2000 | target 0x0E, sw 4 | `SetPlayState()` | Verified |
 | STOP LED | host→DM2000 | target 0x0E, sw 3 | `SetPlayState()` | Verified |
 | REC LED | host→DM2000 | target 0x0E, sw 5 | `SetPlayState()` | Verified |
-| LOOP LED | host→DM2000 | target 0x10, sw 2 | `SetRepeatState()` | Verified |
 | Jog wheel | DM2000→host | `B0 0D vv` | `MoveEditCursor()` (default jog) | Verified |
 | SCRUB key | DM2000→host | zone 0x0D, sw 5 | switch to scrub mode | Verified |
 | SHUTTLE key | DM2000→host | zone 0x0D, sw 6 | switch to shuttle mode | Verified |
@@ -237,12 +248,12 @@ Three modes, selected by the SCRUB/SHUTTLE keys (zone 0x0D sw 5/6, LEDs driven,
 mutually exclusive): default jog = `MoveEditCursor(speed * ±0.1s)`; SHUTTLE =
 coarse `MoveEditCursor(speed * ±1s)`; SCRUB = `CSurf_ScrubAmt(speed * ±0.05)`.
 Plain `CSurf_ScrubAmt()` as the only handler did nothing in normal operation
-(hardware-verified), hence the edit-cursor default. ENTER (zone 0x14 sw 0) toggles
-the cursor arrow keys between scroll mode (`CSurf_OnArrow(dir, false)`) and zoom
-mode (`CSurf_OnArrow(dir, true)`); the `m_arrow_zoom` flag persists until the next
-press. REW/FF (zone 0x0E sw1/sw2) support auto-repeat: first repeat after 400 ms,
-then every 80 ms. QUICK PUNCH (zone 0x10 sw 3) inserts a marker at the edit cursor
-(REAPER action 40157).
+(hardware-verified), hence the edit-cursor default. ENTER (zone 0x14 sw 0) cycles the cursor arrow keys: scroll -> zoom -> bank-scroll
+(mode 2 calls `AdjustBankOffset` + `SetMixerScroll` to keep the REAPER mixer view
+in sync with the DM2000 bank). REW/FF (zone 0x0E sw1/sw2) support auto-repeat:
+first repeat after 400 ms, then every 80 ms. IN (zone 0x10 sw 2) sets the loop
+in-point; OUT (zone 0x10 sw 3) sets the loop out-point. SET/LOOP/RTZ buttons are
+in zone 0x10 at sw4+ but their exact switch numbers have not been captured yet.
 
 **Switch/LED feedback (host → DM2000):**
 LEDs use a different CC pair to avoid confusion with the incoming zone-select:
@@ -252,7 +263,7 @@ B0  2C  vv      - value: bits 0–3 = switch number, bit 6 = on (0x40), 0 = off
 ```
 
 Channel LEDs (switch numbers): 1=SELECT, 2=MUTE, 3=SOLO, 7=REC/RDY
-Transport LEDs (target 0x0E, switch numbers): 3=STOP, 4=PLAY, 5=REC, 7=LOOP (wired via SetRepeatState)
+Transport LEDs (target 0x0E, switch numbers): 3=STOP, 4=PLAY, 5=REC. LOOP LED is at target 0x0F sw4 (wired via SetRepeatState), not on transport row.
 
 **HUI meter (host → DM2000):**
 Polyphonic key pressure, one message per meter side:
@@ -365,7 +376,7 @@ Tasks:
 - [x] Transport: play/stop/record/rewind/forward with LEDs
 - [~] Transport extensions: RTZ (zone 0x0E sw=0), END (sw=6), LOOP (sw=7) added; switch numbers
       are unverified guesses - verify with MIDI-OX before relying on them. `SetRepeatState` wired
-      to LOOP LED (zone 0x0E, target 0x0E, sw=7).
+      to LOOP LED (zone 0x0F, target 0x0F, sw=4; hw-verified 2026-06-15).
 - [x] Bank switching: left/right arrows to shift which 24 tracks are visible
 - [x] Automation modes: AUTOMIX section (zone 0x18, 7 buttons) mapped to REAPER global automation override; LED feedback on all 3 HUI ports
 
@@ -385,7 +396,7 @@ Tasks:
 - [x] Selected channel highlight
 - [x] Track name truncated to 4 chars on scribble strip via HUI (`F0 00 00 66 05 00 10 <ch> <4 chars> F7`, per port)
 - [x] Jog/scrub wheel: CC 0x0D, bits 0–5 = speed, bit 6 set = forward; jog/SHUTTLE/SCRUB modes (see protocol section)
-- [x] Cursor arrows (scroll/zoom toggled by ENTER), DEC/INC = prev/next marker, ENTER = toggle scroll/zoom, QUICK PUNCH = insert marker
+- [x] Cursor arrows (3-mode ENTER: scroll/zoom/bank-scroll+mixer-scroll), DEC/INC = prev/next marker, IN = set loop in-point, OUT = set loop out-point
 - [x] LOCATE MEMORY [1-8]: zone 0x0F sw 0-7 → jump to REAPER markers 1-8 (zone unverified)
 - [~] HUI counter (LED timecode) display: `F0 00 00 66 05 00 11 <8 ASCII chars> F7` sent
       every 100ms from `Run()`; position from `GetPlayPosition()`/`GetCursorPosition()` +

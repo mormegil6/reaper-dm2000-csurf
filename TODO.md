@@ -19,8 +19,8 @@ Tasks tracked here to avoid scrolling chat history.
       test by recalling a DM2000 scene and confirming REAPER jumps to the
       matching marker.
 
-- [x] **Transport sw verification** - RTZ, END, LOOP are at zone 0x10 sw 0/1/2
-      (not zone 0x0E as previously guessed). Verified 2026-06-15, code fixed.
+- [x] **Transport sw verification** - RTZ, END are zone 0x0F sw0/1; LOOP is zone 0x0F sw3
+      (Locate row 2, not transport zone 0x0E). All hw-verified 2026-06-15, code fixed.
 
 - [x] **ENTER zone hardware re-verify** - zone 0x14 sw 0 confirmed by full
       capture 2026-06-15. ENTER now toggles cursor arrow keys between scroll
@@ -76,14 +76,21 @@ Tasks tracked here to avoid scrolling chat history.
       from 100 to 118 dialog units; second SysLink added linking to
       doc/dm2000_keys.ini.example on GitHub.
 
-- [~] **HUI counter display** - `F0 00 00 66 05 00 11 <8 ASCII chars> F7` sent every 100ms
-      in `Run()`. Command byte 0x11 and ASCII encoding are UNVERIFIED on the DM2000. Verify
-      by checking the LED counter during playback; if blank/garbled, capture what Pro Tools
-      sends to port 1 with MIDI-OX and adjust format.
+- [x] **HUI counter display** - protocol decoded 2026-06-15 from Pro Tools loopMIDI capture.
+      `F0 00 00 66 05 00 11 [N bytes right-to-left] F7`; each byte `(sep_flag<<4)|digit`,
+      delta updates only. Follows REAPER transport display format via `timemode2`/`timemode`
+      project config vars (same as csurf_mcu). Hardware-verified 2026-06-15.
 
-- [x] **Transport extensions: RTZ, END, LOOP** - moved to zone 0x10 sw=0/1/2
-      (hardware-verified 2026-06-15). LOOP LED now targets zone 0x10 sw 2.
+- [x] **Transport extensions: RTZ, END, LOOP** - zone 0x0F sw0/1/3 (Locate row 2,
+      hw-verified 2026-06-15). LOOP LED targets zone 0x0F sw3 via SetRepeatState.
       AUTOMIX section sw assignments also corrected (all were wrong previously).
+
+- [x] **Locate section INI-configurable** - all buttons in the Locate section (RTZ, END,
+      ONLINE, LOOP, QPUNCH, AUDITION, PRE, IN, OUT, POST, LM1-LM8) now read their REAPER
+      action IDs from the `[locate]` section of dm2000_keys.ini on plugin load.
+      0 = no action (RTZ/END: 0 = use CSurf_GoStart/GoEnd API). All defaults match the
+      hw-verified REAPER-native behavior. doc/dm2000_keys.ini.example updated with the full
+      section, comments, and Pro Tools vs REAPER-native notes.
 
 - [ ] **Scene recall PC indexing verify** - implemented for all 99 scenes using
       0-indexed wire format (byte 0x00 = Scene 1 → marker 1). Per manual p.370
@@ -94,12 +101,13 @@ Tasks tracked here to avoid scrolling chat history.
       send PC to DM2000 to recall the matching scene. Requires knowing which port
       is GENERAL; plan to add as optional 5th port in config, or reuse port 4.
 
-- [ ] **USER DEFINED KEYS dispatch** - config dialog has ini path field; the actual
-      ini-file reader that maps key N to a REAPER action ID is not written.
-      Format and suggested actions documented in doc/dm2000_keys.ini.example.
-      Confirmed UDK zones: 4/5/13/14=zone 0x08, 6/7/8=zone 0x19. Keys 2/3 duplicate
-      bank navigation (zone 0x0A sw1/sw3) and 10/11 duplicate ch navigation
-      (zone 0x0A sw0/sw2) per manual ch.19; zones for 1/3/9/11/12/15/16 unconfirmed.
+- [ ] **USER DEFINED KEYS dispatch** - config dialog has ini path field; the `[locate]`
+      section is now implemented (see above), but the `[udk]` dispatcher that maps UDK
+      button N to a REAPER action ID is not yet written. Format documented in
+      doc/dm2000_keys.ini.example under `[udk]`. Confirmed UDK zones: 4/5/13/14=zone 0x08,
+      6/7/8=zone 0x19. Keys 2/3 duplicate bank navigation (zone 0x0A sw1/sw3) and 10/11
+      duplicate ch navigation (zone 0x0A sw0/sw2) per manual ch.19; zones for
+      1/9/12/15/16 unconfirmed.
 
 - [ ] **EQ / parameter control via CC** - manual appendix confirms EQ ATT (input
       attenuation), EQ ON/OFF, and all faders/pans are accessible as MIDI CC on

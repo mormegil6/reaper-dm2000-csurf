@@ -75,6 +75,8 @@ extern int (*GetMasterMuteSoloFlags)();
 extern void (*TrackList_UpdateAllExternalSurfaces)();
 
 extern void (*MoveEditCursor)(double adjamt, bool dosel);
+extern void (*Main_OnCommand)(int command, int flag);
+extern void (*SetMixerScroll)(MediaTrack *leftmosttrack);
 extern void (*adjustZoom)(double amt, int forceset, bool doupd, int centermode); // 0,true,-1 are defaults
 extern double (*GetHZoomLevel)(); // returns pixels/second
 
