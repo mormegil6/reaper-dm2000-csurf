@@ -38,6 +38,13 @@ Tasks tracked here to avoid scrolling chat history.
       playback to see if it pushes peak data to the host (would enable meter
       bridge without polling).
 
+- [ ] **Full button zone map — needs hardware capture** - only the navigation
+      cluster was ever captured (DEC, INC, ENTER, 4 arrows, SCRUB, SHUTTLE).
+      BACK (Edit Mode), FORWARD (Edit Tools), ONLINE, AUDITION, PRE, POST,
+      IN, OUT, and USER DEFINED KEYS 1-16 have never been recorded. Next
+      hardware session: press each with MIDI-OX monitoring port 1, record
+      zone/sw, add to DESIGN.md button reference table, then implement.
+
 ---
 
 ## Software
@@ -64,9 +71,6 @@ Tasks tracked here to avoid scrolling chat history.
 - [ ] **Scene recall PC send** - REAPER → DM2000: when playback crosses a marker,
       send PC to DM2000 to recall the matching scene. Requires knowing which port
       is GENERAL; plan to add as optional 5th port in config, or reuse port 4.
-
-- [ ] **LOCATE MEMORY 1-8** - zone map noted as 0x10 / 0x0F; wiring to
-      REAPER marker jump not yet written. Needs hardware re-verification first.
 
 - [ ] **USER DEFINED KEYS dispatch** - config dialog has ini path field; the actual
       ini-file reader that maps `zone_sw = action_id` to REAPER actions is not
