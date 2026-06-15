@@ -164,11 +164,11 @@ Full button/zone/MIDI reference: [DESIGN.md - Button / function / MIDI reference
 
 - Port 8 output not yet wired in the config dialog; `m_midiout8` is always NULL.
   Port 8 support will be re-exposed in the UI when scene recall send is implemented.
-- [~] Channel names via native SysEx - format captured 2026-06-12, code written; not active
+- [ ] (in progress) Channel names via native SysEx - format captured 2026-06-12, code written; not active
       until port 8 is wired. Hardware test confirmed scribble strip is 4-char wide in DAW
       mode regardless (HUI controls the visible strip; native SysEx updates internal memory only).
 - [x] Meter bridge - driven by existing HUI meter messages (Layer 2); no native SysEx needed
-- [~] Scene recall: PC receive implemented (DM2000 scene change → REAPER marker jump for
+- [ ] (in progress) Scene recall: PC receive implemented (DM2000 scene change → REAPER marker jump for
       scenes 1-99); set GENERAL port to a DAW USB port on the console. PC send and SysEx
       scene dump not yet implemented.
 

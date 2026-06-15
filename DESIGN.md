@@ -456,7 +456,7 @@ Tasks:
   - Implemented in `SendTrackTitle()`: sends pos=0..7 on port 8 alongside HUI 4-char names
   - Hardware test result: display shows 4 chars only - scribble strip is physically 4-char wide in DAW mode; native SysEx updates console memory but HUI controls the visible strip
 - [x] Meter bridge - already driven by HUI `A0 ch (side<<4)|level` messages (Layer 2); the DM2000 has no separate channel-strip VU display, so HUI meters ARE the meter bridge. No native SysEx needed.
-- [~] Scene recall:
+- [ ] (in progress) Scene recall:
   - [x] PC receive: all 99 scenes (bytes 0x00-0x62) jump to REAPER markers 1-99.
         Wire format is 0-indexed per manual p.370 ("Program number 0-127"):
         byte 0x00 = PC 1 = Scene 1 → marker 1. UNVERIFIED: some Yamaha devices
