@@ -23,15 +23,11 @@ Tasks tracked here to avoid scrolling chat history.
       those buttons while MIDI-OX monitors port 1, or confirm the zone 0x0E
       switch positions match implementation.
 
-- [ ] **Marker insertion button** - ENTER (zone 0x14 sw 0) is the prime HUI
-      candidate (Pro Tools uses it to create memory locations). Currently wired
-      to scroll/zoom toggle. Verify zone with MIDI-OX, then wire to REAPER action
-      40157 (Insert marker at current position) and move scroll/zoom toggle
-      elsewhere.
+- [ ] **ENTER zone hardware re-verify** - zone 0x14 sw 0 is now wired to insert
+      marker (action 40157, per manual ch.19 p.249). Confirm zone/sw with MIDI-OX.
 
-- [ ] **LOCATE MEMORY 1-8 zone** - TODO says zone 0x10 / 0x0F was captured;
-      needs hardware re-verification. Once confirmed, wire to
-      `SendMessage(g_hwnd, WM_COMMAND, ID_GOTO_MARKER1 + n, 0)`.
+- [ ] **LOCATE MEMORY 1-8 zone** - implemented at zone 0x0F sw 0-7; zone is
+      unverified. Press MEMORY buttons while MIDI-OX monitors port 1 to confirm.
 
 - [ ] **Port 4 MCS PANNER** - manual p.223 confirms port 4 uses MCS PANNER protocol
       (surround joystick), not HUI channel strips. Protocol capture needed before
@@ -60,10 +56,10 @@ Tasks tracked here to avoid scrolling chat history.
 - [ ] **Transport extensions: RTZ, END, LOOP** - added to zone 0x0E sw=0/6/7;
       switch numbers unverified. `SetRepeatState` wired to LOOP LED.
 
-- [ ] **Scene recall PC receive** - implemented: PC 1-9 on any DAW port jump to
-      REAPER markers 1-9 (1-indexed per manual p.218). Requires GENERAL port to be
-      set to a DAW USB port on the console. PC 10+ not yet handled (needs a
-      scene-to-marker table).
+- [ ] **Scene recall PC indexing verify** - implemented for all 99 scenes using
+      0-indexed wire format (byte 0x00 = Scene 1 → marker 1). Per manual p.370
+      ("Program number 0-127"). UNVERIFIED: test by recalling scenes 1 and 2 and
+      checking which REAPER markers are jumped to; if off by one, flip to 1-indexed.
 
 - [ ] **Scene recall PC send** - REAPER → DM2000: when playback crosses a marker,
       send PC to DM2000 to recall the matching scene. Requires knowing which port

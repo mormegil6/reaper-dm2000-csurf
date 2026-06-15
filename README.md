@@ -110,6 +110,11 @@ WDL clone, `make`, binary verification, install).
 - [x] Transport extensions: RTZ, END, LOOP buttons wired; LOOP LED feedback via
       `SetRepeatState`. Switch positions are software guesses - verify with MIDI-OX
       before relying on RTZ/END/LOOP in a session.
+- [x] ENTER button inserts a marker at the edit cursor (REAPER action 40157;
+      zone 0x14 sw 0 - zone unverified, confirm with MIDI-OX)
+- [x] LOCATE MEMORY [1-8] jump to REAPER markers 1-8 (zone 0x0F - unverified)
+- [x] Scene recall: DM2000 scenes 1-99 jump to REAPER markers 1-99 via Program
+      Change on the GENERAL port (0-indexed wire format per manual p.370, unverified)
 - [ ] LED counter display: position sent every 100ms as HUI SysEx
       (`F0 00 00 66 05 00 11 <8 chars> F7`). Implemented but unverified on
       hardware - counter should track playback position; format may need adjustment.
