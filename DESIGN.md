@@ -54,17 +54,23 @@ B0  20+ch vv  - fader LSB (controller 0x20–0x27); triggers the volume update
 Value reconstruction: `(MSB << 7) | LSB`, full scale 0–16383 (MSB reaches 0x7F;
 LSB only carries bits 5–6, so the ~9-bit effective resolution sits in the top
 bits). The dB mapping follows the console's **printed scale**, NOT REAPER's
-slider taper - calibrated mark-by-mark (MIDI-OX, 2026-06-12):
+slider taper - calibrated via DM2000 Editor after running the console's built-in
+fader calibration utility (MIDI-OX, 2026-06-15; doc/fader-calibration-2026-06-15.txt):
 | printed mark | wire value |
 |---|---|
-| +5 (= console max; saturates above) | 16352 |
-| 0 | 14112 |
-| −30 | 3200 |
-| −40 | 2304 |
-| −50 | 1056 |
+| +10 (= console max) | 16383 |
+| +5 | 14768 |
+| 0 | 13168 |
+| −5 | 11568 |
+| −10 | 9968 |
+| −15 | 8368 |
+| −20 | 6768 |
+| −30 | 5168 |
+| −40 | 3568 |
+| −50 | 2768 |
 | −∞ (bottom) | 0 |
-0→−30 is near-linear (≈364 units/dB); both calibration captures agree within
-~0.5 dB. Conversion is piecewise-linear between anchors (`g_taper_db[]` /
+Taper is linear from −30 to +10 dB (1600 wire units per 5 dB); compressed below
+−30 dB. Conversion is piecewise-linear between anchors (`g_taper_db[]` /
 `g_taper_val[]` in csurf_dm2000.cpp), used by both directions.
 
 **Fader position (host → DM2000):**
@@ -74,9 +80,8 @@ B0  ch    msb  - MSB first  (controller 0x00–0x07)
 B0  20+ch lsb  - LSB second (controller 0x20–0x27)
 ```
 Both directions use the same calibrated taper table (`volToInt14` is the
-inverse of `int14ToVol`). REAPER volumes above +5 dB clamp to 16352 - the
-console's value range physically tops out at the printed +5 mark, so REAPER
-+5..+12 all park the motor there.
+inverse of `int14ToVol`). REAPER volumes above +10 dB clamp to 16383 - the
+console's physical maximum.
 
 **Echo requirement (hardware-verified 2026-06-12):** the DM2000 keeps an
 internal model of the DAW's fader positions and springs the motor back to that
@@ -95,16 +100,26 @@ B0  0F  zone  - zone select (sets current zone for this port)
 B0  2F  vv    - value: bits 0–3 = switch number, bit 6 = press (0x40), 0 = release
 ```
 
-Zone assignments:
+Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; see doc/midi-capture-2026-06-15.txt):
 | Zone | Meaning | Switches used |
 |------|---------|---------------|
-| 0–7  | Channel strip (zone = channel 0–7 on this port) | 0=fader touch/release, 1=SELECT, 2=MUTE, 3=SOLO, 5=pan knob press → center pan, 7=REC/RDY |
-| 0x0A | Bank/channel navigation | 0=ch◄, 1=bank◄, 2=ch►, 3=bank► |
-| 0x0D | Cursor cluster + wheel modes (hardware-verified) | 0=down, 1=left, 2=INC → next marker, 3=right, 4=up, 5=SCRUB, 6=SHUTTLE |
-| 0x0E | Transport | 0=RTZ (unverified sw#), 1=REW, 2=FFWD, 3=STOP, 4=PLAY, 5=REC, 6=END (unverified sw#), 7=LOOP (unverified sw#) |
-| 0x0F | LOCATE MEMORY 1-8 (zone unverified) | sw 0-7=press → jump to REAPER marker 1-8 |
-| 0x14 | ENTER (hardware-verified) | 0=press → insert marker at edit cursor (action 40157; manual p.249) |
-| 0x1B | DEC (hardware-verified) | 7=press → previous marker |
+| 0-7  | Channel strip (zone = ch 0-7 on this port) | 0=fader touch, 1=SELECT, 2=MUTE, 3=SOLO, 4=AUTOMIX per-ch, 5=pan knob press, 7=REC/RDY |
+| 0x08 | Display history + User Defined Keys 4/5/13/14 | sw2=BACK, sw6=FORWARD (and UDK sw1/sw5/sw3/sw7) |
+| 0x09 | Display buttons + User Defined Keys 1/2/9/10 | sw3=LOCATOR DISPLAY, sw4=UDK DISPLAY, sw5=EFFECT DISPLAY |
+| 0x0A | Bank/channel navigation | 0=ch-left, 1=bank-left, 2=ch-right, 3=bank-right |
+| 0x0B | Aux select + encoder assign | sw7=AUX1, sw6=AUX2, sw5=AUX3, sw4=AUX4, sw3=AUX5; sw2=ENC PAN, sw1=ENC ASSIGN1, sw0=ENC ASSIGN2 |
+| 0x0C | Fader mode + AUTOMIX REC + matrix select | sw3=FADER, sw0=FAD ASSIGN2; sw2=AUTOMIX REC; sw1=MATRIX1, sw4=MATRIX2 |
+| 0x0D | Cursor cluster + wheel modes | 0=down, 1=left, 2=INC, 3=right, 4=up, 5=SCRUB, 6=SHUTTLE |
+| 0x0E | Transport | 1=REW, 2=FFWD, 3=STOP, 4=PLAY, 5=REC |
+| 0x0F | Locator row 2 | 0=ROLL BACK, 1=REHEARSAL, 2=MTR, 3=MASTER (sw4 unidentified) |
+| 0x10 | RTZ / END / LOOP group | 0=RTZ, 1=END, 2=LOOP, 3=QUICK PUNCH (sw4 unidentified) |
+| 0x13 | LOCATE MEMORY | sw1=LM1, sw3=LM2, sw6=LM3, sw2=LM4, sw4=LM5, sw7=LM6; sw5=companion event (always fires alongside, ignore) |
+| 0x14 | ENTER | 0=press -> insert marker at edit cursor |
+| 0x15 | Locator / audition | 0=AUDITION, 1=PRE |
+| 0x17 | OVERWRITE section | 0=AUX ON, 1=PAN, 2=FADER, 3=AUX, 4=SURROUND, 5=ON |
+| 0x18 | AUTOMIX mode buttons | 0=TOUCH SENSE, 1=RETURN/READ, 2=RELATIVE, 4=ABORT/UNDO, 5=AUTO-REC/LATCH |
+| 0x19 | AUTOMIX ENABLE + User Defined Keys 6-8 | sw2=ENABLE; sw3/4/5=UDK6/7/8 (fire on all 3 ports) |
+| 0x1B | DEC | 7=press -> previous marker |
 
 <details>
 <summary><strong>Button / function / MIDI reference table</strong> (click to expand)</summary>
@@ -135,25 +150,36 @@ Zone assignments:
 | REC | DM2000→host | zone 0x0E, sw 5 | `CSurf_OnRecord()` | Verified |
 | REW | DM2000→host | zone 0x0E, sw 1 | `CSurf_OnRew()` | Verified |
 | FFWD | DM2000→host | zone 0x0E, sw 2 | `CSurf_OnFwd()` | Verified |
-| RTZ | DM2000→host | zone 0x0E, sw 0 | `CSurf_GoStart()` | Unverified (sw# guess) |
-| END | DM2000→host | zone 0x0E, sw 6 | `CSurf_GoEnd()` | Unverified (sw# guess) |
-| LOOP | DM2000→host | zone 0x0E, sw 7 | toggle loop (`IDC_REPEAT`) | Unverified (sw# guess) |
+| RTZ | DM2000→host | zone 0x10, sw 0 | `CSurf_GoStart()` | Verified |
+| END | DM2000→host | zone 0x10, sw 1 | `CSurf_GoEnd()` | Verified |
+| LOOP | DM2000→host | zone 0x10, sw 2 | toggle loop (`IDC_REPEAT`) | Verified |
+| QUICK PUNCH | DM2000→host | zone 0x10, sw 3 | (not implemented) | Verified |
 | PLAY LED | host→DM2000 | target 0x0E, sw 4 | `SetPlayState()` | Verified |
 | STOP LED | host→DM2000 | target 0x0E, sw 3 | `SetPlayState()` | Verified |
 | REC LED | host→DM2000 | target 0x0E, sw 5 | `SetPlayState()` | Verified |
-| LOOP LED | host→DM2000 | target 0x0E, sw 7 | `SetRepeatState()` | Inferred |
+| LOOP LED | host→DM2000 | target 0x10, sw 2 | `SetRepeatState()` | Verified |
 | Jog wheel | DM2000→host | `B0 0D vv` | `MoveEditCursor()` (default jog) | Verified |
 | SCRUB key | DM2000→host | zone 0x0D, sw 5 | switch to scrub mode | Verified |
 | SHUTTLE key | DM2000→host | zone 0x0D, sw 6 | switch to shuttle mode | Verified |
 | Cursor UP/DOWN/LEFT/RIGHT | DM2000→host | zone 0x0D, sw 4/0/1/3 | `CSurf_OnArrow()` scroll | Verified |
-| INC (►\|) | DM2000→host | zone 0x0D, sw 2 | next marker | Verified |
-| DEC (\|◄) | DM2000→host | zone 0x1B, sw 7 | previous marker | Verified |
+| INC (>|) | DM2000→host | zone 0x0D, sw 2 | next marker | Verified |
+| DEC (|<) | DM2000→host | zone 0x1B, sw 7 | previous marker | Verified |
 | ENTER | DM2000→host | zone 0x14, sw 0 | insert marker at edit cursor (action 40157) | Verified |
-| LOCATE MEMORY 1-8 | DM2000→host | zone 0x0F, sw 0-7 | jump to REAPER marker 1-8 | Unverified |
-| AUTOMIX READ | DM2000→host | zone 0x18, sw 1 | global automation = Read | Inferred |
-| AUTOMIX WRITE | DM2000→host | zone 0x18, sw 2 | global automation = Write | Inferred |
-| AUTOMIX TOUCH | DM2000→host | zone 0x18, sw 3 | global automation = Touch | Inferred |
-| AUTOMIX LATCH | DM2000→host | zone 0x18, sw 4 | global automation = Latch | Inferred |
+| Display Hist BACK | DM2000→host | zone 0x08, sw 2 | undo (action 40029) | Verified |
+| Display Hist FORWARD | DM2000→host | zone 0x08, sw 6 | redo (action 40030) | Verified |
+| LOCATE MEMORY 1 | DM2000→host | zone 0x13, sw 1 (+sw5 companion) | jump to REAPER marker 1 | Verified |
+| LOCATE MEMORY 2 | DM2000→host | zone 0x13, sw 3 (+sw5 companion) | jump to REAPER marker 2 | Verified |
+| LOCATE MEMORY 3 | DM2000→host | zone 0x13, sw 6 (+sw5 companion) | jump to REAPER marker 3 | Verified |
+| LOCATE MEMORY 4 | DM2000→host | zone 0x13, sw 2 (+sw5 companion) | jump to REAPER marker 4 | Verified |
+| LOCATE MEMORY 5 | DM2000→host | zone 0x13, sw 4 (+sw5 companion) | jump to REAPER marker 5 | Verified |
+| LOCATE MEMORY 6 | DM2000→host | zone 0x13, sw 7 (+sw5 companion) | jump to REAPER marker 6 | Verified |
+| AUTOMIX ENABLE | DM2000→host | zone 0x19, sw 2 (all 3 ports) | toggle bypass/read | Verified |
+| AUTOMIX RETURN | DM2000→host | zone 0x18, sw 1 (all 3 ports) | global automation = Read | Verified |
+| AUTOMIX TOUCH SENSE | DM2000→host | zone 0x18, sw 0 (all 3 ports) | global automation = Touch | Verified |
+| AUTOMIX REC (WRITE) | DM2000→host | zone 0x0C, sw 2 (port 1 only) | global automation = Write | Verified |
+| AUTOMIX AUTO-REC | DM2000→host | zone 0x18, sw 5 (all 3 ports) | global automation = Latch | Verified |
+| AUTOMIX RELATIVE | DM2000→host | zone 0x18, sw 2 (all 3 ports) | global automation = Latch Preview | Verified |
+| AUTOMIX ABORT/UNDO | DM2000→host | zone 0x18, sw 4 (all 3 ports) | undo (`IDC_EDIT_UNDO`) | Verified |
 | Scribble strip (ch N) | host→DM2000 | `F0 00 00 66 05 00 10 N <4 chars> F7` (port P) | `SetTrackTitle()` 4-char | Verified |
 | LED counter display | host→DM2000 | `F0 00 00 66 05 00 11 <8 chars> F7` (port 1) | position from `format_timestr_pos()` | Unverified |
 | USER DEFINED KEYS | DM2000→host | zones unconfirmed | custom action via ini file | Not implemented |
@@ -478,11 +504,10 @@ Note: earlier versions stored a 9th value (sysex_out); it is now ignored on load
 ## Known issues and caveats
 
 - Port 4 is MCS PANNER (surround joystick protocol), not a 4th HUI channel block - opened and keepalive-echoed but the protocol is not yet implemented (Layer 4)
-- Fader taper is CALIBRATED and applied (see protocol section): the console's
-  wire value saturates at the printed +5 mark, so REAPER volumes above +5 dB
-  all park the motor at +5 - a hardware limit of the DM2000's HUI value range,
-  not a bug. (The first calibration capture's provisional table was superseded
-  by the explicit mark-by-mark capture of 2026-06-12.)
+- Fader taper is CALIBRATED and applied (see protocol section): physical maximum
+  is the printed +10 mark (wire 16383); REAPER volumes above +10 dB clamp there.
+  Table recalibrated 2026-06-15 after running the DM2000's built-in fader
+  calibration utility, which fixed a systematic offset in the −20 to −5 dB range.
 - HUI fader resolution: ~9-bit (512 steps), coarse below -20dB - by design, not a bug
 - Pro Tools target locks USB port 1 on the DM2000 - if port 1 is unavailable, check DM2000 SETUP
 - REAPER must not have the DM2000 ports open as regular MIDI devices (disable in REAPER MIDI prefs)

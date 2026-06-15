@@ -6,10 +6,11 @@ Tasks tracked here to avoid scrolling chat history.
 
 ## Hardware / on-site
 
-- [ ] **Fader recalibration** - use DM2000 Editor to set exact dB values, capture
-      HUI wire values in MIDI-OX. Replace the 6 hand-matched printed-mark points
-      in `g_taper_db[]` / `g_taper_val[]` with a dense, precise table.
-      Target: -60, -50, -40, -30, -20, -10, -6, -3, 0, +3, +5 at minimum.
+- [x] **Fader recalibration** - DM2000 built-in fader calibration utility run
+      2026-06-15, then DM2000 Editor used to confirm 11 dB marks via MIDI-OX
+      (doc/fader-calibration-2026-06-15.txt). `g_taper_db[]` / `g_taper_val[]`
+      updated to 11-point post-calibration table (-inf, -50..+10). Previous table
+      (2026-06-12, 6 points) had systematic offset in -20 to -5 dB range; fixed.
 
 - [ ] **Scene recall — verify GENERAL port** - manual ch.18 confirms Program Change
       on the GENERAL port recalls DM2000 scenes bidirectionally. On the console:
@@ -18,40 +19,39 @@ Tasks tracked here to avoid scrolling chat history.
       test by recalling a DM2000 scene and confirming REAPER jumps to the
       matching marker.
 
-- [ ] **Transport sw verification** - RTZ (sw=0), END (sw=6), LOOP (sw=7) have
-      been added to zone 0x0E but switch numbers are guesses. Verify by pressing
-      those buttons while MIDI-OX monitors port 1, or confirm the zone 0x0E
-      switch positions match implementation.
+- [x] **Transport sw verification** - RTZ, END, LOOP are at zone 0x10 sw 0/1/2
+      (not zone 0x0E as previously guessed). Verified 2026-06-15, code fixed.
 
-- [ ] **ENTER zone hardware re-verify** - zone 0x14 sw 0 is now wired to insert
-      marker (action 40157, per manual ch.19 p.249). Confirm zone/sw with MIDI-OX.
+- [x] **ENTER zone hardware re-verify** - zone 0x14 sw 0 confirmed by full
+      capture 2026-06-15. Code already correct.
 
-- [ ] **LOCATE MEMORY 1-8 zone** - implemented at zone 0x0F sw 0-7; zone is
-      unverified. Press MEMORY buttons while MIDI-OX monitors port 1 to confirm.
+- [x] **LOCATE MEMORY zone** - was wrongly coded at zone 0x0F sw 0-7.
+      Correct: zone 0x13, non-sequential sw: LM1=sw1, LM2=sw3, LM3=sw6,
+      LM4=sw2, LM5=sw4, LM6=sw7; sw5 is a companion event that fires
+      alongside every press (ignore it). Code fixed 2026-06-15.
 
-- [ ] **Port 4 MCS PANNER** - manual p.223 confirms port 4 uses MCS PANNER protocol
-      (surround joystick), not HUI channel strips. Protocol capture needed before
-      implementation; Layer 4 feature.
+- [ ] **Port 4 MCS PANNER** - protocol captured 2026-06-15: surround joystick
+      uses BE 02 (X-axis) and BE 03 (Y-axis) CC on MIDI channel 15 (port 4).
+      Routing buttons use BE 00/01 pairs; dynamics knobs use BE 10-14.
+      Implementation pending; Layer 4 feature.
 
 - [ ] **Remote Meter receive** - manual appendix shows SysEx type 0x21 (Remote
       Meter) is rx/tx on port 8. Capture what the DM2000 sends on port 8 during
       playback to see if it pushes peak data to the host (would enable meter
       bridge without polling).
 
-- [ ] **Full button zone map — needs hardware capture** - only the navigation
-      cluster was ever captured (DEC, INC, ENTER, 4 arrows, SCRUB, SHUTTLE).
-      BACK (Edit Mode), FORWARD (Edit Tools), ONLINE, AUDITION, PRE, POST,
-      IN, OUT, and USER DEFINED KEYS 1-16 have never been recorded. Next
-      hardware session: press each with MIDI-OX monitoring port 1, record
-      zone/sw, add to DESIGN.md button reference table, then implement.
+- [x] **Full button zone map** - complete MIDI-OX surface capture done
+      2026-06-15 (every button, fader, knob). Raw data: doc/midi-capture-2026-06-15.txt.
+      Zone/sw table updated in DESIGN.md. Remaining gaps: zone 0x10 sw4,
+      zone 0x0F sw4 not identified. BACK/FORWARD wired 2026-06-15 (zone 0x08
+      sw2=undo, sw6=redo).
 
 ---
 
 ## Software
 
-- [x] **Fader taper** - hardware-calibrated table implemented in `g_taper_db[]` /
-      `g_taper_val[]` from printed-mark captures 2026-06-12. Revisit after full
-      recalibration run above.
+- [x] **Fader taper** - 11-point post-calibration table implemented 2026-06-15
+      (see Hardware section above). Previous 6-point hand-matched table superseded.
 
 - [x] **Transport: play, stop, rec, rew, fwd** - implemented and hardware-verified.
 
@@ -60,8 +60,9 @@ Tasks tracked here to avoid scrolling chat history.
       by checking the LED counter during playback; if blank/garbled, capture what Pro Tools
       sends to port 1 with MIDI-OX and adjust format.
 
-- [ ] **Transport extensions: RTZ, END, LOOP** - added to zone 0x0E sw=0/6/7;
-      switch numbers unverified. `SetRepeatState` wired to LOOP LED.
+- [x] **Transport extensions: RTZ, END, LOOP** - moved to zone 0x10 sw=0/1/2
+      (hardware-verified 2026-06-15). LOOP LED now targets zone 0x10 sw 2.
+      AUTOMIX section sw assignments also corrected (all were wrong previously).
 
 - [ ] **Scene recall PC indexing verify** - implemented for all 99 scenes using
       0-indexed wire format (byte 0x00 = Scene 1 → marker 1). Per manual p.370

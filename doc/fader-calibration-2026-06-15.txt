@@ -1,0 +1,601 @@
+DM2000 Fader Calibration Capture - 2026-06-15
+=============================================
+
+METHODOLOGY
+-----------
+1. DM2000 built-in fader calibration utility run first (UTILITY menu) to align
+   printed scale marks with internal motor positions.
+2. DM2000 Editor used to set fader 1 to each exact dB value.
+3. Channel turned off then on in editor ("confirm" sequence) to produce a
+   B0 40 00 / B0 40 7F marker pair in the MIDI-OX log.
+4. The last fader CC pair (B0 01 MSB + B0 21 LSB) immediately before each
+   B0 40 00 is the calibrated wire value for that dB mark.
+5. Wire value reconstruction: (MSB << 7) | LSB, 14-bit range 0-16383.
+6. Capture port: USB port 7 (Yamaha native), fader 1, MIDI channel 1.
+
+FINAL CALIBRATION TABLE (post-calibration, authoritative)
+----------------------------------------------------------
+Source: new 3.txt capture session
+
+  dB   | wire value | MSB  | LSB
+  -----+------------+------+-----
+  -inf |          0 | 0x00 | 0x00
+   -50 |       2768 | 0x15 | 0x50
+   -40 |       3568 | 0x1B | 0x70
+   -30 |       5168 | 0x28 | 0x30
+   -20 |       6768 | 0x34 | 0x70
+   -15 |       8368 | 0x41 | 0x30
+   -10 |       9968 | 0x4D | 0x70
+    -5 |      11568 | 0x5A | 0x30
+     0 |      13168 | 0x66 | 0x70
+    +5 |      14768 | 0x73 | 0x30
+   +10 |      16383 | 0x7F | 0x7F
+
+Pattern: linear 1600 units per 5 dB from -30 to +10; compressed below -30.
+Physical maximum = 16383 at the printed +10 mark. Fader cannot exceed +10 dB.
+
+NOTE ON PRE-CALIBRATION DATA
+-----------------------------
+A prior capture (new 2.txt, same date, before fader calibration) showed
+different wire values for the same dB marks in the -20 to -5 range (those
+values were all ~1600 units higher). That capture also missed 0 dB.
+The new 3.txt post-calibration data supersedes new 2.txt entirely.
+
++5 and +10 were independently verified in a separate session:
+  +5 confirmed at wire 14768 (0x73, 0x30) -- matches new 3.txt
+  +10 confirmed at wire 16383 (0x7F, 0x7F) -- matches new 3.txt
+
+RAW MIDI-OX DATA - POST-CALIBRATION SESSION (new 3.txt)
+---------------------------------------------------------
+Each calibration point shown as: last fader pair + confirm marker.
+Intermediate fader movements omitted for brevity.
+
+-- confirm 1: -inf --
+ B0 01 00   B0 21 00   (wire = 0)
+ B0 40 00   B0 40 7F   [confirm]
+
+-- confirm 2: -50 dB --
+ B0 01 15   B0 21 50   (wire = 2768)
+ B0 40 00   B0 40 7F   [confirm]
+
+-- confirm 3: -40 dB --
+ B0 01 1B   B0 21 70   (wire = 3568)
+ B0 40 00   B0 40 7F   [confirm]
+
+-- confirm 4: -30 dB --
+ B0 01 28   B0 21 30   (wire = 5168)
+ B0 40 00   B0 40 7F   [confirm]
+
+-- confirm 5: -20 dB --
+ B0 01 34   B0 21 70   (wire = 6768)
+ B0 40 00   B0 40 7F   [confirm]
+
+-- confirm 6: -15 dB --
+ B0 01 41   B0 21 30   (wire = 8368)
+ B0 40 00   B0 40 7F   [confirm]
+
+-- confirm 7: -10 dB --
+ B0 01 4D   B0 21 70   (wire = 9968)
+ B0 40 00   B0 40 7F   [confirm]
+
+-- confirm 8: -5 dB --
+ B0 01 5A   B0 21 30   (wire = 11568)
+ B0 40 00   B0 40 7F   [confirm]
+
+-- confirm 9: 0 dB --
+ B0 01 66   B0 21 70   (wire = 13168)
+ B0 40 00   B0 40 7F   [confirm]
+
+-- confirm 10: +5 dB --
+ B0 01 73   B0 21 30   (wire = 14768)
+ B0 40 00   B0 40 7F   [confirm]
+
+-- confirm 11: +10 dB --
+ B0 01 7F   B0 21 7F   (wire = 16383)
+ B0 40 00   B0 40 7F   [confirm]
+
+FULL RAW LOG - new 3.txt
+-------------------------
+ TIMESTAMP IN PORT STATUS DATA1 DATA2 CHAN NOTE EVENT
+ 0044F5AB   7  --     B0    01    6E    1  ---  CC: Modulation
+ 0044F5AB   7  --     B0    21    10    1  ---  Control Change
+ 0044F5C3   7  --     B0    01    58    1  ---  CC: Modulation
+ 0044F5C3   7  --     B0    21    50    1  ---  Control Change
+ 0044F5D8   7  --     B0    01    4E    1  ---  CC: Modulation
+ 0044F5D8   7  --     B0    21    20    1  ---  Control Change
+ 0044F5EC   7  --     B0    01    0F    1  ---  CC: Modulation
+ 0044F5EC   7  --     B0    21    30    1  ---  Control Change
+ 0044F5FC   7  --     B0    01    00    1  ---  CC: Modulation
+ 0044F5FC   7  --     B0    21    00    1  ---  Control Change
+ 0044FAC9   7  --     B0    40    00    1  ---  CC: Pedal (Sustain)
+ 0044FB28   7  --     B0    40    7F    1  ---  CC: Pedal (Sustain)
+ 004501F4   7  --     B0    01    01    1  ---  CC: Modulation
+ 004501F4   7  --     B0    21    70    1  ---  Control Change
+ 00450254   7  --     B0    01    03    1  ---  CC: Modulation
+ 00450254   7  --     B0    21    20    1  ---  Control Change
+ 004502B4   7  --     B0    01    03    1  ---  CC: Modulation
+ 004502B4   7  --     B0    21    70    1  ---  Control Change
+ 0045032E   7  --     B0    01    06    1  ---  CC: Modulation
+ 0045032E   7  --     B0    21    00    1  ---  Control Change
+ 00450383   7  --     B0    01    0C    1  ---  CC: Modulation
+ 00450383   7  --     B0    21    20    1  ---  Control Change
+ 00450421   7  --     B0    01    0F    1  ---  CC: Modulation
+ 00450421   7  --     B0    21    30    1  ---  Control Change
+ 0045060B   7  --     B0    01    15    1  ---  CC: Modulation
+ 0045060B   7  --     B0    21    50    1  ---  Control Change
+ 00450CAE   7  --     B0    40    00    1  ---  CC: Pedal (Sustain)
+ 00450CFE   7  --     B0    40    7F    1  ---  CC: Pedal (Sustain)
+ 00451044   7  --     B0    01    16    1  ---  CC: Modulation
+ 00451044   7  --     B0    21    10    1  ---  Control Change
+ 0045106C   7  --     B0    01    16    1  ---  CC: Modulation
+ 0045106C   7  --     B0    21    50    1  ---  Control Change
+ 0045109B   7  --     B0    01    17    1  ---  CC: Modulation
+ 0045109B   7  --     B0    21    60    1  ---  Control Change
+ 004512A9   7  --     B0    01    18    1  ---  CC: Modulation
+ 004512A9   7  --     B0    21    20    1  ---  Control Change
+ 0045132A   7  --     B0    01    18    1  ---  CC: Modulation
+ 0045132A   7  --     B0    21    60    1  ---  Control Change
+ 00451461   7  --     B0    01    19    1  ---  CC: Modulation
+ 00451461   7  --     B0    21    60    1  ---  Control Change
+ 004514E0   7  --     B0    01    1A    1  ---  CC: Modulation
+ 004514E0   7  --     B0    21    30    1  ---  Control Change
+ 0045167B   7  --     B0    01    1B    1  ---  CC: Modulation
+ 0045167B   7  --     B0    21    30    1  ---  Control Change
+ 00451829   7  --     B0    01    1B    1  ---  CC: Modulation
+ 00451829   7  --     B0    21    70    1  ---  Control Change
+ 00451E56   7  --     B0    40    00    1  ---  CC: Pedal (Sustain)
+ 00451EA2   7  --     B0    40    7F    1  ---  CC: Pedal (Sustain)
+ 004523E6   7  --     B0    01    1C    1  ---  CC: Modulation
+ 004523E6   7  --     B0    21    40    1  ---  Control Change
+ 0045242C   7  --     B0    01    1D    1  ---  CC: Modulation
+ 0045242C   7  --     B0    21    60    1  ---  Control Change
+ 0045246E   7  --     B0    01    1E    1  ---  CC: Modulation
+ 0045246E   7  --     B0    21    30    1  ---  Control Change
+ 004524D5   7  --     B0    01    1F    1  ---  CC: Modulation
+ 004524D5   7  --     B0    21    00    1  ---  Control Change
+ 00452587   7  --     B0    01    20    1  ---  CC: Modulation
+ 00452587   7  --     B0    21    20    1  ---  Control Change
+ 00452601   7  --     B0    01    20    1  ---  CC: Modulation
+ 00452601   7  --     B0    21    70    1  ---  Control Change
+ 00452691   7  --     B0    01    22    1  ---  CC: Modulation
+ 00452691   7  --     B0    21    10    1  ---  Control Change
+ 0045272D   7  --     B0    01    22    1  ---  CC: Modulation
+ 0045272D   7  --     B0    21    60    1  ---  Control Change
+ 0045280C   7  --     B0    01    23    1  ---  CC: Modulation
+ 0045280C   7  --     B0    21    30    1  ---  Control Change
+ 004528CB   7  --     B0    01    24    1  ---  CC: Modulation
+ 004528CB   7  --     B0    21    50    1  ---  Control Change
+ 004529B3   7  --     B0    01    25    1  ---  CC: Modulation
+ 004529B3   7  --     B0    21    20    1  ---  Control Change
+ 00452AC0   7  --     B0    01    25    1  ---  CC: Modulation
+ 00452AC0   7  --     B0    21    70    1  ---  Control Change
+ 00452C81   7  --     B0    01    27    1  ---  CC: Modulation
+ 00452C81   7  --     B0    21    10    1  ---  Control Change
+ 0045328F   7  --     B0    01    27    1  ---  CC: Modulation
+ 0045328F   7  --     B0    21    60    1  ---  Control Change
+ 0045353A   7  --     B0    01    28    1  ---  CC: Modulation
+ 0045353A   7  --     B0    21    60    1  ---  Control Change
+ 0045461E   7  --     B0    01    27    1  ---  CC: Modulation
+ 0045461E   7  --     B0    21    60    1  ---  Control Change
+ 004546D0   7  --     B0    01    27    1  ---  CC: Modulation
+ 004546D0   7  --     B0    21    10    1  ---  Control Change
+ 00454930   7  --     B0    01    27    1  ---  CC: Modulation
+ 00454930   7  --     B0    21    60    1  ---  Control Change
+ 00454E30   7  --     B0    01    28    1  ---  CC: Modulation
+ 00454E30   7  --     B0    21    30    1  ---  Control Change
+ 004554B1   7  --     B0    40    00    1  ---  CC: Pedal (Sustain)
+ 004554E9   7  --     B0    40    7F    1  ---  CC: Pedal (Sustain)
+ 00455A85   7  --     B0    01    29    1  ---  CC: Modulation
+ 00455A85   7  --     B0    21    30    1  ---  Control Change
+ 00455AD8   7  --     B0    01    29    1  ---  CC: Modulation
+ 00455AD8   7  --     B0    21    60    1  ---  Control Change
+ 00455B05   7  --     B0    01    2A    1  ---  CC: Modulation
+ 00455B05   7  --     B0    21    10    1  ---  Control Change
+ 00455B50   7  --     B0    01    2A    1  ---  CC: Modulation
+ 00455B50   7  --     B0    21    40    1  ---  Control Change
+ 00455B8D   7  --     B0    01    2A    1  ---  CC: Modulation
+ 00455B8D   7  --     B0    21    60    1  ---  Control Change
+ 00455BC8   7  --     B0    01    2B    1  ---  CC: Modulation
+ 00455BC8   7  --     B0    21    10    1  ---  Control Change
+ 00455C16   7  --     B0    01    2B    1  ---  CC: Modulation
+ 00455C16   7  --     B0    21    40    1  ---  Control Change
+ 00455D84   7  --     B0    01    2B    1  ---  CC: Modulation
+ 00455D84   7  --     B0    21    70    1  ---  Control Change
+ 00455DB4   7  --     B0    01    2C    1  ---  CC: Modulation
+ 00455DB4   7  --     B0    21    20    1  ---  Control Change
+ 00455DF0   7  --     B0    01    2C    1  ---  CC: Modulation
+ 00455DF0   7  --     B0    21    40    1  ---  Control Change
+ 00455E58   7  --     B0    01    2C    1  ---  CC: Modulation
+ 00455E58   7  --     B0    21    70    1  ---  Control Change
+ 00455EBF   7  --     B0    01    2D    1  ---  CC: Modulation
+ 00455EBF   7  --     B0    21    20    1  ---  Control Change
+ 00455F37   7  --     B0    01    2D    1  ---  CC: Modulation
+ 00455F37   7  --     B0    21    50    1  ---  Control Change
+ 00455FE4   7  --     B0    01    2D    1  ---  CC: Modulation
+ 00455FE4   7  --     B0    21    70    1  ---  Control Change
+ 00456020   7  --     B0    01    2E    1  ---  CC: Modulation
+ 00456020   7  --     B0    21    20    1  ---  Control Change
+ 0045603F   7  --     B0    01    2E    1  ---  CC: Modulation
+ 0045603F   7  --     B0    21    50    1  ---  Control Change
+ 004560C7   7  --     B0    01    2F    1  ---  CC: Modulation
+ 004560C7   7  --     B0    21    00    1  ---  Control Change
+ 0045612A   7  --     B0    01    2F    1  ---  CC: Modulation
+ 0045612A   7  --     B0    21    30    1  ---  Control Change
+ 00456179   7  --     B0    01    2F    1  ---  CC: Modulation
+ 00456179   7  --     B0    21    50    1  ---  Control Change
+ 004561F2   7  --     B0    01    30    1  ---  CC: Modulation
+ 004561F2   7  --     B0    21    00    1  ---  Control Change
+ 00456226   7  --     B0    01    30    1  ---  CC: Modulation
+ 00456226   7  --     B0    21    30    1  ---  Control Change
+ 00456263   7  --     B0    01    30    1  ---  CC: Modulation
+ 00456263   7  --     B0    21    60    1  ---  Control Change
+ 0045629A   7  --     B0    01    31    1  ---  CC: Modulation
+ 0045629A   7  --     B0    21    00    1  ---  Control Change
+ 004562CD   7  --     B0    01    31    1  ---  CC: Modulation
+ 004562CD   7  --     B0    21    30    1  ---  Control Change
+ 00456301   7  --     B0    01    31    1  ---  CC: Modulation
+ 00456301   7  --     B0    21    60    1  ---  Control Change
+ 00456385   7  --     B0    01    32    1  ---  CC: Modulation
+ 00456385   7  --     B0    21    10    1  ---  Control Change
+ 004563DC   7  --     B0    01    32    1  ---  CC: Modulation
+ 004563DC   7  --     B0    21    40    1  ---  Control Change
+ 004563ED   7  --     B0    01    32    1  ---  CC: Modulation
+ 004563ED   7  --     B0    21    60    1  ---  Control Change
+ 004564C5   7  --     B0    01    33    1  ---  CC: Modulation
+ 004564C5   7  --     B0    21    10    1  ---  Control Change
+ 00456597   7  --     B0    01    33    1  ---  CC: Modulation
+ 00456597   7  --     B0    21    40    1  ---  Control Change
+ 004565D1   7  --     B0    01    33    1  ---  CC: Modulation
+ 004565D1   7  --     B0    21    70    1  ---  Control Change
+ 00456608   7  --     B0    01    34    1  ---  CC: Modulation
+ 00456608   7  --     B0    21    40    1  ---  Control Change
+ 00456888   7  --     B0    01    34    1  ---  CC: Modulation
+ 00456888   7  --     B0    21    70    1  ---  Control Change
+ 00456ECE   7  --     B0    40    00    1  ---  CC: Pedal (Sustain)
+ 00456F0B   7  --     B0    40    7F    1  ---  CC: Pedal (Sustain)
+ 00457253   7  --     B0    01    35    1  ---  CC: Modulation
+ 00457253   7  --     B0    21    30    1  ---  Control Change
+ 00457273   7  --     B0    01    35    1  ---  CC: Modulation
+ 00457273   7  --     B0    21    70    1  ---  Control Change
+ 0045729D   7  --     B0    01    36    1  ---  CC: Modulation
+ 0045729D   7  --     B0    21    30    1  ---  Control Change
+ 004572E8   7  --     B0    01    36    1  ---  CC: Modulation
+ 004572E8   7  --     B0    21    60    1  ---  Control Change
+ 00457321   7  --     B0    01    37    1  ---  CC: Modulation
+ 00457321   7  --     B0    21    20    1  ---  Control Change
+ 00457335   7  --     B0    01    37    1  ---  CC: Modulation
+ 00457335   7  --     B0    21    60    1  ---  Control Change
+ 004573CE   7  --     B0    01    38    1  ---  CC: Modulation
+ 004573CE   7  --     B0    21    20    1  ---  Control Change
+ 0045743A   7  --     B0    01    38    1  ---  CC: Modulation
+ 0045743A   7  --     B0    21    60    1  ---  Control Change
+ 00457479   7  --     B0    01    39    1  ---  CC: Modulation
+ 00457479   7  --     B0    21    20    1  ---  Control Change
+ 004574EC   7  --     B0    01    39    1  ---  CC: Modulation
+ 004574EC   7  --     B0    21    50    1  ---  Control Change
+ 0045751C   7  --     B0    01    3A    1  ---  CC: Modulation
+ 0045751C   7  --     B0    21    10    1  ---  Control Change
+ 0045754D   7  --     B0    01    3A    1  ---  CC: Modulation
+ 0045754D   7  --     B0    21    50    1  ---  Control Change
+ 004575B8   7  --     B0    01    3B    1  ---  CC: Modulation
+ 004575B8   7  --     B0    21    10    1  ---  Control Change
+ 00457643   7  --     B0    01    3B    1  ---  CC: Modulation
+ 00457643   7  --     B0    21    50    1  ---  Control Change
+ 00457695   7  --     B0    01    3C    1  ---  CC: Modulation
+ 00457695   7  --     B0    21    10    1  ---  Control Change
+ 0045779E   7  --     B0    01    3C    1  ---  CC: Modulation
+ 0045779E   7  --     B0    21    50    1  ---  Control Change
+ 004577D4   7  --     B0    01    3D    1  ---  CC: Modulation
+ 004577D4   7  --     B0    21    00    1  ---  Control Change
+ 0045785C   7  --     B0    01    3D    1  ---  CC: Modulation
+ 0045785C   7  --     B0    21    40    1  ---  Control Change
+ 004579D2   7  --     B0    01    3E    1  ---  CC: Modulation
+ 004579D2   7  --     B0    21    00    1  ---  Control Change
+ 00457A73   7  --     B0    01    3E    1  ---  CC: Modulation
+ 00457A73   7  --     B0    21    40    1  ---  Control Change
+ 00457ACF   7  --     B0    01    3F    1  ---  CC: Modulation
+ 00457ACF   7  --     B0    21    00    1  ---  Control Change
+ 00457D4D   7  --     B0    01    3F    1  ---  CC: Modulation
+ 00457D4D   7  --     B0    21    40    1  ---  Control Change
+ 00457EC9   7  --     B0    01    3F    1  ---  CC: Modulation
+ 00457EC9   7  --     B0    21    70    1  ---  Control Change
+ 00457F23   7  --     B0    01    40    1  ---  CC: Modulation
+ 00457F23   7  --     B0    21    30    1  ---  Control Change
+ 00457F5C   7  --     B0    01    40    1  ---  CC: Modulation
+ 00457F5C   7  --     B0    21    70    1  ---  Control Change
+ 00457F7D   7  --     B0    01    41    1  ---  CC: Modulation
+ 00457F7D   7  --     B0    21    30    1  ---  Control Change
+ 0045864D   7  --     B0    40    00    1  ---  CC: Pedal (Sustain)
+ 00458687   7  --     B0    40    7F    1  ---  CC: Pedal (Sustain)
+ 00458A6B   7  --     B0    01    41    1  ---  CC: Modulation
+ 00458A6B   7  --     B0    21    60    1  ---  Control Change
+ 00458ABD   7  --     B0    01    42    1  ---  CC: Modulation
+ 00458ABD   7  --     B0    21    00    1  ---  Control Change
+ 00458AD3   7  --     B0    01    42    1  ---  CC: Modulation
+ 00458AD3   7  --     B0    21    30    1  ---  Control Change
+ 00458AEF   7  --     B0    01    42    1  ---  CC: Modulation
+ 00458AEF   7  --     B0    21    60    1  ---  Control Change
+ 00458B10   7  --     B0    01    43    1  ---  CC: Modulation
+ 00458B10   7  --     B0    21    00    1  ---  Control Change
+ 00458B5B   7  --     B0    01    43    1  ---  CC: Modulation
+ 00458B5B   7  --     B0    21    30    1  ---  Control Change
+ 00458B94   7  --     B0    01    43    1  ---  CC: Modulation
+ 00458B94   7  --     B0    21    50    1  ---  Control Change
+ 00458BE4   7  --     B0    01    44    1  ---  CC: Modulation
+ 00458BE4   7  --     B0    21    00    1  ---  Control Change
+ 00458C30   7  --     B0    01    44    1  ---  CC: Modulation
+ 00458C30   7  --     B0    21    30    1  ---  Control Change
+ 00458C4E   7  --     B0    01    44    1  ---  CC: Modulation
+ 00458C4E   7  --     B0    21    50    1  ---  Control Change
+ 00458C77   7  --     B0    01    45    1  ---  CC: Modulation
+ 00458C77   7  --     B0    21    00    1  ---  Control Change
+ 00458CAF   7  --     B0    01    45    1  ---  CC: Modulation
+ 00458CAF   7  --     B0    21    30    1  ---  Control Change
+ 00458D45   7  --     B0    01    45    1  ---  CC: Modulation
+ 00458D45   7  --     B0    21    50    1  ---  Control Change
+ 00458DB8   7  --     B0    01    46    1  ---  CC: Modulation
+ 00458DB8   7  --     B0    21    00    1  ---  Control Change
+ 00458E7D   7  --     B0    01    46    1  ---  CC: Modulation
+ 00458E7D   7  --     B0    21    20    1  ---  Control Change
+ 00458EC4   7  --     B0    01    46    1  ---  CC: Modulation
+ 00458EC4   7  --     B0    21    50    1  ---  Control Change
+ 00458EE5   7  --     B0    01    47    1  ---  CC: Modulation
+ 00458EE5   7  --     B0    21    00    1  ---  Control Change
+ 00458F46   7  --     B0    01    47    1  ---  CC: Modulation
+ 00458F46   7  --     B0    21    20    1  ---  Control Change
+ 00458FD5   7  --     B0    01    47    1  ---  CC: Modulation
+ 00458FD5   7  --     B0    21    50    1  ---  Control Change
+ 00459045   7  --     B0    01    48    1  ---  CC: Modulation
+ 00459045   7  --     B0    21    00    1  ---  Control Change
+ 004590F9   7  --     B0    01    48    1  ---  CC: Modulation
+ 004590F9   7  --     B0    21    20    1  ---  Control Change
+ 0045913D   7  --     B0    01    48    1  ---  CC: Modulation
+ 0045913D   7  --     B0    21    50    1  ---  Control Change
+ 004591C2   7  --     B0    01    49    1  ---  CC: Modulation
+ 004591C2   7  --     B0    21    00    1  ---  Control Change
+ 00459273   7  --     B0    01    49    1  ---  CC: Modulation
+ 00459273   7  --     B0    21    20    1  ---  Control Change
+ 004592A4   7  --     B0    01    49    1  ---  CC: Modulation
+ 004592A4   7  --     B0    21    50    1  ---  Control Change
+ 004592EF   7  --     B0    01    49    1  ---  CC: Modulation
+ 004592EF   7  --     B0    21    70    1  ---  Control Change
+ 0045935E   7  --     B0    01    4A    1  ---  CC: Modulation
+ 0045935E   7  --     B0    21    20    1  ---  Control Change
+ 00459390   7  --     B0    01    4A    1  ---  CC: Modulation
+ 00459390   7  --     B0    21    50    1  ---  Control Change
+ 004593F4   7  --     B0    01    4A    1  ---  CC: Modulation
+ 004593F4   7  --     B0    21    70    1  ---  Control Change
+ 004594A3   7  --     B0    01    4B    1  ---  CC: Modulation
+ 004594A3   7  --     B0    21    20    1  ---  Control Change
+ 00459527   7  --     B0    01    4B    1  ---  CC: Modulation
+ 00459527   7  --     B0    21    50    1  ---  Control Change
+ 00459550   7  --     B0    01    4B    1  ---  CC: Modulation
+ 00459550   7  --     B0    21    70    1  ---  Control Change
+ 00459599   7  --     B0    01    4C    1  ---  CC: Modulation
+ 00459599   7  --     B0    21    20    1  ---  Control Change
+ 004595D1   7  --     B0    01    4C    1  ---  CC: Modulation
+ 004595D1   7  --     B0    21    40    1  ---  Control Change
+ 0045960B   7  --     B0    01    4C    1  ---  CC: Modulation
+ 0045960B   7  --     B0    21    70    1  ---  Control Change
+ 00459A6E   7  --     B0    01    4D    1  ---  CC: Modulation
+ 00459A6E   7  --     B0    21    20    1  ---  Control Change
+ 00459B08   7  --     B0    01    4D    1  ---  CC: Modulation
+ 00459B08   7  --     B0    21    40    1  ---  Control Change
+ 00459C15   7  --     B0    01    4D    1  ---  CC: Modulation
+ 00459C15   7  --     B0    21    70    1  ---  Control Change
+ 0045A19C   7  --     B0    40    00    1  ---  CC: Pedal (Sustain)
+ 0045A1CF   7  --     B0    40    7F    1  ---  CC: Pedal (Sustain)
+ 0045A698   7  --     B0    01    4E    1  ---  CC: Modulation
+ 0045A698   7  --     B0    21    20    1  ---  Control Change
+ 0045A6D1   7  --     B0    01    4E    1  ---  CC: Modulation
+ 0045A6D1   7  --     B0    21    50    1  ---  Control Change
+ 0045A713   7  --     B0    01    4E    1  ---  CC: Modulation
+ 0045A713   7  --     B0    21    70    1  ---  Control Change
+ 0045A769   7  --     B0    01    4F    1  ---  CC: Modulation
+ 0045A769   7  --     B0    21    20    1  ---  Control Change
+ 0045A79F   7  --     B0    01    50    1  ---  CC: Modulation
+ 0045A79F   7  --     B0    21    00    1  ---  Control Change
+ 0045A7E0   7  --     B0    01    50    1  ---  CC: Modulation
+ 0045A7E0   7  --     B0    21    20    1  ---  Control Change
+ 0045A813   7  --     B0    01    50    1  ---  CC: Modulation
+ 0045A813   7  --     B0    21    50    1  ---  Control Change
+ 0045A850   7  --     B0    01    51    1  ---  CC: Modulation
+ 0045A850   7  --     B0    21    00    1  ---  Control Change
+ 0045A889   7  --     B0    01    51    1  ---  CC: Modulation
+ 0045A889   7  --     B0    21    30    1  ---  Control Change
+ 0045A8EE   7  --     B0    01    51    1  ---  CC: Modulation
+ 0045A8EE   7  --     B0    21    60    1  ---  Control Change
+ 0045A9FA   7  --     B0    01    52    1  ---  CC: Modulation
+ 0045A9FA   7  --     B0    21    00    1  ---  Control Change
+ 0045AAAD   7  --     B0    01    52    1  ---  CC: Modulation
+ 0045AAAD   7  --     B0    21    30    1  ---  Control Change
+ 0045AAE4   7  --     B0    01    52    1  ---  CC: Modulation
+ 0045AAE4   7  --     B0    21    60    1  ---  Control Change
+ 0045AB16   7  --     B0    01    53    1  ---  CC: Modulation
+ 0045AB16   7  --     B0    21    10    1  ---  Control Change
+ 0045AC05   7  --     B0    01    53    1  ---  CC: Modulation
+ 0045AC05   7  --     B0    21    30    1  ---  Control Change
+ 0045AC63   7  --     B0    01    53    1  ---  CC: Modulation
+ 0045AC63   7  --     B0    21    60    1  ---  Control Change
+ 0045AC7A   7  --     B0    01    54    1  ---  CC: Modulation
+ 0045AC7A   7  --     B0    21    10    1  ---  Control Change
+ 0045ACB7   7  --     B0    01    54    1  ---  CC: Modulation
+ 0045ACB7   7  --     B0    21    40    1  ---  Control Change
+ 0045ACE3   7  --     B0    01    54    1  ---  CC: Modulation
+ 0045ACE3   7  --     B0    21    70    1  ---  Control Change
+ 0045AD2C   7  --     B0    01    55    1  ---  CC: Modulation
+ 0045AD2C   7  --     B0    21    10    1  ---  Control Change
+ 0045AD89   7  --     B0    01    55    1  ---  CC: Modulation
+ 0045AD89   7  --     B0    21    40    1  ---  Control Change
+ 0045ADBF   7  --     B0    01    55    1  ---  CC: Modulation
+ 0045ADBF   7  --     B0    21    70    1  ---  Control Change
+ 0045ADF5   7  --     B0    01    56    1  ---  CC: Modulation
+ 0045ADF5   7  --     B0    21    20    1  ---  Control Change
+ 0045AE45   7  --     B0    01    56    1  ---  CC: Modulation
+ 0045AE45   7  --     B0    21    40    1  ---  Control Change
+ 0045AE71   7  --     B0    01    56    1  ---  CC: Modulation
+ 0045AE71   7  --     B0    21    70    1  ---  Control Change
+ 0045AE99   7  --     B0    01    57    1  ---  CC: Modulation
+ 0045AE99   7  --     B0    21    20    1  ---  Control Change
+ 0045B12A   7  --     B0    01    57    1  ---  CC: Modulation
+ 0045B12A   7  --     B0    21    50    1  ---  Control Change
+ 0045B153   7  --     B0    01    58    1  ---  CC: Modulation
+ 0045B153   7  --     B0    21    00    1  ---  Control Change
+ 0045B22B   7  --     B0    01    58    1  ---  CC: Modulation
+ 0045B22B   7  --     B0    21    20    1  ---  Control Change
+ 0045B483   7  --     B0    01    58    1  ---  CC: Modulation
+ 0045B483   7  --     B0    21    50    1  ---  Control Change
+ 0045B55F   7  --     B0    01    59    1  ---  CC: Modulation
+ 0045B55F   7  --     B0    21    00    1  ---  Control Change
+ 0045B679   7  --     B0    01    59    1  ---  CC: Modulation
+ 0045B679   7  --     B0    21    30    1  ---  Control Change
+ 0045B968   7  --     B0    01    59    1  ---  CC: Modulation
+ 0045B968   7  --     B0    21    50    1  ---  Control Change
+ 0045BA28   7  --     B0    01    5A    1  ---  CC: Modulation
+ 0045BA28   7  --     B0    21    00    1  ---  Control Change
+ 0045BC07   7  --     B0    01    5A    1  ---  CC: Modulation
+ 0045BC07   7  --     B0    21    30    1  ---  Control Change
+ 0045C2D3   7  --     B0    40    00    1  ---  CC: Pedal (Sustain)
+ 0045C312   7  --     B0    40    7F    1  ---  CC: Pedal (Sustain)
+ 0045C82F   7  --     B0    01    5B    1  ---  CC: Modulation
+ 0045C82F   7  --     B0    21    20    1  ---  Control Change
+ 0045C84D   7  --     B0    01    5B    1  ---  CC: Modulation
+ 0045C84D   7  --     B0    21    60    1  ---  Control Change
+ 0045C871   7  --     B0    01    5C    1  ---  CC: Modulation
+ 0045C871   7  --     B0    21    10    1  ---  Control Change
+ 0045C8AE   7  --     B0    01    5D    1  ---  CC: Modulation
+ 0045C8AE   7  --     B0    21    40    1  ---  Control Change
+ 0045C8C5   7  --     B0    01    5E    1  ---  CC: Modulation
+ 0045C8C5   7  --     B0    21    00    1  ---  Control Change
+ 0045C8EE   7  --     B0    01    5E    1  ---  CC: Modulation
+ 0045C8EE   7  --     B0    21    30    1  ---  Control Change
+ 0045C91E   7  --     B0    01    5E    1  ---  CC: Modulation
+ 0045C91E   7  --     B0    21    70    1  ---  Control Change
+ 0045CACD   7  --     B0    01    5F    1  ---  CC: Modulation
+ 0045CACD   7  --     B0    21    20    1  ---  Control Change
+ 0045CB1A   7  --     B0    01    5F    1  ---  CC: Modulation
+ 0045CB1A   7  --     B0    21    60    1  ---  Control Change
+ 0045CB7B   7  --     B0    01    60    1  ---  CC: Modulation
+ 0045CB7B   7  --     B0    21    10    1  ---  Control Change
+ 0045CBAB   7  --     B0    01    60    1  ---  CC: Modulation
+ 0045CBAB   7  --     B0    21    50    1  ---  Control Change
+ 0045CC60   7  --     B0    01    61    1  ---  CC: Modulation
+ 0045CC60   7  --     B0    21    10    1  ---  Control Change
+ 0045CCD0   7  --     B0    01    61    1  ---  CC: Modulation
+ 0045CCD0   7  --     B0    21    40    1  ---  Control Change
+ 0045CD87   7  --     B0    01    62    1  ---  CC: Modulation
+ 0045CD87   7  --     B0    21    00    1  ---  Control Change
+ 0045CE70   7  --     B0    01    62    1  ---  CC: Modulation
+ 0045CE70   7  --     B0    21    30    1  ---  Control Change
+ 0045CED3   7  --     B0    01    62    1  ---  CC: Modulation
+ 0045CED3   7  --     B0    21    70    1  ---  Control Change
+ 0045CF45   7  --     B0    01    63    1  ---  CC: Modulation
+ 0045CF45   7  --     B0    21    20    1  ---  Control Change
+ 0045D007   7  --     B0    01    63    1  ---  CC: Modulation
+ 0045D007   7  --     B0    21    60    1  ---  Control Change
+ 0045D0D0   7  --     B0    01    64    1  ---  CC: Modulation
+ 0045D0D0   7  --     B0    21    20    1  ---  Control Change
+ 0045D151   7  --     B0    01    64    1  ---  CC: Modulation
+ 0045D151   7  --     B0    21    50    1  ---  Control Change
+ 0045D270   7  --     B0    01    65    1  ---  CC: Modulation
+ 0045D270   7  --     B0    21    10    1  ---  Control Change
+ 0045D38C   7  --     B0    01    65    1  ---  CC: Modulation
+ 0045D38C   7  --     B0    21    40    1  ---  Control Change
+ 0045D449   7  --     B0    01    66    1  ---  CC: Modulation
+ 0045D449   7  --     B0    21    00    1  ---  Control Change
+ 0045D58A   7  --     B0    01    66    1  ---  CC: Modulation
+ 0045D58A   7  --     B0    21    30    1  ---  Control Change
+ 0045D61B   7  --     B0    01    66    1  ---  CC: Modulation
+ 0045D61B   7  --     B0    21    70    1  ---  Control Change
+ 0045DA6F   7  --     B0    40    00    1  ---  CC: Pedal (Sustain)
+ 0045DAA9   7  --     B0    40    7F    1  ---  CC: Pedal (Sustain)
+ 0045DBF3   7  --     B0    01    67    1  ---  CC: Modulation
+ 0045DBF3   7  --     B0    21    30    1  ---  Control Change
+ 0045DC1C   7  --     B0    01    67    1  ---  CC: Modulation
+ 0045DC1C   7  --     B0    21    70    1  ---  Control Change
+ 0045DC38   7  --     B0    01    68    1  ---  CC: Modulation
+ 0045DC38   7  --     B0    21    30    1  ---  Control Change
+ 0045DC5B   7  --     B0    01    69    1  ---  CC: Modulation
+ 0045DC5B   7  --     B0    21    00    1  ---  Control Change
+ 0045DC79   7  --     B0    01    6A    1  ---  CC: Modulation
+ 0045DC79   7  --     B0    21    00    1  ---  Control Change
+ 0045DCA0   7  --     B0    01    6B    1  ---  CC: Modulation
+ 0045DCA0   7  --     B0    21    00    1  ---  Control Change
+ 0045DCD5   7  --     B0    01    6B    1  ---  CC: Modulation
+ 0045DCD5   7  --     B0    21    40    1  ---  Control Change
+ 0045DCEC   7  --     B0    01    6C    1  ---  CC: Modulation
+ 0045DCEC   7  --     B0    21    10    1  ---  Control Change
+ 0045DD0E   7  --     B0    01    6C    1  ---  CC: Modulation
+ 0045DD0E   7  --     B0    21    50    1  ---  Control Change
+ 0045DD2E   7  --     B0    01    6D    1  ---  CC: Modulation
+ 0045DD2E   7  --     B0    21    10    1  ---  Control Change
+ 0045DF67   7  --     B0    01    6D    1  ---  CC: Modulation
+ 0045DF67   7  --     B0    21    50    1  ---  Control Change
+ 0045DFC7   7  --     B0    01    6E    1  ---  CC: Modulation
+ 0045DFC7   7  --     B0    21    10    1  ---  Control Change
+ 0045DFD8   7  --     B0    01    6E    1  ---  CC: Modulation
+ 0045DFD8   7  --     B0    21    50    1  ---  Control Change
+ 0045DFFC   7  --     B0    01    6F    1  ---  CC: Modulation
+ 0045DFFC   7  --     B0    21    20    1  ---  Control Change
+ 0045E035   7  --     B0    01    70    1  ---  CC: Modulation
+ 0045E035   7  --     B0    21    20    1  ---  Control Change
+ 0045E046   7  --     B0    01    70    1  ---  CC: Modulation
+ 0045E046   7  --     B0    21    60    1  ---  Control Change
+ 0045E334   7  --     B0    01    71    1  ---  CC: Modulation
+ 0045E334   7  --     B0    21    20    1  ---  Control Change
+ 0045E3ED   7  --     B0    01    71    1  ---  CC: Modulation
+ 0045E3ED   7  --     B0    21    60    1  ---  Control Change
+ 0045E465   7  --     B0    01    72    1  ---  CC: Modulation
+ 0045E465   7  --     B0    21    30    1  ---  Control Change
+ 0045E6D5   7  --     B0    01    72    1  ---  CC: Modulation
+ 0045E6D5   7  --     B0    21    70    1  ---  Control Change
+ 0045E79B   7  --     B0    01    73    1  ---  CC: Modulation
+ 0045E79B   7  --     B0    21    30    1  ---  Control Change
+ 0045EC7F   7  --     B0    40    00    1  ---  CC: Pedal (Sustain)
+ 0045ECB8   7  --     B0    40    7F    1  ---  CC: Pedal (Sustain)
+ 0045EE61   7  --     B0    01    73    1  ---  CC: Modulation
+ 0045EE61   7  --     B0    21    70    1  ---  Control Change
+ 0045EE9E   7  --     B0    01    74    1  ---  CC: Modulation
+ 0045EE9E   7  --     B0    21    30    1  ---  Control Change
+ 0045EEBC   7  --     B0    01    74    1  ---  CC: Modulation
+ 0045EEBC   7  --     B0    21    70    1  ---  Control Change
+ 0045EEE4   7  --     B0    01    75    1  ---  CC: Modulation
+ 0045EEE4   7  --     B0    21    40    1  ---  Control Change
+ 0045EF11   7  --     B0    01    76    1  ---  CC: Modulation
+ 0045EF11   7  --     B0    21    00    1  ---  Control Change
+ 0045EF34   7  --     B0    01    76    1  ---  CC: Modulation
+ 0045EF34   7  --     B0    21    40    1  ---  Control Change
+ 0045EF76   7  --     B0    01    77    1  ---  CC: Modulation
+ 0045EF76   7  --     B0    21    00    1  ---  Control Change
+ 0045EFFC   7  --     B0    01    77    1  ---  CC: Modulation
+ 0045EFFC   7  --     B0    21    40    1  ---  Control Change
+ 0045F05F   7  --     B0    01    78    1  ---  CC: Modulation
+ 0045F05F   7  --     B0    21    00    1  ---  Control Change
+ 0045F0AA   7  --     B0    01    78    1  ---  CC: Modulation
+ 0045F0AA   7  --     B0    21    50    1  ---  Control Change
+ 0045F124   7  --     B0    01    79    1  ---  CC: Modulation
+ 0045F124   7  --     B0    21    10    1  ---  Control Change
+ 0045F15A   7  --     B0    01    79    1  ---  CC: Modulation
+ 0045F15A   7  --     B0    21    50    1  ---  Control Change
+ 0045F1A4   7  --     B0    01    7A    1  ---  CC: Modulation
+ 0045F1A4   7  --     B0    21    10    1  ---  Control Change
+ 0045F20D   7  --     B0    01    7A    1  ---  CC: Modulation
+ 0045F20D   7  --     B0    21    50    1  ---  Control Change
+ 0045F242   7  --     B0    01    7B    1  ---  CC: Modulation
+ 0045F242   7  --     B0    21    10    1  ---  Control Change
+ 0045F254   7  --     B0    01    7B    1  ---  CC: Modulation
+ 0045F254   7  --     B0    21    60    1  ---  Control Change
+ 0045F286   7  --     B0    01    7C    1  ---  CC: Modulation
+ 0045F286   7  --     B0    21    20    1  ---  Control Change
+ 0045F2A5   7  --     B0    01    7C    1  ---  CC: Modulation
+ 0045F2A5   7  --     B0    21    60    1  ---  Control Change
+ 0045F2C7   7  --     B0    01    7D    1  ---  CC: Modulation
+ 0045F2C7   7  --     B0    21    20    1  ---  Control Change
+ 0045F303   7  --     B0    01    7E    1  ---  CC: Modulation
+ 0045F303   7  --     B0    21    20    1  ---  Control Change
+ 0045F31C   7  --     B0    01    7E    1  ---  CC: Modulation
+ 0045F31C   7  --     B0    21    70    1  ---  Control Change
+ 0045F344   7  --     B0    01    7F    1  ---  CC: Modulation
+ 0045F344   7  --     B0    21    7F    1  ---  Control Change
+ 0045F7A3   7  --     B0    40    00    1  ---  CC: Pedal (Sustain)
+ 0045F7D5   7  --     B0    40    7F    1  ---  CC: Pedal (Sustain)
