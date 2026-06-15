@@ -25,7 +25,7 @@ reference, layer plan, and task tracking.
   - Remote Layer 1 target: **Pro Tools**
   - DAW: **USB 1-4**
 
-  <p align="center"><img src="doc/dm2000_midi_host_setup.png" alt="DM2000 MIDI/HOST SETUP" width="480"></p>
+  <div align="center"><img src="doc/dm2000_midi_host_setup.png" alt="DM2000 MIDI/HOST SETUP" width="480"></div>
 
 - Windows x64 or macOS (arm64/x86_64), REAPER 6 or later
 - Note: "DAW Off-line" on the DM2000 display is normal until REAPER is running
@@ -100,7 +100,7 @@ WDL clone, `make`, binary verification, install).
    see [doc/dm2000_keys_guide.md](doc/dm2000_keys_guide.md) for the full reference.
 4. OK.
 
-<p align="center"><img src="doc/config-dialog.png" alt="Config dialog"></p>
+<div align="center"><img src="doc/config-dialog.png" alt="Config dialog"></div>
 
 ## Feature status
 
