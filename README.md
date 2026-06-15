@@ -7,11 +7,10 @@ integration between the Yamaha DM2000 digital console and REAPER: 24
 touch-sensitive faders, pan knobs, mute/solo/rec-arm/select buttons with LED
 feedback, transport controls, automation mode switching, jog wheel, bank
 switching, and channel-name scribble strips. The plugin speaks HUI on the
-console's USB MIDI ports 1-4, with native Yamaha SysEx on a configurable
-port 8 output for channel names.
+console's USB MIDI ports 1-4.
 
-To our knowledge this is the first open-source DM2000 control surface for
-REAPER.
+To the author's knowledge this is the first open-source DM2000 control
+surface for REAPER.
 
 **Design document:** see [DESIGN.md](DESIGN.md) for the full protocol
 reference, layer plan, and task tracking.
@@ -43,6 +42,12 @@ Restart REAPER after copying.
 
 > macOS note: the dylib is a universal binary (arm64 + x86_64). Hardware-verified
 > with a connected DM2000 on 2026-06-15 (v0.3); all features work on macOS.
+
+**User Keys (Locate section and UDK buttons):** copy
+[doc/dm2000_keys.ini.example](doc/dm2000_keys.ini.example) to a location of
+your choice, rename it (e.g. `dm2000_keys.ini`), edit the action IDs to taste,
+then enter the path in the surface config dialog. Without this file, RTZ and
+END use built-in go-to-start/end; all other Locate and UDK buttons do nothing.
 
 ## Building from source
 

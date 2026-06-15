@@ -138,16 +138,18 @@ public:
     m_transport_last_repeat = 0;
     memset(m_tc_lastbuf, 0xFF, sizeof(m_tc_lastbuf));
 
-    // locate defaults (can be overridden via [locate] section in dm2000_keys.ini)
-    m_la_rtz     = 0;                    // 0 = CSurf_GoStart() API
-    m_la_end     = 0;                    // 0 = CSurf_GoEnd() API
-    m_la_loop    = IDC_REPEAT;           // 1068: toggle repeat
-    m_la_qpunch  = ID_INSERT_MARKER;     // 40157: insert marker at edit cursor
-    m_la_in      = ID_LOOP_SETSTART;     // 40222: set loop in-point
-    m_la_out     = ID_LOOP_SETEND;       // 40223: set loop out-point
-    m_la_post    = ID_INSERT_MARKERRGN;  // 40174: insert region from time selection
+    // locate section: all buttons default to no-op; configure via [locate] in dm2000_keys.ini.
+    // RTZ/END: 0 = CSurf_GoStart/GoEnd API (fundamental transport, always works).
+    // All other buttons: 0 = no action until ini is configured.
+    m_la_rtz     = 0;
+    m_la_end     = 0;
+    m_la_loop    = 0;
+    m_la_qpunch  = 0;
+    m_la_in      = 0;
+    m_la_out     = 0;
+    m_la_post    = 0;
     for (int i = 0; i < 8; i++)
-        m_la_lm[i] = ID_GOTO_MARKER1 + i; // 40161-40168: go to markers 1-8
+        m_la_lm[i] = 0;
 
     // load [locate] overrides from ini
     char _la_ini[MAX_PATH];
