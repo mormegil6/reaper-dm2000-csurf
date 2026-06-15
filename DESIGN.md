@@ -218,7 +218,7 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 | AUTOMIX RELATIVE | DM2000→host | zone 0x18, sw 2 (all 3 ports) | global automation = Latch Preview | Verified |
 | AUTOMIX ABORT/UNDO | DM2000→host | zone 0x18, sw 4 (all 3 ports) | undo (`IDC_EDIT_UNDO`) | Verified |
 | Scribble strip (ch N) | host→DM2000 | `F0 00 00 66 05 00 10 N <4 chars> F7` (port P) | `SetTrackTitle()` 4-char | Verified |
-| LED counter display | host→DM2000 | `F0 00 00 66 05 00 11 <8 chars> F7` (port 1) | position from `format_timestr_pos()` | Unverified |
+| LED counter display | host→DM2000 | see **HUI counter display protocol** section below | position from `format_timestr_pos()` following REAPER transport format | Verified 2026-06-15 |
 | USER DEFINED KEYS (UDK 4/5/6/7/8/13/14) | DM2000→host | zones confirmed - see zone table | custom action via dm2000_keys.ini (dispatcher not yet implemented) | Not implemented |
 | USER DEFINED KEYS (UDK 1/2/3/9/10/11/12/15/16) | DM2000→host | zones unconfirmed - need MIDI-OX capture | custom action via dm2000_keys.ini | Not implemented |
 
@@ -280,6 +280,49 @@ keep steady signals from flickering.
 (An earlier draft described a `B0 0D / B0 2D` CC pair - refuted: 0x0D is the jog
 wheel CC, and HUI metering is poly pressure. If hardware testing shows no meter
 movement, capture what Pro Tools sends to the console and adjust.)
+
+**HUI counter display protocol (host → DM2000, port 1):**
+
+Decoded 2026-06-15 from Pro Tools via loopMIDI sniff on port 1. Hardware-verified on DM2000.
+
+The display has 8 digit positions (0 = leftmost). Separators (`:` and `.`) are encoded as
+a flag on the digit to their left.
+
+**Byte encoding:** `(sep_flag << 4) | bcd_digit`
+- `bcd_digit` = 0x00–0x09 (the digit value 0–9)
+- `sep_flag` = 1 if a separator (`:` or `.`) appears after this digit in the display, 0 otherwise
+
+**Clear / blank all 8 positions:**
+```
+F0 00 00 66 05 00 11  20 20 20 20 20 20 20 20  F7   (16 bytes, 8 x 0x20)
+```
+Sent once at plugin load and on close. 0x20 is a special "blank" code distinct from digit 0 (0x00).
+
+**Position update (delta, during playback):**
+```
+F0 00 00 66 05 00 11  [N bytes]  F7   (N = 1–8)
+```
+Bytes cover only the positions that changed since the last message, sent **right-to-left**
+(position 7 first, then 6, ..., down to the leftmost changed position).
+
+**Example - display showing `1:23.626`:**
+Positions 2–7: `1[:]`, `2`, `3[.]`, `6`, `2`, `6`
+Encoded: `0x11 0x02 0x13 0x06 0x02 0x06`
+Sent right-to-left (pos 7→2): `06 02 06 13 02 11`
+Full message: `F0 00 00 66 05 00 11 06 02 06 13 02 11 F7`
+
+If only the frame/sub-second digits changed (positions 5–7), only 3 bytes follow the header.
+
+**Implementation note:** the display format (SMPTE, minutes:seconds, measures:beats, etc.)
+is determined by `projectconfig_var_addr(NULL, __g_projectconfig_timemode2)`, with fallback
+to `__g_projectconfig_timemode` - matching csurf_mcu.cpp behaviour. Updated every 100ms.
+
+**Verified captures at known playback positions:**
+| Pro Tools display | Data bytes (after `F0 00 00 66 05 00 11`) |
+|---|---|
+| `0:12.458` | `08 05 04 12 01` (positions 7→3; `0:` in pos 2 unchanged) |
+| `0:51.882` | `02 08 08 11 05` |
+| `1:23.626` | `06 02 06 13 02 11` (6 bytes; minute digit changed) |
 
 ### Yamaha native SysEx (port 8)
 
