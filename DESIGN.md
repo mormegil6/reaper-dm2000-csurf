@@ -102,7 +102,8 @@ Zone assignments:
 | 0x0A | Bank/channel navigation | 0=ch◄, 1=bank◄, 2=ch►, 3=bank► |
 | 0x0D | Cursor cluster + wheel modes (hardware-verified) | 0=down, 1=left, 2=INC → next marker, 3=right, 4=up, 5=SCRUB, 6=SHUTTLE |
 | 0x0E | Transport | 0=RTZ (unverified sw#), 1=REW, 2=FFWD, 3=STOP, 4=PLAY, 5=REC, 6=END (unverified sw#), 7=LOOP (unverified sw#) |
-| 0x14 | ENTER (hardware-verified) | 0=press → toggle scroll/zoom |
+| 0x0F | LOCATE MEMORY 1-8 (zone unverified) | sw 0-7=press → jump to REAPER marker 1-8 |
+| 0x14 | ENTER (hardware-verified) | 0=press → insert marker at edit cursor (action 40157; manual p.249) |
 | 0x1B | DEC (hardware-verified) | 7=press → previous marker |
 
 <details>
@@ -144,17 +145,18 @@ Zone assignments:
 | Jog wheel | DM2000→host | `B0 0D vv` | `MoveEditCursor()` (default jog) | Verified |
 | SCRUB key | DM2000→host | zone 0x0D, sw 5 | switch to scrub mode | Verified |
 | SHUTTLE key | DM2000→host | zone 0x0D, sw 6 | switch to shuttle mode | Verified |
-| Cursor UP/DOWN/LEFT/RIGHT | DM2000→host | zone 0x0D, sw 4/0/1/3 | `CSurf_OnArrow()` scroll or zoom | Verified |
+| Cursor UP/DOWN/LEFT/RIGHT | DM2000→host | zone 0x0D, sw 4/0/1/3 | `CSurf_OnArrow()` scroll | Verified |
 | INC (►\|) | DM2000→host | zone 0x0D, sw 2 | next marker | Verified |
 | DEC (\|◄) | DM2000→host | zone 0x1B, sw 7 | previous marker | Verified |
-| ENTER | DM2000→host | zone 0x14, sw 0 | toggle cursor arrows scroll/zoom | Verified |
+| ENTER | DM2000→host | zone 0x14, sw 0 | insert marker at edit cursor (action 40157) | Verified |
+| LOCATE MEMORY 1-8 | DM2000→host | zone 0x0F, sw 0-7 | jump to REAPER marker 1-8 | Unverified |
 | AUTOMIX READ | DM2000→host | zone 0x18, sw 1 | global automation = Read | Inferred |
 | AUTOMIX WRITE | DM2000→host | zone 0x18, sw 2 | global automation = Write | Inferred |
 | AUTOMIX TOUCH | DM2000→host | zone 0x18, sw 3 | global automation = Touch | Inferred |
 | AUTOMIX LATCH | DM2000→host | zone 0x18, sw 4 | global automation = Latch | Inferred |
 | Scribble strip (ch N) | host→DM2000 | `F0 00 00 66 05 00 10 N <4 chars> F7` (port P) | `SetTrackTitle()` 4-char | Verified |
 | LED counter display | host→DM2000 | `F0 00 00 66 05 00 11 <8 chars> F7` (port 1) | position from `format_timestr_pos()` | Unverified |
-| LOCATE MEMORY 1-8 | DM2000→host | zone 0x10 or 0x0F (unconfirmed) | jump to REAPER marker | Not implemented |
+| USER DEFINED KEYS | DM2000→host | zones unconfirmed | custom action via ini file | Not implemented |
 | USER DEFINED KEYS | DM2000→host | zones unconfirmed | custom action via ini file | Not implemented |
 
 **Pan ring LED values:** 1=hard left, 6=centre, 11=hard right. `B0+(P) 10+(N%8) 0` = ring off.
@@ -184,7 +186,7 @@ mutually exclusive): default jog = `MoveEditCursor(speed * ±0.1s)`; SHUTTLE =
 coarse `MoveEditCursor(speed * ±1s)`; SCRUB = `CSurf_ScrubAmt(speed * ±0.05)`.
 Plain `CSurf_ScrubAmt()` as the only handler did nothing in normal operation
 (hardware-verified), hence the edit-cursor default. ENTER (zone 0x14 sw 0)
-toggles the cursor arrows between scroll and zoom (`CSurf_OnArrow`).
+inserts a marker at the edit cursor (REAPER action 40157; manual ch.19 p.249).
 
 **Switch/LED feedback (host → DM2000):**
 LEDs use a different CC pair to avoid confusion with the incoming zone-select:
@@ -327,7 +329,8 @@ Tasks:
 - [x] Selected channel highlight
 - [x] Track name truncated to 4 chars on scribble strip via HUI (`F0 00 00 66 05 00 10 <ch> <4 chars> F7`, per port)
 - [x] Jog/scrub wheel: CC 0x0D, bits 0–5 = speed, bit 6 set = forward; jog/SHUTTLE/SCRUB modes (see protocol section)
-- [x] Cursor arrows (scroll/zoom via ENTER toggle), DEC/INC = prev/next marker
+- [x] Cursor arrows (scroll), DEC/INC = prev/next marker, ENTER = insert marker
+- [x] LOCATE MEMORY [1-8]: zone 0x0F sw 0-7 → jump to REAPER markers 1-8 (zone unverified)
 - [~] HUI counter (LED timecode) display: `F0 00 00 66 05 00 11 <8 ASCII chars> F7` sent
       every 100ms from `Run()`; position from `GetPlayPosition()`/`GetCursorPosition()` +
       `format_timestr_pos(..., -1)`, right-justified into 8 positions. Format/command byte
@@ -348,7 +351,10 @@ Tasks:
   - Hardware test result: display shows 4 chars only - scribble strip is physically 4-char wide in DAW mode; native SysEx updates console memory but HUI controls the visible strip
 - [x] Meter bridge - already driven by HUI `A0 ch (side<<4)|level` messages (Layer 2); the DM2000 has no separate channel-strip VU display, so HUI meters ARE the meter bridge. No native SysEx needed.
 - [~] Scene recall:
-  - [x] PC receive: PC 1-9 on any DAW port jump to REAPER markers 1-9 (1-indexed per manual p.218).
+  - [x] PC receive: all 99 scenes (bytes 0x00-0x62) jump to REAPER markers 1-99.
+        Wire format is 0-indexed per manual p.370 ("Program number 0-127"):
+        byte 0x00 = PC 1 = Scene 1 → marker 1. UNVERIFIED: some Yamaha devices
+        use 1-indexed bytes; verify with MIDI-OX on the GENERAL port.
         Requires GENERAL port on the console set to one of the 4 DAW USB ports.
   - [ ] PC send: REAPER marker → send PC to DM2000 to recall matching scene. Needs a 5th
         port or reusing port 4; not yet implemented.

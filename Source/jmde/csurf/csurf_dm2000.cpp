@@ -86,7 +86,6 @@ class CSurf_DM2000 : public IReaperControlSurface
     DWORD m_meter_lastrun;
     int m_bank_offset;
     int m_wheel_mode;                // 0=jog (edit cursor), 1=scrub, 2=shuttle (coarse)
-    bool m_arrow_zoom;               // ENTER toggles arrows between scroll and zoom
     int m_auto_mode;                 // 0=trim/bypass, 1=read, 2=touch, 3=write, 4=latch, 5=latch preview
     char m_ini_path[MAX_PATH];       // user-configured path to dm2000_keys.ini (empty = default)
     int m_held_arrow;                // -1=none, 0-3=CSurf_OnArrow direction being held
@@ -118,7 +117,6 @@ public:
     m_meter_histpos = 0;
     m_meter_lastrun = 0;
     m_wheel_mode = 0;
-    m_arrow_zoom = false;
     m_auto_mode  = 1;
     sprintf_s(m_ini_path, sizeof(m_ini_path), "%s", iniPath ? iniPath : "");
     m_held_arrow = -1;
@@ -226,7 +224,7 @@ public:
       {
           if (now - m_arrow_last_repeat > 80)
           {
-              CSurf_OnArrow(m_held_arrow, m_arrow_zoom);
+              CSurf_OnArrow(m_held_arrow, false);
               m_arrow_last_repeat = now;
           }
       }
@@ -518,13 +516,15 @@ private:
 
         // Program Change on any port: DM2000 GENERAL port scene recall.
         // User must assign GENERAL to one of the 4 DAW USB ports on the console.
-        // Default PC table (manual p.218): scene N sends PC N (1-indexed).
-        // PC 1-9 map to REAPER markers 1-9; PC 0 and higher PCs fall through
-        // as no-ops until a proper scene-to-marker table is implemented.
+        // Wire format is 0-indexed (manual p.370: "Program number 0-127"):
+        //   byte 0x00 = PC 1 = Scene 1 -> marker 1
+        //   byte 0x62 = PC 99 = Scene 99 -> marker 99
+        //   byte 0x63 = PC 100 = Scene 0 (no marker jump)
+        // UNVERIFIED: some Yamaha devices use 1-indexed bytes; test with MIDI-OX.
         if (status == 0xC0)
         {
-            if (data1 >= 1 && data1 <= 9)
-                SendMessage(g_hwnd, WM_COMMAND, ID_GOTO_MARKER1 + data1 - 1, 0);
+            if (data1 <= 98)
+                SendMessage(g_hwnd, WM_COMMAND, ID_GOTO_MARKER1 + data1, 0);
             return;
         }
 
@@ -651,10 +651,10 @@ private:
             switch (sw)
             {
                 // arrows: fire immediately and arm auto-repeat in Run()
-                case 4: CSurf_OnArrow(0, m_arrow_zoom); m_held_arrow = 0; m_arrow_held_since = timeGetTime(); break; // up
-                case 0: CSurf_OnArrow(1, m_arrow_zoom); m_held_arrow = 1; m_arrow_held_since = timeGetTime(); break; // down
-                case 1: CSurf_OnArrow(2, m_arrow_zoom); m_held_arrow = 2; m_arrow_held_since = timeGetTime(); break; // left
-                case 3: CSurf_OnArrow(3, m_arrow_zoom); m_held_arrow = 3; m_arrow_held_since = timeGetTime(); break; // right
+                case 4: CSurf_OnArrow(0, false); m_held_arrow = 0; m_arrow_held_since = timeGetTime(); break; // up
+                case 0: CSurf_OnArrow(1, false); m_held_arrow = 1; m_arrow_held_since = timeGetTime(); break; // down
+                case 1: CSurf_OnArrow(2, false); m_held_arrow = 2; m_arrow_held_since = timeGetTime(); break; // left
+                case 3: CSurf_OnArrow(3, false); m_held_arrow = 3; m_arrow_held_since = timeGetTime(); break; // right
                 case 2:                                        // INC -> next marker
                     SendMessage(g_hwnd, WM_COMMAND, ID_MARKER_NEXT, 0);
                     break;
@@ -670,13 +670,17 @@ private:
                     break;
             }
         }
+        else if (zone == 0x0F && press && sw <= 7) // LOCATE MEMORY [1-8] — zone unverified, verify with MIDI-OX
+        {
+            SendMessage(g_hwnd, WM_COMMAND, ID_GOTO_MARKER1 + sw, 0);
+        }
         else if (zone == 0x1B && sw == 7 && press) // DEC -> previous marker
         {
             SendMessage(g_hwnd, WM_COMMAND, ID_MARKER_PREV, 0);
         }
-        else if (zone == 0x14 && sw == 0 && press) // ENTER: arrows scroll <-> zoom
+        else if (zone == 0x14 && sw == 0 && press) // ENTER: insert marker (manual ch.19 p.249)
         {
-            m_arrow_zoom = !m_arrow_zoom;
+            SendMessage(g_hwnd, WM_COMMAND, 40157, 0); // 40157 = Insert marker at edit cursor
         }
         else if (zone == 0x18 && press && port == 0) // AUTOMIX -- fires on all 3 ports; deduplicate via port 0
         {
