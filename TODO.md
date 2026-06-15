@@ -23,7 +23,9 @@ Tasks tracked here to avoid scrolling chat history.
       (not zone 0x0E as previously guessed). Verified 2026-06-15, code fixed.
 
 - [x] **ENTER zone hardware re-verify** - zone 0x14 sw 0 confirmed by full
-      capture 2026-06-15. Code already correct.
+      capture 2026-06-15. ENTER now toggles cursor arrow keys between scroll
+      mode and zoom mode (CSurf_OnArrow zoom flag). Previously mapped to insert
+      marker; that function moved to QUICK PUNCH (zone 0x10 sw3).
 
 - [x] **LOCATE MEMORY zone** - was wrongly coded at zone 0x0F sw 0-7.
       Correct: zone 0x13, non-sequential sw: LM1=sw1, LM2=sw3, LM3=sw6,
@@ -44,7 +46,7 @@ Tasks tracked here to avoid scrolling chat history.
       2026-06-15 (every button, fader, knob). Raw data: doc/midi-capture-2026-06-15.txt.
       Zone/sw table updated in DESIGN.md. Remaining gaps: zone 0x10 sw4,
       zone 0x0F sw4 not identified. BACK/FORWARD wired 2026-06-15 (zone 0x08
-      sw2=undo, sw6=redo).
+      sw2=undo, sw6=redo). QUICK PUNCH (zone 0x10 sw3) = insert marker.
 
 ---
 
@@ -54,6 +56,8 @@ Tasks tracked here to avoid scrolling chat history.
       (see Hardware section above). Previous 6-point hand-matched table superseded.
 
 - [x] **Transport: play, stop, rec, rew, fwd** - implemented and hardware-verified.
+      REW/FF (zone 0x0E sw1/sw2) also support auto-repeat when held (400 ms delay,
+      80 ms interval), matching the cursor arrow key behavior.
 
 - [~] **HUI counter display** - `F0 00 00 66 05 00 11 <8 ASCII chars> F7` sent every 100ms
       in `Run()`. Command byte 0x11 and ASCII encoding are UNVERIFIED on the DM2000. Verify
@@ -74,10 +78,11 @@ Tasks tracked here to avoid scrolling chat history.
       is GENERAL; plan to add as optional 5th port in config, or reuse port 4.
 
 - [ ] **USER DEFINED KEYS dispatch** - config dialog has ini path field; the actual
-      ini-file reader that maps `zone_sw = action_id` to REAPER actions is not
-      written. From manual ch.19: keys 2/3 = bank ±24 (duplicate of zone 0x0A),
-      10/11 = channel ±1 (duplicate). Other keys (1,4-9,12-16) have no defined
-      mapping — worth assigning to REAPER actions via the ini file.
+      ini-file reader that maps key N to a REAPER action ID is not written.
+      Format and suggested actions documented in doc/dm2000_keys.ini.example.
+      Confirmed UDK zones: 4/5/13/14=zone 0x08, 6/7/8=zone 0x19. Keys 2/3 duplicate
+      bank navigation (zone 0x0A sw1/sw3) and 10/11 duplicate ch navigation
+      (zone 0x0A sw0/sw2) per manual ch.19; zones for 1/3/9/11/12/15/16 unconfirmed.
 
 - [ ] **EQ / parameter control via CC** - manual appendix confirms EQ ATT (input
       attenuation), EQ ON/OFF, and all faders/pans are accessible as MIDI CC on

@@ -84,11 +84,15 @@ class CSurf_DM2000 : public IReaperControlSurface
     DWORD m_meter_lastrun;
     int m_bank_offset;
     int m_wheel_mode;                // 0=jog (edit cursor), 1=scrub, 2=shuttle (coarse)
+    bool m_arrow_zoom;               // ENTER toggles cursor arrows between scroll (false) and zoom (true)
     int m_auto_mode;                 // 0=trim/bypass, 1=read, 2=touch, 3=write, 4=latch, 5=latch preview
     char m_ini_path[MAX_PATH];       // user-configured path to dm2000_keys.ini (empty = default)
     int m_held_arrow;                // -1=none, 0-3=CSurf_OnArrow direction being held
     DWORD m_arrow_held_since;        // timestamp of the press that started the hold
     DWORD m_arrow_last_repeat;       // timestamp of the last auto-repeat fire
+    int m_held_transport;            // -1=none, 1=REW, 2=FF
+    DWORD m_transport_held_since;
+    DWORD m_transport_last_repeat;
     char m_tc_lastbuf[16];           // last timecode string sent to counter display (change detection)
 
 public:
@@ -115,11 +119,15 @@ public:
     m_meter_histpos = 0;
     m_meter_lastrun = 0;
     m_wheel_mode = 0;
+    m_arrow_zoom = false;
     m_auto_mode  = 1;
     sprintf_s(m_ini_path, sizeof(m_ini_path), "%s", iniPath ? iniPath : "");
     m_held_arrow = -1;
     m_arrow_held_since = 0;
     m_arrow_last_repeat = 0;
+    m_held_transport = -1;
+    m_transport_held_since = 0;
+    m_transport_last_repeat = 0;
     m_tc_lastbuf[0] = '\0';
 
     for (int i = 0; i < 4; ++i)
@@ -222,8 +230,19 @@ public:
       {
           if (now - m_arrow_last_repeat > 80)
           {
-              CSurf_OnArrow(m_held_arrow, false);
+              CSurf_OnArrow(m_held_arrow, m_arrow_zoom);
               m_arrow_last_repeat = now;
+          }
+      }
+
+      // REW/FF auto-repeat: same timing as arrows
+      if (m_held_transport >= 0 && now - m_transport_held_since > 400)
+      {
+          if (now - m_transport_last_repeat > 80)
+          {
+              if (m_held_transport == 1) CSurf_OnRew(1);
+              else                       CSurf_OnFwd(1);
+              m_transport_last_repeat = now;
           }
       }
 
@@ -637,24 +656,29 @@ private:
             }
             if (amt) AdjustBankOffset(amt);
         }
+        else if (zone == 0x0E && !press && (sw == 1 || sw == 2))
+        {
+            m_held_transport = -1;               // REW/FF released: cancel auto-repeat
+        }
         else if (zone == 0x0E && press)          // transport (hw-verified: sw1=REW sw2=FF sw3=STOP sw4=PLAY sw5=REC)
         {
             switch (sw)
             {
-                case 1: CSurf_OnRew(1); break;
-                case 2: CSurf_OnFwd(1); break;
+                case 1: CSurf_OnRew(1); m_held_transport = 1; m_transport_held_since = timeGetTime(); break;
+                case 2: CSurf_OnFwd(1); m_held_transport = 2; m_transport_held_since = timeGetTime(); break;
                 case 3: CSurf_OnStop(); break;
                 case 4: CSurf_OnPlay(); break;
                 case 5: CSurf_OnRecord(); break;
             }
         }
-        else if (zone == 0x10 && press)          // RTZ/END/LOOP (hw-verified: sw0=RTZ sw1=END sw2=LOOP)
+        else if (zone == 0x10 && press)          // RTZ/END/LOOP/QUICK PUNCH (hw-verified: sw0=RTZ sw1=END sw2=LOOP sw3=QUICK PUNCH)
         {
             switch (sw)
             {
                 case 0: CSurf_GoStart(); break;
                 case 1: CSurf_GoEnd(); break;
                 case 2: SendMessage(g_hwnd, WM_COMMAND, IDC_REPEAT, 0); break;
+                case 3: SendMessage(g_hwnd, WM_COMMAND, 40157, 0); break; // QUICK PUNCH -> insert marker at edit cursor
             }
         }
         else if (zone == 0x0D && !press && (sw == 4 || sw == 0 || sw == 1 || sw == 3))
@@ -666,10 +690,10 @@ private:
             switch (sw)
             {
                 // arrows: fire immediately and arm auto-repeat in Run()
-                case 4: CSurf_OnArrow(0, false); m_held_arrow = 0; m_arrow_held_since = timeGetTime(); break; // up
-                case 0: CSurf_OnArrow(1, false); m_held_arrow = 1; m_arrow_held_since = timeGetTime(); break; // down
-                case 1: CSurf_OnArrow(2, false); m_held_arrow = 2; m_arrow_held_since = timeGetTime(); break; // left
-                case 3: CSurf_OnArrow(3, false); m_held_arrow = 3; m_arrow_held_since = timeGetTime(); break; // right
+                case 4: CSurf_OnArrow(0, m_arrow_zoom); m_held_arrow = 0; m_arrow_held_since = timeGetTime(); break; // up
+                case 0: CSurf_OnArrow(1, m_arrow_zoom); m_held_arrow = 1; m_arrow_held_since = timeGetTime(); break; // down
+                case 1: CSurf_OnArrow(2, m_arrow_zoom); m_held_arrow = 2; m_arrow_held_since = timeGetTime(); break; // left
+                case 3: CSurf_OnArrow(3, m_arrow_zoom); m_held_arrow = 3; m_arrow_held_since = timeGetTime(); break; // right
                 case 2:                                        // INC -> next marker
                     SendMessage(g_hwnd, WM_COMMAND, ID_MARKER_NEXT, 0);
                     break;
@@ -696,9 +720,9 @@ private:
         {
             SendMessage(g_hwnd, WM_COMMAND, ID_MARKER_PREV, 0);
         }
-        else if (zone == 0x14 && sw == 0 && press) // ENTER: insert marker (manual ch.19 p.249)
+        else if (zone == 0x14 && sw == 0 && press) // ENTER: toggle cursor arrows scroll <-> zoom
         {
-            SendMessage(g_hwnd, WM_COMMAND, 40157, 0); // 40157 = Insert marker at edit cursor
+            m_arrow_zoom = !m_arrow_zoom;
         }
         else if (zone == 0x19 && sw == 2 && press && port == 0) // AUTOMIX ENABLE (hw-verified; all 3 ports)
         {

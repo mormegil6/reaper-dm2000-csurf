@@ -1,4 +1,4 @@
-[![C++](https://img.shields.io/badge/C++-14-blue.svg)]() [![Windows](https://img.shields.io/badge/Windows-x64-0078D4.svg?logo=windows&logoColor=white)]() [![macOS](https://img.shields.io/badge/macOS-arm64%2Fx86__64-000000.svg?logo=apple&logoColor=white)]() [![REAPER](https://img.shields.io/badge/REAPER-6+-darkgreen.svg)]() [![v0.2](https://img.shields.io/badge/version-v0.2-lightgrey.svg)](https://bmroz.eu/projects/dm2000-csurf) [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
+[![C++](https://img.shields.io/badge/C++-14-blue.svg)]() [![Windows](https://img.shields.io/badge/Windows-x64-0078D4.svg?logo=windows&logoColor=white)]() [![macOS](https://img.shields.io/badge/macOS-arm64%2Fx86__64-000000.svg?logo=apple&logoColor=white)]() [![REAPER](https://img.shields.io/badge/REAPER-6+-darkgreen.svg)]() [![v0.3](https://img.shields.io/badge/version-v0.3-lightgrey.svg)](https://bmroz.eu/projects/dm2000-csurf) [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
 
 # reaper_csurf_dm2000 - Yamaha DM2000 control surface for REAPER
 
@@ -110,8 +110,9 @@ WDL clone, `make`, binary verification, install).
 - [x] Transport extensions: RTZ/END/LOOP buttons wired to zone 0x10 sw0/1/2;
       LOOP LED feedback via `SetRepeatState`; all hardware-verified 2026-06-15.
 - [x] BACK button (zone 0x08 sw2) -> undo; FORWARD (zone 0x08 sw6) -> redo.
-- [x] ENTER button inserts a marker at the edit cursor (REAPER action 40157;
-      zone 0x14 sw 0 - hardware-verified 2026-06-15)
+- [x] ENTER button (zone 0x14 sw0) toggles cursor arrows between scroll and zoom mode.
+- [x] QUICK PUNCH button (zone 0x10 sw3) inserts a marker at the edit cursor (action 40157).
+- [x] REW/FF (zone 0x0E sw1/sw2) support auto-repeat when held (400 ms delay, 80 ms interval), same as cursor arrows.
 - [x] LOCATE MEMORY 1-6 jump to REAPER markers 1-6 (zone 0x13; hardware-verified
       2026-06-15; sw mapping is non-sequential: LM1=sw1, LM2=sw3, LM3=sw6, etc.)
 - [x] Scene recall: DM2000 scenes 1-99 jump to REAPER markers 1-99 via Program
