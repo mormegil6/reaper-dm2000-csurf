@@ -101,25 +101,51 @@ B0  2F  vv    - value: bits 0–3 = switch number, bit 6 = press (0x40), 0 = rel
 ```
 
 Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; see doc/midi-capture-2026-06-15.txt):
+
+**Channel strips**
 | Zone | Meaning | Switches used |
 |------|---------|---------------|
-| 0-7  | Channel strip (zone = ch 0-7 on this port) | 0=fader touch, 1=SELECT, 2=MUTE, 3=SOLO, 4=AUTOMIX per-ch, 5=pan knob press, 7=REC/RDY |
-| 0x08 | Display history + User Defined Keys 4/5/13/14 | sw2=BACK, sw6=FORWARD (and UDK sw1/sw5/sw3/sw7) |
-| 0x09 | Display buttons + User Defined Keys 1/2/9/10 | sw3=LOCATOR DISPLAY, sw4=UDK DISPLAY, sw5=EFFECT DISPLAY |
-| 0x0A | Bank/channel navigation | 0=ch-left, 1=bank-left, 2=ch-right, 3=bank-right |
+| 0-7 | Channel strip (zone = ch 0-7 on this port) | 0=fader touch, 1=SELECT, 2=MUTE, 3=SOLO, 4=AUTOMIX per-ch, 5=pan knob press, 7=REC/RDY |
+
+**Display, navigation & user-defined keys**
+| Zone | Meaning | Switches used |
+|------|---------|---------------|
+| 0x08 | Display History + UDK 4/5/13/14 | sw2=BACK, sw6=FORWARD; UDK: sw1=UDK4, sw5=UDK5, sw3=UDK13, sw7=UDK14 |
+| 0x09 | Display buttons + UDK 1/2/9/10 | sw3=LOCATOR DISPLAY, sw4=UDK DISPLAY, sw5=EFFECT DISPLAY; UDK 1/2/9/10 at unconfirmed sw values |
+| 0x0A | Bank/channel navigation - these ARE UDK buttons 2/3/10/11 (factory-labeled BANK ◄/►, CH ◄/►; manual ch.19) | 0=ch-left, 1=bank-left, 2=ch-right, 3=bank-right |
+
+**EQ & routing control**
+| Zone | Meaning | Switches used |
+|------|---------|---------------|
 | 0x0B | Aux select + encoder assign | sw7=AUX1, sw6=AUX2, sw5=AUX3, sw4=AUX4, sw3=AUX5; sw2=ENC PAN, sw1=ENC ASSIGN1, sw0=ENC ASSIGN2 |
 | 0x0C | Fader mode + AUTOMIX REC + matrix select | sw3=FADER, sw0=FAD ASSIGN2; sw2=AUTOMIX REC; sw1=MATRIX1, sw4=MATRIX2 |
+
+**Cursor, jog & transport**
+| Zone | Meaning | Switches used |
+|------|---------|---------------|
 | 0x0D | Cursor cluster + wheel modes | 0=down, 1=left, 2=INC, 3=right, 4=up, 5=SCRUB, 6=SHUTTLE |
 | 0x0E | Transport | 1=REW, 2=FFWD, 3=STOP, 4=PLAY, 5=REC |
+| 0x10 | RTZ / END / LOOP / QUICK PUNCH | 0=RTZ, 1=END, 2=LOOP, 3=QUICK PUNCH (sw4 unidentified) |
+
+**Locate & markers**
+| Zone | Meaning | Switches used |
+|------|---------|---------------|
 | 0x0F | Locator row 2 | 0=ROLL BACK, 1=REHEARSAL, 2=MTR, 3=MASTER (sw4 unidentified) |
-| 0x10 | RTZ / END / LOOP group | 0=RTZ, 1=END, 2=LOOP, 3=QUICK PUNCH (sw4 unidentified) |
 | 0x13 | LOCATE MEMORY | sw1=LM1, sw3=LM2, sw6=LM3, sw2=LM4, sw4=LM5, sw7=LM6; sw5=companion event (always fires alongside, ignore) |
-| 0x14 | ENTER | 0=press -> insert marker at edit cursor |
+| 0x14 | ENTER | 0=press -> toggle cursor arrows between scroll and zoom mode |
 | 0x15 | Locator / audition | 0=AUDITION, 1=PRE |
+
+**AUTOMIX & overwrite**
+| Zone | Meaning | Switches used |
+|------|---------|---------------|
 | 0x17 | OVERWRITE section | 0=AUX ON, 1=PAN, 2=FADER, 3=AUX, 4=SURROUND, 5=ON |
 | 0x18 | AUTOMIX mode buttons | 0=TOUCH SENSE, 1=RETURN/READ, 2=RELATIVE, 4=ABORT/UNDO, 5=AUTO-REC/LATCH |
-| 0x19 | AUTOMIX ENABLE + User Defined Keys 6-8 | sw2=ENABLE; sw3/4/5=UDK6/7/8 (fire on all 3 ports) |
-| 0x1B | DEC | 7=press -> previous marker |
+| 0x19 | AUTOMIX ENABLE + UDK 6-8 | sw2=ENABLE; sw3=UDK6, sw4=UDK7, sw5=UDK8 (fire on all 3 ports) |
+
+**Misc**
+| Zone | Meaning | Switches used |
+|------|---------|---------------|
+| 0x1B | DEC (\|<) | 7=press -> previous marker |
 
 <details>
 <summary><strong>Button / function / MIDI reference table</strong> (click to expand)</summary>
@@ -148,12 +174,12 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 | PLAY | DM2000→host | zone 0x0E, sw 4 | `CSurf_OnPlay()` | Verified |
 | STOP | DM2000→host | zone 0x0E, sw 3 | `CSurf_OnStop()` | Verified |
 | REC | DM2000→host | zone 0x0E, sw 5 | `CSurf_OnRecord()` | Verified |
-| REW | DM2000→host | zone 0x0E, sw 1 | `CSurf_OnRew()` | Verified |
-| FFWD | DM2000→host | zone 0x0E, sw 2 | `CSurf_OnFwd()` | Verified |
+| REW | DM2000→host | zone 0x0E, sw 1 | `CSurf_OnRew()` with auto-repeat (400ms delay, 80ms interval) | Verified |
+| FFWD | DM2000→host | zone 0x0E, sw 2 | `CSurf_OnFwd()` with auto-repeat (400ms delay, 80ms interval) | Verified |
 | RTZ | DM2000→host | zone 0x10, sw 0 | `CSurf_GoStart()` | Verified |
 | END | DM2000→host | zone 0x10, sw 1 | `CSurf_GoEnd()` | Verified |
 | LOOP | DM2000→host | zone 0x10, sw 2 | toggle loop (`IDC_REPEAT`) | Verified |
-| QUICK PUNCH | DM2000→host | zone 0x10, sw 3 | (not implemented) | Verified |
+| QUICK PUNCH | DM2000→host | zone 0x10, sw 3 | insert marker at edit cursor (action 40157) | Verified |
 | PLAY LED | host→DM2000 | target 0x0E, sw 4 | `SetPlayState()` | Verified |
 | STOP LED | host→DM2000 | target 0x0E, sw 3 | `SetPlayState()` | Verified |
 | REC LED | host→DM2000 | target 0x0E, sw 5 | `SetPlayState()` | Verified |
@@ -162,9 +188,9 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 | SCRUB key | DM2000→host | zone 0x0D, sw 5 | switch to scrub mode | Verified |
 | SHUTTLE key | DM2000→host | zone 0x0D, sw 6 | switch to shuttle mode | Verified |
 | Cursor UP/DOWN/LEFT/RIGHT | DM2000→host | zone 0x0D, sw 4/0/1/3 | `CSurf_OnArrow()` scroll | Verified |
-| INC (>|) | DM2000→host | zone 0x0D, sw 2 | next marker | Verified |
-| DEC (|<) | DM2000→host | zone 0x1B, sw 7 | previous marker | Verified |
-| ENTER | DM2000→host | zone 0x14, sw 0 | insert marker at edit cursor (action 40157) | Verified |
+| INC (>\|) | DM2000→host | zone 0x0D, sw 2 | next marker | Verified |
+| DEC (\|<) | DM2000→host | zone 0x1B, sw 7 | previous marker | Verified |
+| ENTER | DM2000→host | zone 0x14, sw 0 | toggle cursor arrows: scroll <-> zoom (m_arrow_zoom) | Verified |
 | Display Hist BACK | DM2000→host | zone 0x08, sw 2 | undo (action 40029) | Verified |
 | Display Hist FORWARD | DM2000→host | zone 0x08, sw 6 | redo (action 40030) | Verified |
 | LOCATE MEMORY 1 | DM2000→host | zone 0x13, sw 1 (+sw5 companion) | jump to REAPER marker 1 | Verified |
@@ -182,8 +208,8 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 | AUTOMIX ABORT/UNDO | DM2000→host | zone 0x18, sw 4 (all 3 ports) | undo (`IDC_EDIT_UNDO`) | Verified |
 | Scribble strip (ch N) | host→DM2000 | `F0 00 00 66 05 00 10 N <4 chars> F7` (port P) | `SetTrackTitle()` 4-char | Verified |
 | LED counter display | host→DM2000 | `F0 00 00 66 05 00 11 <8 chars> F7` (port 1) | position from `format_timestr_pos()` | Unverified |
-| USER DEFINED KEYS | DM2000→host | zones unconfirmed | custom action via ini file | Not implemented |
-| USER DEFINED KEYS | DM2000→host | zones unconfirmed | custom action via ini file | Not implemented |
+| USER DEFINED KEYS (UDK 4/5/6/7/8/13/14) | DM2000→host | zones confirmed - see zone table | custom action via dm2000_keys.ini (dispatcher not yet implemented) | Not implemented |
+| USER DEFINED KEYS (UDK 1/2/3/9/10/11/12/15/16) | DM2000→host | zones unconfirmed - need MIDI-OX capture | custom action via dm2000_keys.ini | Not implemented |
 
 **Pan ring LED values:** 1=hard left, 6=centre, 11=hard right. `B0+(P) 10+(N%8) 0` = ring off.
 
@@ -211,8 +237,12 @@ Three modes, selected by the SCRUB/SHUTTLE keys (zone 0x0D sw 5/6, LEDs driven,
 mutually exclusive): default jog = `MoveEditCursor(speed * ±0.1s)`; SHUTTLE =
 coarse `MoveEditCursor(speed * ±1s)`; SCRUB = `CSurf_ScrubAmt(speed * ±0.05)`.
 Plain `CSurf_ScrubAmt()` as the only handler did nothing in normal operation
-(hardware-verified), hence the edit-cursor default. ENTER (zone 0x14 sw 0)
-inserts a marker at the edit cursor (REAPER action 40157; manual ch.19 p.249).
+(hardware-verified), hence the edit-cursor default. ENTER (zone 0x14 sw 0) toggles
+the cursor arrow keys between scroll mode (`CSurf_OnArrow(dir, false)`) and zoom
+mode (`CSurf_OnArrow(dir, true)`); the `m_arrow_zoom` flag persists until the next
+press. REW/FF (zone 0x0E sw1/sw2) support auto-repeat: first repeat after 400 ms,
+then every 80 ms. QUICK PUNCH (zone 0x10 sw 3) inserts a marker at the edit cursor
+(REAPER action 40157).
 
 **Switch/LED feedback (host → DM2000):**
 LEDs use a different CC pair to avoid confusion with the incoming zone-select:
@@ -355,7 +385,7 @@ Tasks:
 - [x] Selected channel highlight
 - [x] Track name truncated to 4 chars on scribble strip via HUI (`F0 00 00 66 05 00 10 <ch> <4 chars> F7`, per port)
 - [x] Jog/scrub wheel: CC 0x0D, bits 0–5 = speed, bit 6 set = forward; jog/SHUTTLE/SCRUB modes (see protocol section)
-- [x] Cursor arrows (scroll), DEC/INC = prev/next marker, ENTER = insert marker
+- [x] Cursor arrows (scroll/zoom toggled by ENTER), DEC/INC = prev/next marker, ENTER = toggle scroll/zoom, QUICK PUNCH = insert marker
 - [x] LOCATE MEMORY [1-8]: zone 0x0F sw 0-7 → jump to REAPER markers 1-8 (zone unverified)
 - [~] HUI counter (LED timecode) display: `F0 00 00 66 05 00 11 <8 ASCII chars> F7` sent
       every 100ms from `Run()`; position from `GetPlayPosition()`/`GetCursorPosition()` +

@@ -1,0 +1,59 @@
+; dm2000_keys.ini - User Defined Keys mapping for reaper_csurf_dm2000
+;
+; Copy this file to %APPDATA%\REAPER\dm2000_keys.ini (Windows) or
+; ~/Library/Application Support/REAPER/dm2000_keys.ini (macOS), then set
+; the ini path in the DM2000 control surface config dialog.
+;
+; Format: key<N> = <REAPER action ID>
+;   N        = UDK button number on the DM2000 console (1-16)
+;   action ID = the numeric action ID from REAPER > Actions > Show action list
+;
+; To find an action ID in REAPER: Actions > Show action list, search for the
+; action by name, then right-click it and select "Copy selected action command ID".
+;
+; Zone/switch reference for confirmed UDK button MIDI positions:
+;   UDK  4: zone 0x08 sw1      UDK 13: zone 0x08 sw3
+;   UDK  5: zone 0x08 sw5      UDK 14: zone 0x08 sw7
+;   UDK  6: zone 0x19 sw3
+;   UDK  7: zone 0x19 sw4
+;   UDK  8: zone 0x19 sw5
+;   UDK 1/2/3/9/10/11/12/15/16: zone/sw unconfirmed (capture with MIDI-OX)
+;
+; Per manual ch.19 and hardware verification:
+;   UDK  2 = BANK ◄ button (zone 0x0A sw1) - these ARE the dedicated bank/channel
+;   UDK  3 = BANK ► button (zone 0x0A sw3)   navigation buttons on the console,
+;   UDK 10 = CH ◄ button   (zone 0x0A sw0)   not separate buttons. Already handled
+;   UDK 11 = CH ► button   (zone 0x0A sw2)   by the csurf; no ini entry needed.
+;
+; Full zone/switch protocol reference: doc/DESIGN.md, "Zone assignments" section.
+; For SWS/ReaScript action IDs see the Cockos forum action list thread.
+;
+; NOTE: the ini-file reader is not yet implemented in the plugin; entries here
+; are proposals to be activated once the dispatcher is written.
+
+; --- UDK buttons with confirmed MIDI zones ---
+
+; Zone 0x08 sw1 - near Display History BACK button
+key4  = 40029   ; undo (same as BACK) - change to something unique
+
+; Zone 0x08 sw5 - near Display History FORWARD button
+key5  = 40030   ; redo (same as FORWARD) - change to something unique
+
+; Zone 0x08 sw3 / sw7 - additional buttons near display area
+key13 = 40157   ; insert marker at edit cursor (same as QUICK PUNCH) - or choose another
+key14 = 0       ; unassigned
+
+; Zone 0x19 sw3/4/5 - share zone with AUTOMIX ENABLE button
+key6  = 40022   ; save project
+key7  = 0       ; unassigned
+key8  = 0       ; unassigned
+
+; --- UDK buttons with unconfirmed MIDI zones (capture first with MIDI-OX) ---
+
+; Capture the button press with MIDI-OX, note the zone/sw, then uncomment:
+; key1  = 0
+; key2/3/10/11 are the factory bank/channel buttons - already handled, no entry needed
+; key9  = 0
+; key12 = 0
+; key15 = 0
+; key16 = 0
