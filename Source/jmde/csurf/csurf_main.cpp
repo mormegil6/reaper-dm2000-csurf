@@ -97,6 +97,8 @@ bool (*GetTrackUIVolPan)(MediaTrack *tr, double *vol, double *pan);
 
 
 void (*MoveEditCursor)(double adjamt, bool dosel);
+void (*Main_OnCommand)(int command, int flag);
+void (*SetMixerScroll)(MediaTrack *leftmosttrack);
 void (*adjustZoom)(double amt, int forceset, bool doupd, int centermode); // forceset=0, doupd=true, centermode=-1 for default
 double (*GetHZoomLevel)(); // returns pixels/second
 
@@ -233,7 +235,9 @@ REAPER_PLUGIN_DLL_EXPORT int REAPER_PLUGIN_ENTRYPOINT(REAPER_PLUGIN_HINSTANCE hI
 
   // Resolved separately from the IMPAPI block above so a REAPER that lacks it
   // never increments errcnt and blocks load. Used by the DM2000 surface.
-  *(void **)&GetResourcePath = (void *)rec->GetFunc("GetResourcePath");
+  *(void **)&GetResourcePath    = (void *)rec->GetFunc("GetResourcePath");
+  *(void **)&Main_OnCommand     = (void *)rec->GetFunc("Main_OnCommand");
+  *(void **)&SetMixerScroll     = (void *)rec->GetFunc("SetMixerScroll");
 
 
   rec->Register("csurf",&csurf_bcf_reg);

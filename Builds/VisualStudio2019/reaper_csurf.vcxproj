@@ -194,7 +194,7 @@
       </AdditionalOptions>
     </Link>
     <PostBuildEvent>
-      <Command>copy "x64\Release\reaper_csurf_x64.dll" "%APPDATA%\REAPER\UserPlugins\"</Command>
+      <Command>copy "x64\Release\reaper_csurf_x64.dll" "%APPDATA%\REAPER\UserPlugins\reaper_csurf_dm2000_x64.dll"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -282,7 +282,7 @@
       <AdditionalDependencies>odbc32.lib;odbccp32.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>copy "$(OutDir)reaper_csurf_x64.dll" "%APPDATA%\REAPER\UserPlugins\"</Command>
+      <Command>copy "$(OutDir)reaper_csurf_x64.dll" "%APPDATA%\REAPER\UserPlugins\reaper_csurf_dm2000_x64.dll"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

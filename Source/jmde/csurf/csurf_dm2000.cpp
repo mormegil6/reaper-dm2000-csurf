@@ -64,6 +64,8 @@ static unsigned char panToChar(double pan)
     return (unsigned char)(pan + 0.5);
 }
 
+static void GetIniPath(char *buf, int bufsz); // defined below; used in constructor
+
 class CSurf_DM2000 : public IReaperControlSurface
 {
     int m_midi_in_devs[4];
@@ -93,7 +95,13 @@ class CSurf_DM2000 : public IReaperControlSurface
     int m_held_transport;            // -1=none, 1=REW, 2=FF
     DWORD m_transport_held_since;
     DWORD m_transport_last_repeat;
-    char m_tc_lastbuf[16];           // last timecode string sent to counter display (change detection)
+    unsigned char m_tc_lastbuf[8];   // encoded HUI counter bytes for change detection
+    // Locate section: configurable action IDs loaded from [locate] in dm2000_keys.ini.
+    // RTZ/END: 0 = use CSurf_GoStart()/CSurf_GoEnd() API; non-zero = dispatch that action ID.
+    // All others: 0 = no action; non-zero = dispatch that action ID.
+    int m_la_rtz, m_la_end, m_la_loop, m_la_qpunch; // zone 0x0F hw-verified buttons
+    int m_la_in, m_la_out, m_la_post;                // zone 0x10 hw-verified buttons
+    int m_la_lm[8];                                  // LM1-LM8 locate memory buttons
 
 public:
   CSurf_DM2000(int indev1, int outdev1, int indev2, int outdev2, int indev3, int outdev3, int indev4, int outdev4, const char *iniPath, int *errStats)
@@ -128,7 +136,41 @@ public:
     m_held_transport = -1;
     m_transport_held_since = 0;
     m_transport_last_repeat = 0;
-    m_tc_lastbuf[0] = '\0';
+    memset(m_tc_lastbuf, 0xFF, sizeof(m_tc_lastbuf));
+
+    // locate defaults (can be overridden via [locate] section in dm2000_keys.ini)
+    m_la_rtz     = 0;                    // 0 = CSurf_GoStart() API
+    m_la_end     = 0;                    // 0 = CSurf_GoEnd() API
+    m_la_loop    = IDC_REPEAT;           // 1068: toggle repeat
+    m_la_qpunch  = ID_INSERT_MARKER;     // 40157: insert marker at edit cursor
+    m_la_in      = ID_LOOP_SETSTART;     // 40222: set loop in-point
+    m_la_out     = ID_LOOP_SETEND;       // 40223: set loop out-point
+    m_la_post    = ID_INSERT_MARKERRGN;  // 40174: insert region from time selection
+    for (int i = 0; i < 8; i++)
+        m_la_lm[i] = ID_GOTO_MARKER1 + i; // 40161-40168: go to markers 1-8
+
+    // load [locate] overrides from ini
+    char _la_ini[MAX_PATH];
+    if (m_ini_path[0])
+        sprintf_s(_la_ini, sizeof(_la_ini), "%s", m_ini_path);
+    else
+        GetIniPath(_la_ini, sizeof(_la_ini));
+    if (_la_ini[0])
+    {
+        m_la_rtz    = GetPrivateProfileInt("locate", "rtz",    m_la_rtz,    _la_ini);
+        m_la_end    = GetPrivateProfileInt("locate", "end",    m_la_end,    _la_ini);
+        m_la_loop   = GetPrivateProfileInt("locate", "loop",   m_la_loop,   _la_ini);
+        m_la_qpunch = GetPrivateProfileInt("locate", "qpunch", m_la_qpunch, _la_ini);
+        m_la_in     = GetPrivateProfileInt("locate", "in",     m_la_in,     _la_ini);
+        m_la_out    = GetPrivateProfileInt("locate", "out",    m_la_out,    _la_ini);
+        m_la_post   = GetPrivateProfileInt("locate", "post",   m_la_post,   _la_ini);
+        for (int i = 0; i < 8; i++)
+        {
+            char key[8];
+            sprintf_s(key, sizeof(key), "lm%d", i + 1);
+            m_la_lm[i] = GetPrivateProfileInt("locate", key, m_la_lm[i], _la_ini);
+        }
+    }
 
     for (int i = 0; i < 4; ++i)
     {
@@ -146,6 +188,7 @@ public:
     }
 
     m_midiout8 = NULL;
+    SendCounter(true); // blank counter display and sync m_tc_lastbuf to known state
   }
 
   ~CSurf_DM2000()
@@ -191,7 +234,7 @@ public:
       SendTransportLED(3, false);
       SendTransportLED(4, false);
       SendTransportLED(5, false);
-      SendCounter("        "); // blank the LED counter display
+      SendCounter(true); // blank the LED counter display
 
       // REAPER's MIDI outputs queue internally (CreateThreadedMIDIOutput is a
       // passthrough on Windows); deleting them immediately drops whatever the
@@ -235,6 +278,11 @@ public:
                   int dir = m_held_arrow;
                   AdjustBankOffset(dir == 2 ? -1 : 1);
                   m_held_arrow = dir;
+                  if (SetMixerScroll)
+                  {
+                      MediaTrack *t = CSurf_TrackFromID(m_bank_offset + 1, false);
+                      if (t) SetMixerScroll(t);
+                  }
               }
               else
               {
@@ -352,7 +400,7 @@ public:
       SendTransportLED(4, play);            // PLAY
       SendTransportLED(5, rec);             // REC
   }
-  void SetRepeatState(bool rep) { SendGlobalLED(0x10, 2, rep); } // LOOP is zone 0x10 sw2, not 0x0E sw7
+  void SetRepeatState(bool rep) { SendGlobalLED(0x0F, 3, rep); } // LOOP is zone 0x0F sw3 (hw-verified 2026-06-15)
 
   void SetTrackTitle(MediaTrack *trackid, const char *title)
   {
@@ -428,52 +476,97 @@ private:
     }
 
     // HUI counter (LED timecode) display.
-    // Format: F0 00 00 66 05 00 11 <8 ASCII chars> F7  -- UNVERIFIED on DM2000.
-    // Pro Tools sends the current project-format position string here.
-    // If the display shows garbage: try 7-segment encoding instead of ASCII.
-    // If nothing appears: verify command byte 0x11 with MIDI-OX on port 1.
-    void SendCounter(const char *text = nullptr)
+    // Protocol captured 2026-06-15 from Pro Tools via loopMIDI on port 1:
+    //   F0 00 00 66 05 00 11 [N bytes right-to-left] F7
+    // Each byte: high nibble = 1 if a separator (. or :) follows that digit in the
+    // display; low nibble = BCD digit 0-9. Only positions that changed since the
+    // previous message are sent, spanning from the rightmost to leftmost change.
+    // Special clear: 8 x 0x20 blanks all positions (used at init and on close).
+    void SendCounter(bool clear = false)
     {
         if (!m_midiouts[0]) return;
 
-        char tbuf[64] = "        "; // 8 spaces = blank display
-        if (!text)
+        if (clear)
         {
-            double pos = (GetPlayState() & 1) ? GetPlayPosition() : GetCursorPosition();
-            format_timestr_pos(pos, tbuf, sizeof(tbuf), -1);
+            unsigned char blank[17] = {
+                0xF0, 0x00, 0x00, 0x66, 0x05, 0x00, 0x11,
+                0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
+                0xF7
+            };
+            char msgbuf[sizeof(MIDI_event_t) + 17];
+            MIDI_event_t *msg = (MIDI_event_t *)msgbuf;
+            msg->frame_offset = -1;
+            msg->size = 17;
+            memcpy(msg->midi_message, blank, 17);
+            m_midiouts[0]->SendMsg(msg, -1);
+            memset(m_tc_lastbuf, 0x20, sizeof(m_tc_lastbuf));
+            return;
         }
 
-        // truncate/pad to exactly 8 display positions
-        char disp[9];
-        int slen = (int)strlen(text ? text : tbuf);
-        if (slen >= 8)
-        {
-            // take the last 8 chars so HH: is dropped when zero
-            memcpy(disp, (text ? text : tbuf) + slen - 8, 8);
+        // Read transport display mode: prefer timemode2 (right-click transport setting)
+        // over timemode (project primary), same logic as csurf_mcu.cpp.
+        int tmode = 0;
+        int *tmodeptr = (int *)projectconfig_var_addr(NULL, __g_projectconfig_timemode2);
+        if (tmodeptr && *tmodeptr >= 0) tmode = *tmodeptr;
+        else {
+            tmodeptr = (int *)projectconfig_var_addr(NULL, __g_projectconfig_timemode);
+            if (tmodeptr) tmode = *tmodeptr;
         }
-        else
+
+        double pos = (GetPlayState() & 1) ? GetPlayPosition() : GetCursorPosition();
+        char tbuf[64];
+        format_timestr_pos(pos, tbuf, sizeof(tbuf), tmode);
+
+        // Parse the time string right-to-left into 8 display positions.
+        // Separator chars (: . ,) mark the digit to their left as having a separator after it.
+        unsigned char disp[8];
+        memset(disp, 0x20, sizeof(disp)); // 0x20 = blank position
+
+        int slen = (int)strlen(tbuf);
+        int dpos = 7;
+        bool sep_follows = false;
+        for (int i = slen - 1; i >= 0 && dpos >= 0; --i)
         {
-            memset(disp, ' ', 8);
-            memcpy(disp + (8 - slen), text ? text : tbuf, slen);
+            char c = tbuf[i];
+            if (c >= '0' && c <= '9')
+            {
+                disp[dpos--] = (unsigned char)((sep_follows ? 0x10 : 0x00) | (c - '0'));
+                sep_follows = false;
+            }
+            else if (c == '.' || c == ':' || c == ',')
+            {
+                sep_follows = true;
+            }
         }
-        disp[8] = '\0';
 
-        if (memcmp(disp, m_tc_lastbuf, 9) == 0) return;
-        memcpy(m_tc_lastbuf, disp, 9);
+        // Find the leftmost and rightmost positions that changed.
+        int lmc = -1, rmc = -1;
+        for (int i = 0; i < 8; ++i)
+        {
+            if (disp[i] != m_tc_lastbuf[i])
+            {
+                if (lmc < 0) lmc = i;
+                rmc = i;
+            }
+        }
+        if (lmc < 0) return;
 
-        unsigned char sysex[17] = {
-            0xF0, 0x00, 0x00, 0x66, 0x05, 0x00, 0x11,
-            (unsigned char)(disp[0] & 0x7F), (unsigned char)(disp[1] & 0x7F),
-            (unsigned char)(disp[2] & 0x7F), (unsigned char)(disp[3] & 0x7F),
-            (unsigned char)(disp[4] & 0x7F), (unsigned char)(disp[5] & 0x7F),
-            (unsigned char)(disp[6] & 0x7F), (unsigned char)(disp[7] & 0x7F),
-            0xF7
-        };
-        char msgbuf[sizeof(MIDI_event_t) + sizeof(sysex)];
+        memcpy(m_tc_lastbuf, disp, 8);
+
+        unsigned char sysex[16]; // 7 header + up to 8 data + 1 F7
+        int si = 0;
+        sysex[si++] = 0xF0; sysex[si++] = 0x00; sysex[si++] = 0x00;
+        sysex[si++] = 0x66; sysex[si++] = 0x05; sysex[si++] = 0x00;
+        sysex[si++] = 0x11;
+        for (int i = rmc; i >= lmc; --i)
+            sysex[si++] = disp[i];
+        sysex[si++] = 0xF7;
+
+        char msgbuf[sizeof(MIDI_event_t) + 16];
         MIDI_event_t *msg = (MIDI_event_t *)msgbuf;
         msg->frame_offset = -1;
-        msg->size = sizeof(sysex);
-        memcpy(msg->midi_message, sysex, sizeof(sysex));
+        msg->size = si;
+        memcpy(msg->midi_message, sysex, si);
         m_midiouts[0]->SendMsg(msg, -1);
     }
 
@@ -683,14 +776,23 @@ private:
                 case 5: CSurf_OnRecord(); break;
             }
         }
-        else if (zone == 0x10 && press)          // RTZ/END/LOOP/QUICK PUNCH (hw-verified: sw0=RTZ sw1=END sw2=LOOP sw3=QUICK PUNCH)
+        else if (zone == 0x0F && press)  // hw-verified 2026-06-15: sw0=RTZ sw1=END sw2=ONLINE sw3=LOOP sw4=QUICK PUNCH
+        {                                // SET/REHEARSAL/MTR/MASTER do not transmit HUI - DM2000 internal only
+            switch (sw)
+            {
+                case 0: if (m_la_rtz)    SendMessage(g_hwnd, WM_COMMAND, m_la_rtz,    0); else CSurf_GoStart(); break; // RTZ
+                case 1: if (m_la_end)    SendMessage(g_hwnd, WM_COMMAND, m_la_end,    0); else CSurf_GoEnd();   break; // END
+                case 3: if (m_la_loop)   SendMessage(g_hwnd, WM_COMMAND, m_la_loop,   0); break;                       // LOOP
+                case 4: if (m_la_qpunch) SendMessage(g_hwnd, WM_COMMAND, m_la_qpunch, 0); break;                       // QUICK PUNCH
+            }
+        }
+        else if (zone == 0x10 && press)  // hw-verified 2026-06-15: sw0=AUDITION sw1=PRE sw2=IN sw3=OUT sw4=POST
         {
             switch (sw)
             {
-                case 0: CSurf_GoStart(); break;
-                case 1: CSurf_GoEnd(); break;
-                case 2: SendMessage(g_hwnd, WM_COMMAND, IDC_REPEAT, 0); break;
-                case 3: SendMessage(g_hwnd, WM_COMMAND, 40157, 0); break; // QUICK PUNCH -> insert marker at edit cursor
+                case 2: if (m_la_in)   SendMessage(g_hwnd, WM_COMMAND, m_la_in,   0); break; // IN
+                case 3: if (m_la_out)  SendMessage(g_hwnd, WM_COMMAND, m_la_out,  0); break; // OUT
+                case 4: if (m_la_post) SendMessage(g_hwnd, WM_COMMAND, m_la_post, 0); break; // POST
             }
         }
         else if (zone == 0x0D && !press && (sw == 4 || sw == 0 || sw == 1 || sw == 3))
@@ -704,12 +806,20 @@ private:
                 // arrows: fire immediately and arm auto-repeat in Run()
                 case 4: CSurf_OnArrow(0, m_arrow_mode == 1); m_held_arrow = 0; m_arrow_held_since = timeGetTime(); break; // up
                 case 0: CSurf_OnArrow(1, m_arrow_mode == 1); m_held_arrow = 1; m_arrow_held_since = timeGetTime(); break; // down
-                case 1: // left: scroll/zoom or bank-scroll
-                    if (m_arrow_mode == 2) { AdjustBankOffset(-1); m_held_arrow = 2; m_arrow_held_since = timeGetTime(); }
+                case 1: // left: scroll/zoom or bank-scroll+mixer-scroll
+                    if (m_arrow_mode == 2)
+                    {
+                        AdjustBankOffset(-1); m_held_arrow = 2; m_arrow_held_since = timeGetTime();
+                        if (SetMixerScroll) { MediaTrack *t = CSurf_TrackFromID(m_bank_offset + 1, false); if (t) SetMixerScroll(t); }
+                    }
                     else { CSurf_OnArrow(2, m_arrow_mode == 1); m_held_arrow = 2; m_arrow_held_since = timeGetTime(); }
                     break;
-                case 3: // right: scroll/zoom or bank-scroll
-                    if (m_arrow_mode == 2) { AdjustBankOffset(1); m_held_arrow = 3; m_arrow_held_since = timeGetTime(); }
+                case 3: // right: scroll/zoom or bank-scroll+mixer-scroll
+                    if (m_arrow_mode == 2)
+                    {
+                        AdjustBankOffset(1); m_held_arrow = 3; m_arrow_held_since = timeGetTime();
+                        if (SetMixerScroll) { MediaTrack *t = CSurf_TrackFromID(m_bank_offset + 1, false); if (t) SetMixerScroll(t); }
+                    }
                     else { CSurf_OnArrow(3, m_arrow_mode == 1); m_held_arrow = 3; m_arrow_held_since = timeGetTime(); }
                     break;
                 case 2:                                        // INC -> next marker
@@ -730,13 +840,14 @@ private:
         else if (zone == 0x13 && press && sw != 5) // LOCATE MEMORY 1-6 (hw-verified; sw5 is companion event)
         {
             // non-sequential sw: LM1=sw1 LM2=sw3 LM3=sw6 LM4=sw2 LM5=sw4 LM6=sw7
-            static const int lm_marker[] = { -1, 0, 3, 1, 4, -1, 2, 5 }; // index by sw -> ID_GOTO_MARKER1 offset
-            if (sw < 8 && lm_marker[sw] >= 0)
-                SendMessage(g_hwnd, WM_COMMAND, ID_GOTO_MARKER1 + lm_marker[sw], 0);
+            static const int lm_idx[] = { -1, 0, 3, 1, 4, -1, 2, 5 }; // index by sw -> m_la_lm index
+            if (sw < 8 && lm_idx[sw] >= 0 && m_la_lm[lm_idx[sw]])
+                SendMessage(g_hwnd, WM_COMMAND, m_la_lm[lm_idx[sw]], 0);
         }
         else if (zone == 0x15 && press && (sw == 0 || sw == 1)) // LM7/LM8 (hw-captured 2026-06-15)
         {
-            SendMessage(g_hwnd, WM_COMMAND, ID_GOTO_MARKER1 + 6 + sw, 0);
+            if (m_la_lm[6 + sw])
+                SendMessage(g_hwnd, WM_COMMAND, m_la_lm[6 + sw], 0);
         }
         else if (zone == 0x1B && sw == 7 && press) // DEC -> previous marker
         {

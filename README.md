@@ -1,4 +1,4 @@
-[![C++](https://img.shields.io/badge/C++-14-blue.svg)]() [![Windows](https://img.shields.io/badge/Windows-x64-0078D4.svg?logo=windows&logoColor=white)]() [![macOS](https://img.shields.io/badge/macOS-arm64%2Fx86__64-000000.svg?logo=apple&logoColor=white)]() [![REAPER](https://img.shields.io/badge/REAPER-6+-darkgreen.svg)]() [![v0.4](https://img.shields.io/badge/version-v0.4-lightgrey.svg)](https://bmroz.eu/projects/dm2000-csurf) [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
+[![C++](https://img.shields.io/badge/C++-14-blue.svg)]() [![Windows](https://img.shields.io/badge/Windows-x64-0078D4.svg?logo=windows&logoColor=white)]() [![macOS](https://img.shields.io/badge/macOS-arm64%2Fx86__64-000000.svg?logo=apple&logoColor=white)]() [![REAPER](https://img.shields.io/badge/REAPER-6+-darkgreen.svg)]() [![v0.5](https://img.shields.io/badge/version-v0.5-lightgrey.svg)](https://bmroz.eu/projects/dm2000-csurf) [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
 
 # reaper_csurf_dm2000 - Yamaha DM2000 control surface for REAPER
 
@@ -94,7 +94,7 @@ WDL clone, `make`, binary verification, install).
 - Faders both directions, touch detect (touch automation works)
 - Mute / solo / rec-arm / select buttons with LED feedback
 - Transport (play/stop/record/rewind/forward, RTZ, END, LOOP) with LEDs; all switch positions
-  hardware-verified 2026-06-15 (RTZ/END/LOOP are zone 0x10 sw0/1/2, not zone 0x0E)
+  hardware-verified 2026-06-15 (RTZ/END are zone 0x0F sw0/1; LOOP is zone 0x0F sw3 - Locate row, not transport zone 0x0E)
 - Bank switching (channel +-1, bank +-24)
 - Automation modes: AUTOMIX section buttons control REAPER's global automation override (read/touch/write/latch/latch preview/bypass), with LED feedback; all sw assignments hardware-verified 2026-06-15
 
@@ -106,22 +106,26 @@ WDL clone, `make`, binary verification, install).
 - [x] 4-char track names on scribble strips (HUI SysEx)
 - [x] VU meters on channel strips (100ms peak polling, 3-cycle peak hold,
       red OVER only above 0 dBFS - matches REAPER's clip indication)
-- [x] Transport extensions: RTZ/END/LOOP buttons wired to zone 0x10 sw0/1/2;
-      LOOP LED feedback via `SetRepeatState`; all hardware-verified 2026-06-15.
+- [x] Locate section buttons (all hw-verified 2026-06-15, fully configurable via `[locate]` in `dm2000_keys.ini`):
+      - Row 2 (zone 0x0F): RTZ (sw0, go to project start), END (sw1, go to project end),
+        LOOP (sw3, toggle repeat with LED feedback), QUICK PUNCH (sw4, insert marker).
+        ONLINE (sw2), SET/REHEARSAL/MTR/MASTER: no HUI output - DM2000 internal only.
+      - Row 1 (zone 0x10): IN (sw2, set loop in-point), OUT (sw3, set loop out-point),
+        POST (sw4, insert region from time selection). AUDITION/PRE: no default action.
+      - LOCATE MEMORY 1-8 (zone 0x13 sw1/sw3/sw6/sw2/sw4/sw7 for LM1-6; zone 0x15
+        sw0/sw1 for LM7-8): jump to REAPER markers 1-8. Configurable via dm2000_keys.ini.
 - [x] BACK button (zone 0x08 sw2) -> undo; FORWARD (zone 0x08 sw6) -> redo.
 - [x] ENTER button (zone 0x14 sw0) cycles cursor arrows through three modes: scroll,
       zoom, and bank-scroll (left/right shift the fader bank offset by one channel).
-- [x] QUICK PUNCH button (zone 0x10 sw3) inserts a marker at the edit cursor (action 40157).
 - [x] REW/FF (zone 0x0E sw1/sw2) support auto-repeat when held (400 ms delay, 80 ms interval), same as cursor arrows.
-- [x] LOCATE MEMORY 1-8 jump to REAPER markers 1-8 (LM1-6: zone 0x13, sw mapping non-sequential;
-      LM7-8: zone 0x15 sw0/sw1; all hardware-verified 2026-06-15).
 - [x] AUTO button (per-channel, zone 0-7 sw4) resets that channel's fader to 0 dB.
 - [x] Scrub wheel speed increased (10x); jog wheel unchanged.
 - [x] Scene recall: DM2000 scenes 1-99 jump to REAPER markers 1-99 via Program
       Change on the GENERAL port (0-indexed wire format per manual p.370, unverified)
-- [ ] LED counter display: position sent every 100ms as HUI SysEx
-      (`F0 00 00 66 05 00 11 <8 chars> F7`). Implemented but unverified on
-      hardware - counter should track playback position; format may need adjustment.
+- [x] LED counter display: position sent every 100ms as HUI SysEx. Protocol decoded
+      2026-06-15 from Pro Tools loopMIDI capture - delta BCD update, bytes right-to-left,
+      each byte `(sep_flag<<4)|digit`. Follows REAPER's transport display format setting
+      (right-click transport). Hardware-verified 2026-06-15.
 
 Full button/zone/MIDI reference: [DESIGN.md - Button / function / MIDI reference table](DESIGN.md#button--function--midi-reference-table).
 

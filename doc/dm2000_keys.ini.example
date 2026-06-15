@@ -1,15 +1,120 @@
-; dm2000_keys.ini - User Defined Keys mapping for reaper_csurf_dm2000
+; dm2000_keys.ini - Action mappings for reaper_csurf_dm2000
 ;
 ; Copy this file to %APPDATA%\REAPER\dm2000_keys.ini (Windows) or
 ; ~/Library/Application Support/REAPER/dm2000_keys.ini (macOS), then set
-; the ini path in the DM2000 control surface config dialog.
+; the path in the DM2000 control surface config dialog.
 ;
-; Format: key<N> = <REAPER action ID>
-;   N        = UDK button number on the DM2000 console (1-16)
-;   action ID = the numeric action ID from REAPER > Actions > Show action list
+; Values are REAPER action IDs.  To find an ID: Actions > Show action list,
+; search by name, right-click the action, "Copy selected action command ID".
+; For SWS/ReaScript actions install SWS extension and look in the same list.
 ;
-; To find an action ID in REAPER: Actions > Show action list, search for the
-; action by name, then right-click it and select "Copy selected action command ID".
+; A value of 0 means "no action" (button is silently ignored).
+; Omitting a key entirely keeps the compiled-in default for that button.
+
+
+; ===========================================================================
+; [locate] - Locate Memory section buttons
+;
+; The DM2000 Locate Memory section has two rows of buttons above the transport:
+;
+;   Row 1 (zone 0x10, hw-verified 2026-06-15):
+;     AUDITION  PRE  IN  OUT  POST
+;
+;   Row 2 (zone 0x0F, hw-verified 2026-06-15):
+;     RTZ  END  ONLINE  LOOP  QUICK PUNCH
+;     (SET / REHEARSAL / MTR / MASTER do not transmit HUI - DM2000 internal only)
+;
+;   Locate Memory buttons LM1-LM8 (zones 0x13 / 0x15, hw-verified 2026-06-15)
+;
+; Default assignments below match native REAPER workflow.
+; Pro Tools users: see the "Pro Tools layout" comments for each button.
+; ===========================================================================
+
+[locate]
+
+; --- Row 2 (zone 0x0F) ---
+
+; RTZ - Return to Zero: move playhead to project start.
+; Default (0) uses the control surface CSurf_GoStart() API.
+; Pro Tools: also goes to start. No change needed.
+; To override: set to a REAPER action ID, e.g. 40042 (Transport: Go to start).
+rtz = 0
+
+; END - move playhead to project end.
+; Default (0) uses the control surface CSurf_GoEnd() API.
+; To override: set to a REAPER action ID, e.g. 40043 (Transport: Go to end).
+end = 0
+
+; ONLINE - no HUI action assigned by default (transmits HUI zone 0x0F sw2).
+; Pro Tools: toggles online/offline mode (not meaningful in REAPER).
+; Assign any action ID here to repurpose this button.
+online = 0
+
+; LOOP - toggle loop/repeat mode.
+; Default: 1068 (IDC_REPEAT, same as clicking the Repeat button in REAPER).
+; Pro Tools: also toggles loop playback. No change needed.
+loop = 1068
+
+; QUICK PUNCH - insert a marker at the edit cursor.
+; Default: 40157 (Insert marker at current position).
+; Pro Tools: enables/disables quick punch recording mode.
+; For Pro Tools-style quick punch: look up "Record: Toggle auto-punch mode" in the action list.
+qpunch = 40157
+
+
+; --- Row 1 (zone 0x10) ---
+
+; AUDITION - no HUI action assigned by default (transmits HUI zone 0x10 sw0).
+; Pro Tools: auditions the selection via pre-roll.
+; Assign any action ID to repurpose this button.
+audition = 0
+
+; PRE - no HUI action assigned by default (transmits HUI zone 0x10 sw1).
+; Pro Tools: sets/adjusts pre-roll.
+; Assign any action ID to repurpose this button.
+pre = 0
+
+; IN - set loop in-point (loop start) to the current edit cursor position.
+; Default: 40222 (Transport: Set loop start point).
+; Pro Tools: also sets the loop/punch in-point. No change needed.
+in = 40222
+
+; OUT - set loop out-point (loop end) to the current edit cursor position.
+; Default: 40223 (Transport: Set loop end point).
+; Pro Tools: also sets the loop/punch out-point. No change needed.
+out = 40223
+
+; POST - insert a region from the current time selection.
+; Default: 40174 (Insert region from time selection).
+; Pro Tools: sets/adjusts post-roll.
+; For Pro Tools-style post-roll: look up "Set post-roll" in the action list, or assign 0 to disable.
+post = 40174
+
+
+; --- Locate Memory buttons LM1-LM8 ---
+;
+; Default: jump to REAPER markers 1-8 (action IDs 40161-40168).
+; Pro Tools: also stores/recalls locate points numbered 1-8.
+;
+; To set a locate point in REAPER: use Actions > "Set marker 1" (action 40657, +7 for each subsequent).
+; To jump to a marker: use Actions > "Go to marker 1" (action 40161, +1 for each subsequent).
+; You can remap any LM button to a SWS action, a custom action, or 0 to disable.
+
+lm1 = 40161   ; Go to marker 1
+lm2 = 40162   ; Go to marker 2
+lm3 = 40163   ; Go to marker 3
+lm4 = 40164   ; Go to marker 4
+lm5 = 40165   ; Go to marker 5
+lm6 = 40166   ; Go to marker 6
+lm7 = 40167   ; Go to marker 7
+lm8 = 40168   ; Go to marker 8
+
+
+; ===========================================================================
+; [udk] - User Defined Keys (UDK 1-16)
+;
+; NOTE: the UDK dispatcher is not yet implemented in the plugin.
+;       Entries below are proposals for a future release.
 ;
 ; Zone/switch reference for confirmed UDK button MIDI positions:
 ;   UDK  4: zone 0x08 sw1      UDK 13: zone 0x08 sw3
@@ -20,18 +125,15 @@
 ;   UDK 1/2/3/9/10/11/12/15/16: zone/sw unconfirmed (capture with MIDI-OX)
 ;
 ; Per manual ch.19 and hardware verification:
-;   UDK  2 = BANK ◄ button (zone 0x0A sw1) - these ARE the dedicated bank/channel
-;   UDK  3 = BANK ► button (zone 0x0A sw3)   navigation buttons on the console,
-;   UDK 10 = CH ◄ button   (zone 0x0A sw0)   not separate buttons. Already handled
-;   UDK 11 = CH ► button   (zone 0x0A sw2)   by the csurf; no ini entry needed.
+;   UDK  2 = BANK <  button (zone 0x0A sw1) - these ARE the dedicated bank/channel
+;   UDK  3 = BANK >  button (zone 0x0A sw3)   navigation buttons on the console,
+;   UDK 10 = CH <   button  (zone 0x0A sw0)   not separate buttons. Already handled
+;   UDK 11 = CH >   button  (zone 0x0A sw2)   by the csurf; no ini entry needed.
 ;
 ; Full zone/switch protocol reference: doc/DESIGN.md, "Zone assignments" section.
-; For SWS/ReaScript action IDs see the Cockos forum action list thread.
-;
-; NOTE: the ini-file reader is not yet implemented in the plugin; entries here
-; are proposals to be activated once the dispatcher is written.
+; ===========================================================================
 
-; --- UDK buttons with confirmed MIDI zones ---
+[udk]
 
 ; Zone 0x08 sw1 - near Display History BACK button
 key4  = 40029   ; undo (same as BACK) - change to something unique
@@ -40,7 +142,7 @@ key4  = 40029   ; undo (same as BACK) - change to something unique
 key5  = 40030   ; redo (same as FORWARD) - change to something unique
 
 ; Zone 0x08 sw3 / sw7 - additional buttons near display area
-key13 = 40157   ; insert marker at edit cursor (same as QUICK PUNCH) - or choose another
+key13 = 40157   ; insert marker at edit cursor (same as QUICK PUNCH default) - or choose another
 key14 = 0       ; unassigned
 
 ; Zone 0x19 sw3/4/5 - share zone with AUTOMIX ENABLE button
@@ -48,9 +150,7 @@ key6  = 40022   ; save project
 key7  = 0       ; unassigned
 key8  = 0       ; unassigned
 
-; --- UDK buttons with unconfirmed MIDI zones (capture first with MIDI-OX) ---
-
-; Capture the button press with MIDI-OX, note the zone/sw, then uncomment:
+; UDK buttons with unconfirmed MIDI zones (capture first with MIDI-OX)
 ; key1  = 0
 ; key2/3/10/11 are the factory bank/channel buttons - already handled, no entry needed
 ; key9  = 0
