@@ -1,4 +1,4 @@
-[![C++](https://img.shields.io/badge/C++-14-blue.svg)]() [![Windows](https://img.shields.io/badge/Windows-x64-0078D4.svg?logo=windows&logoColor=white)]() [![macOS](https://img.shields.io/badge/macOS-arm64%2Fx86__64-000000.svg?logo=apple&logoColor=white)]() [![REAPER](https://img.shields.io/badge/REAPER-6+-darkgreen.svg)]() [![v0.3](https://img.shields.io/badge/version-v0.3-lightgrey.svg)](https://bmroz.eu/projects/dm2000-csurf) [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
+[![C++](https://img.shields.io/badge/C++-14-blue.svg)]() [![Windows](https://img.shields.io/badge/Windows-x64-0078D4.svg?logo=windows&logoColor=white)]() [![macOS](https://img.shields.io/badge/macOS-arm64%2Fx86__64-000000.svg?logo=apple&logoColor=white)]() [![REAPER](https://img.shields.io/badge/REAPER-6+-darkgreen.svg)]() [![v0.4](https://img.shields.io/badge/version-v0.4-lightgrey.svg)](https://bmroz.eu/projects/dm2000-csurf) [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
 
 # reaper_csurf_dm2000 - Yamaha DM2000 control surface for REAPER
 
@@ -109,11 +109,14 @@ WDL clone, `make`, binary verification, install).
 - [x] Transport extensions: RTZ/END/LOOP buttons wired to zone 0x10 sw0/1/2;
       LOOP LED feedback via `SetRepeatState`; all hardware-verified 2026-06-15.
 - [x] BACK button (zone 0x08 sw2) -> undo; FORWARD (zone 0x08 sw6) -> redo.
-- [x] ENTER button (zone 0x14 sw0) toggles cursor arrows between scroll and zoom mode.
+- [x] ENTER button (zone 0x14 sw0) cycles cursor arrows through three modes: scroll,
+      zoom, and bank-scroll (left/right shift the fader bank offset by one channel).
 - [x] QUICK PUNCH button (zone 0x10 sw3) inserts a marker at the edit cursor (action 40157).
 - [x] REW/FF (zone 0x0E sw1/sw2) support auto-repeat when held (400 ms delay, 80 ms interval), same as cursor arrows.
-- [x] LOCATE MEMORY 1-6 jump to REAPER markers 1-6 (zone 0x13; hardware-verified
-      2026-06-15; sw mapping is non-sequential: LM1=sw1, LM2=sw3, LM3=sw6, etc.)
+- [x] LOCATE MEMORY 1-8 jump to REAPER markers 1-8 (LM1-6: zone 0x13, sw mapping non-sequential;
+      LM7-8: zone 0x15 sw0/sw1; all hardware-verified 2026-06-15).
+- [x] AUTO button (per-channel, zone 0-7 sw4) resets that channel's fader to 0 dB.
+- [x] Scrub wheel speed increased (10x); jog wheel unchanged.
 - [x] Scene recall: DM2000 scenes 1-99 jump to REAPER markers 1-99 via Program
       Change on the GENERAL port (0-indexed wire format per manual p.370, unverified)
 - [ ] LED counter display: position sent every 100ms as HUI SysEx

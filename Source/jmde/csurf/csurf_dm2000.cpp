@@ -84,7 +84,7 @@ class CSurf_DM2000 : public IReaperControlSurface
     DWORD m_meter_lastrun;
     int m_bank_offset;
     int m_wheel_mode;                // 0=jog (edit cursor), 1=scrub, 2=shuttle (coarse)
-    bool m_arrow_zoom;               // ENTER toggles cursor arrows between scroll (false) and zoom (true)
+    int m_arrow_mode;                // ENTER cycles cursor arrows: 0=scroll, 1=zoom, 2=bank-scroll
     int m_auto_mode;                 // 0=trim/bypass, 1=read, 2=touch, 3=write, 4=latch, 5=latch preview
     char m_ini_path[MAX_PATH];       // user-configured path to dm2000_keys.ini (empty = default)
     int m_held_arrow;                // -1=none, 0-3=CSurf_OnArrow direction being held
@@ -119,7 +119,7 @@ public:
     m_meter_histpos = 0;
     m_meter_lastrun = 0;
     m_wheel_mode = 0;
-    m_arrow_zoom = false;
+    m_arrow_mode = 0;
     m_auto_mode  = 1;
     sprintf_s(m_ini_path, sizeof(m_ini_path), "%s", iniPath ? iniPath : "");
     m_held_arrow = -1;
@@ -230,7 +230,16 @@ public:
       {
           if (now - m_arrow_last_repeat > 80)
           {
-              CSurf_OnArrow(m_held_arrow, m_arrow_zoom);
+              if (m_arrow_mode == 2 && (m_held_arrow == 2 || m_held_arrow == 3))
+              {
+                  int dir = m_held_arrow;
+                  AdjustBankOffset(dir == 2 ? -1 : 1);
+                  m_held_arrow = dir;
+              }
+              else
+              {
+                  CSurf_OnArrow(m_held_arrow, m_arrow_mode == 1);
+              }
               m_arrow_last_repeat = now;
           }
       }
@@ -588,7 +597,7 @@ private:
             if (speed)
             {
                 double dir = (data2 & 0x40) ? 1.0 : -1.0;
-                if (m_wheel_mode == 1)      CSurf_ScrubAmt(dir * speed * 0.05);       // SCRUB: audible scrub
+                if (m_wheel_mode == 1)      CSurf_ScrubAmt(dir * speed * 0.5);        // SCRUB: audible scrub
                 else if (m_wheel_mode == 2) MoveEditCursor(dir * speed * 1.0, false); // SHUTTLE: coarse, 1s/click
                 else                        MoveEditCursor(dir * speed * 0.1, false); // jog: 0.1s/click
             }
@@ -629,6 +638,9 @@ private:
                     case 1: CSurf_SetSurfaceSelected(tr, CSurf_OnSelectedChange(tr, -1), NULL); break; // SELECT
                     case 2: CSurf_SetSurfaceMute(tr, CSurf_OnMuteChange(tr, -1), NULL); break; // MUTE
                     case 3: CSurf_SetSurfaceSolo(tr, CSurf_OnSoloChange(tr, -1), NULL); break; // SOLO
+                    case 4: // AUTO button -> reset fader to 0 dB (unity gain = 1.0)
+                        CSurf_SetSurfaceVolume(tr, CSurf_OnVolumeChange(tr, 1.0, false), NULL);
+                        break;
                     case 5: // pan knob press -> center pan
                         CSurf_SetSurfacePan(tr, CSurf_OnPanChange(tr, 0.0, false), NULL);
                         m_pan_lasttouch[gch] = timeGetTime();
@@ -690,10 +702,16 @@ private:
             switch (sw)
             {
                 // arrows: fire immediately and arm auto-repeat in Run()
-                case 4: CSurf_OnArrow(0, m_arrow_zoom); m_held_arrow = 0; m_arrow_held_since = timeGetTime(); break; // up
-                case 0: CSurf_OnArrow(1, m_arrow_zoom); m_held_arrow = 1; m_arrow_held_since = timeGetTime(); break; // down
-                case 1: CSurf_OnArrow(2, m_arrow_zoom); m_held_arrow = 2; m_arrow_held_since = timeGetTime(); break; // left
-                case 3: CSurf_OnArrow(3, m_arrow_zoom); m_held_arrow = 3; m_arrow_held_since = timeGetTime(); break; // right
+                case 4: CSurf_OnArrow(0, m_arrow_mode == 1); m_held_arrow = 0; m_arrow_held_since = timeGetTime(); break; // up
+                case 0: CSurf_OnArrow(1, m_arrow_mode == 1); m_held_arrow = 1; m_arrow_held_since = timeGetTime(); break; // down
+                case 1: // left: scroll/zoom or bank-scroll
+                    if (m_arrow_mode == 2) { AdjustBankOffset(-1); m_held_arrow = 2; m_arrow_held_since = timeGetTime(); }
+                    else { CSurf_OnArrow(2, m_arrow_mode == 1); m_held_arrow = 2; m_arrow_held_since = timeGetTime(); }
+                    break;
+                case 3: // right: scroll/zoom or bank-scroll
+                    if (m_arrow_mode == 2) { AdjustBankOffset(1); m_held_arrow = 3; m_arrow_held_since = timeGetTime(); }
+                    else { CSurf_OnArrow(3, m_arrow_mode == 1); m_held_arrow = 3; m_arrow_held_since = timeGetTime(); }
+                    break;
                 case 2:                                        // INC -> next marker
                     SendMessage(g_hwnd, WM_COMMAND, ID_MARKER_NEXT, 0);
                     break;
@@ -716,13 +734,17 @@ private:
             if (sw < 8 && lm_marker[sw] >= 0)
                 SendMessage(g_hwnd, WM_COMMAND, ID_GOTO_MARKER1 + lm_marker[sw], 0);
         }
+        else if (zone == 0x15 && press && (sw == 0 || sw == 1)) // LM7/LM8 (hw-captured 2026-06-15)
+        {
+            SendMessage(g_hwnd, WM_COMMAND, ID_GOTO_MARKER1 + 6 + sw, 0);
+        }
         else if (zone == 0x1B && sw == 7 && press) // DEC -> previous marker
         {
             SendMessage(g_hwnd, WM_COMMAND, ID_MARKER_PREV, 0);
         }
-        else if (zone == 0x14 && sw == 0 && press) // ENTER: toggle cursor arrows scroll <-> zoom
+        else if (zone == 0x14 && sw == 0 && press) // ENTER: cycle cursor arrows scroll -> zoom -> bank-scroll
         {
-            m_arrow_zoom = !m_arrow_zoom;
+            m_arrow_mode = (m_arrow_mode + 1) % 3;
         }
         else if (zone == 0x19 && sw == 2 && press && port == 0) // AUTOMIX ENABLE (hw-verified; all 3 ports)
         {
@@ -890,6 +912,8 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 // On macOS the footer is an SS_NOTIFY static (SWELL has no SysLink);
                 // its click arrives here as WM_COMMAND. SWELL ShellExecute opens the URL.
                 ShellExecute(hwndDlg, "open", "https://bmroz.eu/projects/dm2000-csurf", NULL, NULL, 0);
+            else if (id == IDC_DM2000_INIEXAMPLE)
+                ShellExecute(hwndDlg, "open", "https://github.com/mormegil6/reaper-dm2000-csurf/blob/main/doc/dm2000_keys.ini.example", NULL, NULL, 0);
 #endif
         }
         break;

@@ -100,7 +100,7 @@ B0  0F  zone  - zone select (sets current zone for this port)
 B0  2F  vv    - value: bits 0–3 = switch number, bit 6 = press (0x40), 0 = release
 ```
 
-Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; see doc/midi-capture-2026-06-15.txt):
+Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; see doc/midi-capture-2026-06-15.txt). Notation: `N=name` means switch number N; `press` means the action fires on the press event (bit 6 of the switch byte set); release events are only handled where noted.
 
 **Channel strips**
 | Zone | Meaning | Switches used |
@@ -132,8 +132,8 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 |------|---------|---------------|
 | 0x0F | Locator row 2 | 0=ROLL BACK, 1=REHEARSAL, 2=MTR, 3=MASTER (sw4 unidentified) |
 | 0x13 | LOCATE MEMORY | sw1=LM1, sw3=LM2, sw6=LM3, sw2=LM4, sw4=LM5, sw7=LM6; sw5=companion event (always fires alongside, ignore) |
-| 0x14 | ENTER | 0=press -> toggle cursor arrows between scroll and zoom mode |
-| 0x15 | Locator / audition | 0=AUDITION, 1=PRE |
+| 0x14 | ENTER | 0=press -> cycle cursor arrows: scroll -> zoom -> bank-scroll |
+| 0x15 | LOCATE MEMORY 7-8 | sw0=LM7, sw1=LM8 (hw-captured 2026-06-15; fires alongside zone 0x13 sw5) |
 
 **AUTOMIX & overwrite**
 | Zone | Meaning | Switches used |
@@ -142,10 +142,10 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 | 0x18 | AUTOMIX mode buttons | 0=TOUCH SENSE, 1=RETURN/READ, 2=RELATIVE, 4=ABORT/UNDO, 5=AUTO-REC/LATCH |
 | 0x19 | AUTOMIX ENABLE + UDK 6-8 | sw2=ENABLE; sw3=UDK6, sw4=UDK7, sw5=UDK8 (fire on all 3 ports) |
 
-**Misc**
+**DEC button (separate zone from INC)**
 | Zone | Meaning | Switches used |
 |------|---------|---------------|
-| 0x1B | DEC (\|<) | 7=press -> previous marker |
+| 0x1B | DEC | 7=press -> previous marker (INC is in zone 0x0D sw2 with the cursor cluster) |
 
 <details>
 <summary><strong>Button / function / MIDI reference table</strong> (click to expand)</summary>
@@ -188,8 +188,8 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 | SCRUB key | DM2000→host | zone 0x0D, sw 5 | switch to scrub mode | Verified |
 | SHUTTLE key | DM2000→host | zone 0x0D, sw 6 | switch to shuttle mode | Verified |
 | Cursor UP/DOWN/LEFT/RIGHT | DM2000→host | zone 0x0D, sw 4/0/1/3 | `CSurf_OnArrow()` scroll | Verified |
-| INC (>\|) | DM2000→host | zone 0x0D, sw 2 | next marker | Verified |
-| DEC (\|<) | DM2000→host | zone 0x1B, sw 7 | previous marker | Verified |
+| INC | DM2000→host | zone 0x0D, sw 2 | next marker | Verified |
+| DEC | DM2000→host | zone 0x1B, sw 7 | previous marker | Verified |
 | ENTER | DM2000→host | zone 0x14, sw 0 | toggle cursor arrows: scroll <-> zoom (m_arrow_zoom) | Verified |
 | Display Hist BACK | DM2000→host | zone 0x08, sw 2 | undo (action 40029) | Verified |
 | Display Hist FORWARD | DM2000→host | zone 0x08, sw 6 | redo (action 40030) | Verified |
