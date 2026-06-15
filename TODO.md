@@ -33,9 +33,9 @@ Tasks tracked here to avoid scrolling chat history.
       needs hardware re-verification. Once confirmed, wire to
       `SendMessage(g_hwnd, WM_COMMAND, ID_GOTO_MARKER1 + n, 0)`.
 
-- [ ] **Port 4 channels 25-32** - identify what those strips physically represent
-      on the DM2000 (master bus? effects returns? CR?). Determines whether and
-      how to wire them to REAPER tracks.
+- [ ] **Port 4 MCS PANNER** - manual p.223 confirms port 4 uses MCS PANNER protocol
+      (surround joystick), not HUI channel strips. Protocol capture needed before
+      implementation; Layer 4 feature.
 
 - [ ] **Remote Meter receive** - manual appendix shows SysEx type 0x21 (Remote
       Meter) is rx/tx on port 8. Capture what the DM2000 sends on port 8 during
