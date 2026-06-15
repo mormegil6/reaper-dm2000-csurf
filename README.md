@@ -144,9 +144,8 @@ USER DEFINED KEYS. See [DESIGN.md](DESIGN.md).
 
 ## Known limitations
 
-- **Channels 25-32 (port 4) not mapped** - port 4 is active but no track controls
-  are wired there; the physical purpose of those strips on the DM2000 is not yet
-  determined.
+- **Port 4 (MCS PANNER) not implemented** - port 4 is opened and keepalive-echoed
+  but the MCS PANNER protocol (surround joystick) is not yet implemented.
 - **macOS port in progress** - a universal (arm64 + x86_64) build via a SWELL
   Makefile (`Builds/Make/`) compiles and loads in REAPER; hardware verification
   with a connected DM2000 is still pending. Windows x64 remains the only

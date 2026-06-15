@@ -22,8 +22,9 @@ Build target: Windows x64 DLL, REAPER 6+
 - Console: Yamaha DM2000 V2, firmware V2.40 (final, no further Yamaha updates)
 - Connection: USB (8 virtual MIDI ports), "Pro Tools" Remote Layer target
 - DAW port assignment on DM2000: SETUP → MIDI/HOST SETUP → DAW = USB 1–4
-  (groups are 1–4, 2–5, 3–6, … four consecutive ports; earlier documentation
-  said "3 ports" but hardware testing shows 4)
+  (groups are 1–4, 2–5, 3–6, … four consecutive ports; ports 1–3 carry HUI
+  for channels 1–24, port 4 carries MCS PANNER protocol for the surround joystick
+  - manual ch.19 p.223)
 - Port 8: always carries Yamaha native SysEx regardless of Remote Layer setting
 - "DAW Off-line" on DM2000 display = normal; means controls are routed to MIDI
 
@@ -34,9 +35,10 @@ Build target: Windows x64 DLL, REAPER 6+
 ### HUI (ports 1–4)
 
 HUI is a Mackie/Digidesign 1997 protocol. Each port handles 8 channels.
-Port 1 = channels 1–8, Port 2 = channels 9–16, Port 3 = channels 17–24,
-Port 4 = channels 25–32 (hardware-verified active; channel-strip purpose on
-port 4 not yet mapped - likely master/CR/effects return section).
+Port 1 = channels 1–8, Port 2 = channels 9–16, Port 3 = channels 17–24.
+Port 4 = MCS PANNER (surround joystick protocol, not HUI channel strips;
+confirmed by manual ch.19 p.223 - Pro Tools configures controllers #1–#3 as
+HUI and controller #4 as MCS PANNER).
 
 **Keepalive ping (critical):**
 - DM2000 sends: `90 00 7F` on each port every ~1 second
@@ -362,7 +364,7 @@ Tasks:
 - EQ parameter control via selected channel knobs
 - Dynamics (compressor/gate) parameter control
 - Sends/aux routing
-- [ ] Surround panner joystick: requires native Yamaha SysEx on USB port 4 (not HUI); V2 firmware only; implement after Layer 3 is complete
+- [ ] Surround panner joystick: USB port 4 uses MCS PANNER protocol (manual p.223); V2 firmware only; protocol capture needed; implement after Layer 3 is complete
 - Talkback button integration
 - USER DEFINED KEYS mapping
 
@@ -469,7 +471,7 @@ Note: earlier versions stored a 9th value (sysex_out); it is now ignored on load
 
 ## Known issues and caveats
 
-- DM2000 uses 4 consecutive HUI ports (hardware-verified; documentation previously said 3); port 4 channels (25–32) are opened and ping-echoed but their purpose on this console is not yet mapped
+- Port 4 is MCS PANNER (surround joystick protocol), not a 4th HUI channel block - opened and keepalive-echoed but the protocol is not yet implemented (Layer 4)
 - Fader taper is CALIBRATED and applied (see protocol section): the console's
   wire value saturates at the printed +5 mark, so REAPER volumes above +5 dB
   all park the motor at +5 - a hardware limit of the DM2000's HUI value range,
@@ -484,7 +486,7 @@ Note: earlier versions stored a 9th value (sysex_out); it is now ignored on load
 
 ## Known limitations
 
-- **Channels 25–32 (port 4) not mapped**: port 4 is opened and ping-echoed (keeps DM2000 online), but no channel-strip controls on port 4 are wired to REAPER tracks. The DM2000's physical layout for channels 25–32 is not yet determined (likely master bus / effects returns).
+- **Port 4 (MCS PANNER) not implemented**: port 4 is opened and keepalive-echoed but the MCS PANNER protocol (surround joystick) is not yet implemented. See Layer 4.
 - **macOS port in progress**: SWELL Makefile (`Builds/Make/Makefile`), universal
   arm64+x86_64 dylib, all Windows-only code guarded behind `#ifdef _WIN32`. Compiles
   and loads in REAPER on Mac (plugin appears in control surface list); hardware
