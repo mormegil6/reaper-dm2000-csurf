@@ -94,10 +94,10 @@ WDL clone, `make`, binary verification, install).
 - 4-port MIDI open/close, keepalive ping echo, config dialog
 - Faders both directions, touch detect (touch automation works)
 - Mute / solo / rec-arm / select buttons with LED feedback
-- Transport (play/stop/record/rewind/forward, RTZ, END, LOOP) with LEDs; RTZ/END/LOOP switch
-  positions are unverified - verify with MIDI-OX before relying on them
+- Transport (play/stop/record/rewind/forward, RTZ, END, LOOP) with LEDs; all switch positions
+  hardware-verified 2026-06-15 (RTZ/END/LOOP are zone 0x10 sw0/1/2, not zone 0x0E)
 - Bank switching (channel +-1, bank +-24)
-- Automation modes: AUTOMIX section buttons control REAPER's global automation override (read/touch/write/latch/latch preview/bypass), with LED feedback
+- Automation modes: AUTOMIX section buttons control REAPER's global automation override (read/touch/write/latch/latch preview/bypass), with LED feedback; all sw assignments hardware-verified 2026-06-15
 
 ### Layer 2 - Channel strip feedback: complete (hardware-tested)
 
@@ -107,12 +107,13 @@ WDL clone, `make`, binary verification, install).
 - [x] 4-char track names on scribble strips (HUI SysEx)
 - [x] VU meters on channel strips (100ms peak polling, 3-cycle peak hold,
       red OVER only above 0 dBFS - matches REAPER's clip indication)
-- [x] Transport extensions: RTZ, END, LOOP buttons wired; LOOP LED feedback via
-      `SetRepeatState`. Switch positions are software guesses - verify with MIDI-OX
-      before relying on RTZ/END/LOOP in a session.
+- [x] Transport extensions: RTZ/END/LOOP buttons wired to zone 0x10 sw0/1/2;
+      LOOP LED feedback via `SetRepeatState`; all hardware-verified 2026-06-15.
+- [x] BACK button (zone 0x08 sw2) -> undo; FORWARD (zone 0x08 sw6) -> redo.
 - [x] ENTER button inserts a marker at the edit cursor (REAPER action 40157;
-      zone 0x14 sw 0 - zone unverified, confirm with MIDI-OX)
-- [x] LOCATE MEMORY [1-8] jump to REAPER markers 1-8 (zone 0x0F - unverified)
+      zone 0x14 sw 0 - hardware-verified 2026-06-15)
+- [x] LOCATE MEMORY 1-6 jump to REAPER markers 1-6 (zone 0x13; hardware-verified
+      2026-06-15; sw mapping is non-sequential: LM1=sw1, LM2=sw3, LM3=sw6, etc.)
 - [x] Scene recall: DM2000 scenes 1-99 jump to REAPER markers 1-99 via Program
       Change on the GENERAL port (0-indexed wire format per manual p.370, unverified)
 - [ ] LED counter display: position sent every 100ms as HUI SysEx
@@ -124,10 +125,10 @@ Full button/zone/MIDI reference: [DESIGN.md - Button / function / MIDI reference
 ### DM2000-specific behavior (hardware-verified - details in DESIGN.md)
 
 - **Fader taper is calibrated to the console's printed scale**: REAPER dB and
-  the printed marks agree along the throw (piecewise-linear table from
-  mark-by-mark MIDI captures).
-- **The console's fader value range tops out at the printed +5 mark** - REAPER
-  volumes from +5 to +12 dB all park the motor at +5. Hardware limit, not a bug.
+  the printed marks agree along the throw (11-point piecewise-linear table from
+  DM2000 Editor captures, post-fader-calibration, 2026-06-15).
+- **The console's fader physical maximum is the printed +10 mark** (wire value
+  16383). REAPER volumes above +10 dB clamp to that position.
 - The console keeps an internal model of DAW fader positions and springs motors
   back to it on release; the plugin echoes every received fader move to keep that
   model in sync.

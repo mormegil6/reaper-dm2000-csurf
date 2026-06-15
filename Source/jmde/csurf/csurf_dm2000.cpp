@@ -6,14 +6,12 @@
 #endif
 #include "dm2000_compat.h"
 
-// DM2000 fader taper, hardware-calibrated against the printed dB scale
-// (mark-by-mark MIDI-OX captures, 2026-06-12). Values are 14-bit (MSB<<7)|LSB
-// with the ~9-bit resolution in the top bits, but the dB mapping follows the
-// console's own printed scale, NOT REAPER's slider taper. The wire value
-// saturates at the printed +5 mark -- every physical position above +5 sends
-// 16352 -- so +5 is the console's usable maximum in both directions.
-static const double g_taper_db[]  = { -150.0, -50.0, -40.0, -30.0,   0.0,   5.0 };
-static const int    g_taper_val[] = {      0,  1056,  2304,  3200, 14112, 16352 };
+// DM2000 fader taper calibrated via DM2000 Editor after running the console's built-in
+// fader calibration utility (MIDI-OX capture 2026-06-15; doc/fader-calibration-2026-06-15.txt).
+// 14-bit wire value = (MSB<<7)|LSB. Physical maximum = 16383 at the printed +10 mark.
+// Taper is linear from -30 to +10 dB (1600 wire units per 5 dB); compressed below -30.
+static const double g_taper_db[]  = { -150.0, -50.0, -40.0, -30.0, -20.0, -15.0, -10.0,  -5.0,   0.0,  5.0, 10.0 };
+static const int    g_taper_val[] = {      0,  2768,  3568,  5168,  6768,  8368,  9968, 11568, 13168, 14768, 16383 };
 #define TAPER_N (sizeof(g_taper_val) / sizeof(g_taper_val[0]))
 
 static double int14ToVol(unsigned char msb, unsigned char lsb)
@@ -326,7 +324,7 @@ public:
       SendTransportLED(4, play);            // PLAY
       SendTransportLED(5, rec);             // REC
   }
-  void SetRepeatState(bool rep) { SendGlobalLED(0x0E, 7, rep); }
+  void SetRepeatState(bool rep) { SendGlobalLED(0x10, 2, rep); } // LOOP is zone 0x10 sw2, not 0x0E sw7
 
   void SetTrackTitle(MediaTrack *trackid, const char *title)
   {
@@ -483,19 +481,19 @@ private:
 
     void SendTransportLED(int sw, bool state) { SendGlobalLED(0x0E, sw, state); }
 
-    // light the one AUTOMIX button for the current mode; zone 0x18 is broadcast on all 3 ports
+    // light the one AUTOMIX button for the current mode
+    // hw-verified: enable=z0x19sw2, return=z0x18sw1, touch=z0x18sw0, write=z0x0Csw2, latch=z0x18sw5, rel=z0x18sw2
     void SendAutomixLEDs(int mode)
     {
-        // sw: 5=enable/bypass, 7=return/read, 3=touch, 1=rec/write, 2=auto-rec/latch, 6=relative/latchpreview
-        int litsw = -1;
+        int lit_z = -1, lit_sw = -1;
         switch (mode)
         {
-            case 0: litsw = 5; break;
-            case 1: litsw = 7; break;
-            case 2: litsw = 3; break;
-            case 3: litsw = 1; break;
-            case 4: litsw = 2; break;
-            case 5: litsw = 6; break;
+            case 0: lit_z = 0x19; lit_sw = 2; break; // bypass -> ENABLE
+            case 1: lit_z = 0x18; lit_sw = 1; break; // read -> RETURN
+            case 2: lit_z = 0x18; lit_sw = 0; break; // touch -> TOUCH SENSE
+            case 3: lit_z = 0x0C; lit_sw = 2; break; // write -> REC
+            case 4: lit_z = 0x18; lit_sw = 5; break; // latch -> AUTO-REC
+            case 5: lit_z = 0x18; lit_sw = 2; break; // latch preview -> RELATIVE
         }
         for (int p = 0; p < 3; ++p)
         {
@@ -503,8 +501,12 @@ private:
             for (int s = 0; s < 8; ++s)
             {
                 m_midiouts[p]->Send(0xB0, 0x0C, 0x18, -1);
-                m_midiouts[p]->Send(0xB0, 0x2C, (s == litsw ? 0x40 : 0x00) | s, -1);
+                m_midiouts[p]->Send(0xB0, 0x2C, (lit_z == 0x18 && s == lit_sw ? 0x40 : 0x00) | s, -1);
             }
+            m_midiouts[p]->Send(0xB0, 0x0C, 0x19, -1);
+            m_midiouts[p]->Send(0xB0, 0x2C, (lit_z == 0x19 ? 0x42 : 0x02), -1); // sw2 on/off
+            m_midiouts[p]->Send(0xB0, 0x0C, 0x0C, -1);
+            m_midiouts[p]->Send(0xB0, 0x2C, (lit_z == 0x0C ? 0x42 : 0x02), -1); // sw2 on/off
         }
     }
 
@@ -616,6 +618,13 @@ private:
                 }
             }
         }
+        else if (zone == 0x08 && press && port == 0) // BACK=sw2 FORWARD=sw6 -> undo/redo (hw-verified 2026-06-15)
+        {
+            if (sw == 2)
+                SendMessage(g_hwnd, WM_COMMAND, IDC_EDIT_UNDO, 0);
+            else if (sw == 6)
+                SendMessage(g_hwnd, WM_COMMAND, IDC_EDIT_REDO, 0);
+        }
         else if (zone == 0x0A && press)          // bank/channel arrows
         {
             int amt = 0;
@@ -628,18 +637,24 @@ private:
             }
             if (amt) AdjustBankOffset(amt);
         }
-        else if (zone == 0x0E && press)          // transport section
+        else if (zone == 0x0E && press)          // transport (hw-verified: sw1=REW sw2=FF sw3=STOP sw4=PLAY sw5=REC)
         {
             switch (sw)
             {
-                case 0: CSurf_GoStart(); break;  // RTZ — sw position unverified, logical guess
                 case 1: CSurf_OnRew(1); break;
                 case 2: CSurf_OnFwd(1); break;
                 case 3: CSurf_OnStop(); break;
                 case 4: CSurf_OnPlay(); break;
                 case 5: CSurf_OnRecord(); break;
-                case 6: CSurf_GoEnd(); break;    // END — unverified
-                case 7: SendMessage(g_hwnd, WM_COMMAND, IDC_REPEAT, 0); break; // LOOP — unverified
+            }
+        }
+        else if (zone == 0x10 && press)          // RTZ/END/LOOP (hw-verified: sw0=RTZ sw1=END sw2=LOOP)
+        {
+            switch (sw)
+            {
+                case 0: CSurf_GoStart(); break;
+                case 1: CSurf_GoEnd(); break;
+                case 2: SendMessage(g_hwnd, WM_COMMAND, IDC_REPEAT, 0); break;
             }
         }
         else if (zone == 0x0D && !press && (sw == 4 || sw == 0 || sw == 1 || sw == 3))
@@ -670,9 +685,12 @@ private:
                     break;
             }
         }
-        else if (zone == 0x0F && press && sw <= 7) // LOCATE MEMORY [1-8] — zone unverified, verify with MIDI-OX
+        else if (zone == 0x13 && press && sw != 5) // LOCATE MEMORY 1-6 (hw-verified; sw5 is companion event)
         {
-            SendMessage(g_hwnd, WM_COMMAND, ID_GOTO_MARKER1 + sw, 0);
+            // non-sequential sw: LM1=sw1 LM2=sw3 LM3=sw6 LM4=sw2 LM5=sw4 LM6=sw7
+            static const int lm_marker[] = { -1, 0, 3, 1, 4, -1, 2, 5 }; // index by sw -> ID_GOTO_MARKER1 offset
+            if (sw < 8 && lm_marker[sw] >= 0)
+                SendMessage(g_hwnd, WM_COMMAND, ID_GOTO_MARKER1 + lm_marker[sw], 0);
         }
         else if (zone == 0x1B && sw == 7 && press) // DEC -> previous marker
         {
@@ -682,23 +700,34 @@ private:
         {
             SendMessage(g_hwnd, WM_COMMAND, 40157, 0); // 40157 = Insert marker at edit cursor
         }
-        else if (zone == 0x18 && press && port == 0) // AUTOMIX -- fires on all 3 ports; deduplicate via port 0
+        else if (zone == 0x19 && sw == 2 && press && port == 0) // AUTOMIX ENABLE (hw-verified; all 3 ports)
         {
+            int newMode = (m_auto_mode == 0) ? 1 : 0; // toggle bypass <-> read
+            CSurf_SetAutoMode(newMode, this);
+            m_auto_mode = newMode;
+            SendAutomixLEDs(newMode);
+        }
+        else if (zone == 0x0C && sw == 2 && press && port == 0) // AUTOMIX REC/WRITE (hw-verified)
+        {
+            CSurf_SetAutoMode(3, this);
+            m_auto_mode = 3;
+            SendAutomixLEDs(3);
+        }
+        else if (zone == 0x18 && press && port == 0) // AUTOMIX modes (hw-verified; all 3 ports; dedup via port 0)
+        {
+            // sw0=touch, sw1=return/read, sw2=relative/latch-preview, sw4=abort/undo, sw5=auto-rec/latch
             int newMode = -1;
             switch (sw)
             {
-                case 5: newMode = (m_auto_mode == 0) ? 1 : 0; break; // enable: toggle trim <-> read
-                case 7: newMode = 1; break; // return -> read
-                case 3: newMode = 2; break; // touch sense -> touch
-                case 1: newMode = 3; break; // rec -> write
-                case 2: newMode = 4; break; // auto-rec -> latch
-                case 6: newMode = 5; break; // relative -> latch preview
-                case 0: SendMessage(g_hwnd, WM_COMMAND, IDC_EDIT_UNDO, 0); break; // abort/undo -> undo
-                // case 4 (display): no-op
+                case 0: newMode = 2; break; // touch sense -> touch
+                case 1: newMode = 1; break; // return -> read
+                case 2: newMode = 5; break; // relative -> latch preview
+                case 4: SendMessage(g_hwnd, WM_COMMAND, IDC_EDIT_UNDO, 0); break; // abort/undo -> undo
+                case 5: newMode = 4; break; // auto-rec -> latch
             }
             if (newMode >= 0)
             {
-                CSurf_SetAutoMode(newMode, this); // sets REAPER mode, notifies other surfaces (not us)
+                CSurf_SetAutoMode(newMode, this);
                 m_auto_mode = newMode;
                 SendAutomixLEDs(newMode);
             }
