@@ -3,6 +3,9 @@
 #include <shellapi.h>
 #include <shlobj.h>
 #include <commctrl.h>
+#else
+#include <objc/message.h>
+#include <objc/runtime.h>
 #endif
 #include "dm2000_compat.h"
 
@@ -1000,6 +1003,22 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
             }
 
             SetDlgItemTextA(hwndDlg, IDC_EDIT_INIPATH, iniPath);
+#ifndef _WIN32
+            {
+                // Set link text color to NSColor.linkColor (system blue, dark-mode aware).
+                // WM_CTLCOLORSTATIC in SWELL applies one color to all statics, so we use
+                // objc_msgSend directly to target only the two link controls.
+                typedef id   (*MSId)(id, SEL);
+                typedef void (*MSVoidId)(id, SEL, id);
+                id cls = (id)objc_getClass("NSColor");
+                id col = ((MSId)objc_msgSend)(cls, sel_registerName("linkColor"));
+                SEL setCol = sel_registerName("setTextColor:");
+                id c1 = (id)GetDlgItem(hwndDlg, IDC_DM2000_LINK);
+                id c2 = (id)GetDlgItem(hwndDlg, IDC_DM2000_INIEXAMPLE);
+                if (c1) ((MSVoidId)objc_msgSend)(c1, setCol, col);
+                if (c2) ((MSVoidId)objc_msgSend)(c2, setCol, col);
+            }
+#endif
         }
         break;
         case WM_COMMAND:
@@ -1023,6 +1042,21 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
         }
         break;
 #ifndef _WIN32
+        case WM_MOUSEMOVE:
+        {
+            POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+            auto overLink = [&](int ctrlId) -> bool {
+                HWND h = GetDlgItem(hwndDlg, ctrlId);
+                RECT rc; GetWindowRect(h, &rc);
+                ScreenToClient(hwndDlg, (LPPOINT)&rc);
+                ScreenToClient(hwndDlg, (LPPOINT)&rc + 1);
+                return !!PtInRect(&rc, pt);
+            };
+            SetCursor(LoadCursor(NULL,
+                (overLink(IDC_DM2000_LINK) || overLink(IDC_DM2000_INIEXAMPLE))
+                ? IDC_HAND : IDC_ARROW));
+        }
+        break;
         case WM_LBUTTONDOWN:
         {
             // SWELL does not fire WM_COMMAND for SS_NOTIFY statics, so hit-test manually.
