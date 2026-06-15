@@ -41,9 +41,8 @@ Download the latest release from the [Releases](../../releases) page.
 
 Restart REAPER after copying.
 
-> macOS note: the dylib is a universal binary (arm64 + x86_64). It has been compiled
-> and verified to load in REAPER; full hardware testing with a connected DM2000 is
-> still pending.
+> macOS note: the dylib is a universal binary (arm64 + x86_64). Hardware-verified
+> with a connected DM2000 on 2026-06-15 (v0.3); all features work on macOS.
 
 ## Building from source
 
@@ -153,10 +152,9 @@ USER DEFINED KEYS. See [DESIGN.md](DESIGN.md).
 
 - **Port 4 (MCS PANNER) not implemented** - port 4 is opened and keepalive-echoed
   but the MCS PANNER protocol (surround joystick) is not yet implemented.
-- **macOS port in progress** - a universal (arm64 + x86_64) build via a SWELL
-  Makefile (`Builds/Make/`) compiles and loads in REAPER; hardware verification
-  with a connected DM2000 is still pending. Windows x64 remains the only
-  hardware-tested target. See [MACOS_BUILD.md](MACOS_BUILD.md).
+- **macOS hardware-verified** - universal (arm64 + x86_64) build verified with a
+  connected DM2000 on 2026-06-15 (v0.3). See [MACOS_BUILD.md](MACOS_BUILD.md)
+  for build instructions.
 - **Scribble strips show 4 characters only** - hardware-verified; the display is
   4-char wide in DAW mode regardless of what native SysEx sends.
 - **Scene recall partial** - PC receive is implemented (DM2000 scene recall sends PC on the
