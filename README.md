@@ -21,9 +21,12 @@ reference, layer plan, and task tracking.
   and is not supported
 - USB connection to the PC with the Yamaha USB-MIDI driver (exposes 8 virtual
   MIDI port pairs)
-- Console setup:
-  - Remote Layer target: **Pro Tools**
-  - `SETUP → MIDI/HOST SETUP → DAW = USB 1-4`
+- Console setup (`SETUP → MIDI/HOST SETUP`):
+  - Remote Layer 1 target: **Pro Tools**
+  - DAW: **USB 1-4**
+
+  <p align="center"><img src="doc/dm2000_midi_host_setup.png" alt="DM2000 MIDI/HOST SETUP" width="480"></p>
+
 - Windows x64 or macOS (arm64/x86_64), REAPER 6 or later
 - Note: "DAW Off-line" on the DM2000 display is normal until REAPER is running
   with the surface configured (the plugin answers the console's keepalive ping)
