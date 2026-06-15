@@ -44,9 +44,10 @@ Tasks tracked here to avoid scrolling chat history.
 
 - [x] **Full button zone map** - complete MIDI-OX surface capture done
       2026-06-15 (every button, fader, knob). Raw data: doc/midi-capture-2026-06-15.txt.
-      Zone/sw table updated in DESIGN.md. Remaining gaps: zone 0x10 sw4,
-      zone 0x0F sw4 not identified. BACK/FORWARD wired 2026-06-15 (zone 0x08
-      sw2=undo, sw6=redo). QUICK PUNCH (zone 0x10 sw3) = insert marker.
+      Zone/sw table updated in DESIGN.md. All locate-section switches identified:
+      zone 0x10 sw4 = POST, zone 0x0F sw4 = QUICK PUNCH. BACK/FORWARD wired 2026-06-15
+      (zone 0x08 sw2=undo, sw6=redo). QUICK PUNCH (zone 0x0F sw4) defaults to insert marker
+      via dm2000_keys.ini.
 
 ---
 

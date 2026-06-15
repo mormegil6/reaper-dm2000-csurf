@@ -112,8 +112,8 @@ WDL clone, `make`, binary verification, install).
 - 4-port MIDI open/close, keepalive ping echo, config dialog
 - Faders both directions, touch detect (touch automation works)
 - Mute / solo / rec-arm / select buttons with LED feedback
-- Transport (play/stop/record/rewind/forward, RTZ, END, LOOP) with LEDs; all switch positions
-  hardware-verified 2026-06-15 (RTZ/END are zone 0x0F sw0/1; LOOP is zone 0x0F sw3 - Locate row, not transport zone 0x0E)
+- Transport (play/stop/record/rewind/forward, RETURN TO ZERO, END, LOOP) with LEDs; all switch positions
+  hardware-verified 2026-06-15 (RETURN TO ZERO/END are zone 0x0F sw0/1; LOOP is zone 0x0F sw3 - Locate row, not transport zone 0x0E)
 - Bank switching (channel +-1, bank +-24)
 - Automation modes: AUTOMIX section buttons control REAPER's global automation override (read/touch/write/latch/latch preview/bypass), with LED feedback; all sw assignments hardware-verified 2026-06-15
 
@@ -126,7 +126,7 @@ WDL clone, `make`, binary verification, install).
 - [x] VU meters on channel strips (100ms peak polling, 3-cycle peak hold,
       red OVER only above 0 dBFS - matches REAPER's clip indication)
 - [x] Locate section buttons (all hw-verified 2026-06-15, fully configurable via `[locate]` in `dm2000_keys.ini`):
-      - Row 2 (zone 0x0F): RTZ (sw0, go to project start), END (sw1, go to project end),
+      - Row 2 (zone 0x0F): RETURN TO ZERO (sw0, go to project start), END (sw1, go to project end),
         LOOP (sw3, toggle repeat with LED feedback), QUICK PUNCH (sw4, insert marker).
         ONLINE (sw2), SET/REHEARSAL/MTR/MASTER: no HUI output - DM2000 internal only.
       - Row 1 (zone 0x10): IN (sw2, set loop in-point), OUT (sw3, set loop out-point),

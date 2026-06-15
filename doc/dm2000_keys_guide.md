@@ -36,11 +36,16 @@ key = action_id
 ```
 
 - `0` disables the button (silently ignored)
-- Omitting a key uses the compiled-in default (RTZ/END use the API; all
-  others default to 0)
+- Omitting a key uses the compiled-in default (RETURN TO ZERO/END use the API;
+  all others default to 0)
 - Lines starting with `;` are comments
 
 ## [locate] section - button reference
+
+The **Default** column below shows the value shipped in `dm2000_keys.ini.example`.
+The plugin's compiled-in default for every button is `0` (no action; RETURN TO
+ZERO and END fall back to the go-to-start/end API) - the meaningful action IDs
+come from the example ini, not the binary.
 
 ### Row 2 (above transport)
 

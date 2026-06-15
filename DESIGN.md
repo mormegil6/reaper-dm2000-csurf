@@ -13,7 +13,7 @@ Version: v0.5
 Homepage: bmroz.eu/projects/dm2000-csurf
 Repository: `git.pg.edu.pl/p829296` / `github.com/mormegil6`
 License: LGPL v3
-Build target: Windows x64 DLL, REAPER 6+
+Build target: Windows x64 DLL + macOS universal dylib (arm64 + x86_64), REAPER 6+
 
 ---
 
@@ -169,7 +169,7 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 | Pan knob press (ch N) | DM2000→host | zone N%8, sw 5 | center pan | Verified |
 | Pan ring LED (ch N) | host→DM2000 | `B0+(P) 10+(N%8) vv` | `SetSurfacePan()` | Verified |
 | VU meter (ch N, L/R) | host→DM2000 | `A0+(P) N%8 (side<<4)\|level` | `Track_GetPeakInfo()` poll | Verified |
-| CHANNEL ◄ / ► | DM2000→host | zone 0x0A, sw 0/2 | `CSurf_OnArrow(0/1)` bank±1 | Verified |
+| CHANNEL ◄ / ► | DM2000→host | zone 0x0A, sw 0/2 | `AdjustBankOffset(∓1)` (shift view by 1 channel) | Verified |
 | BANK ◄ / ► | DM2000→host | zone 0x0A, sw 1/3 | bank offset ±24 | Verified |
 | PLAY | DM2000→host | zone 0x0E, sw 4 | `CSurf_OnPlay()` | Verified |
 | STOP | DM2000→host | zone 0x0E, sw 3 | `CSurf_OnStop()` | Verified |
@@ -181,7 +181,7 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 | IN | DM2000→host | zone 0x10, sw 2 | set loop in-point, default 40222 (ini: `in`) | Verified |
 | OUT | DM2000→host | zone 0x10, sw 3 | set loop out-point, default 40223 (ini: `out`) | Verified |
 | POST | DM2000→host | zone 0x10, sw 4 | insert region, default 40174 (ini: `post`) | Verified |
-| RTZ | DM2000→host | zone 0x0F, sw 0 | `CSurf_GoStart()` (ini: `rtz`, 0=API) | Verified |
+| RTZ (RETURN TO ZERO) | DM2000→host | zone 0x0F, sw 0 | `CSurf_GoStart()` (ini: `rtz`, 0=API) | Verified |
 | END | DM2000→host | zone 0x0F, sw 1 | `CSurf_GoEnd()` (ini: `end`, 0=API) | Verified |
 | ONLINE | DM2000→host | zone 0x0F, sw 2 | no action (ini: `online`) | Verified |
 | LOOP | DM2000→host | zone 0x0F, sw 3 | toggle repeat, default 1068 (ini: `loop`) | Verified |
@@ -200,7 +200,7 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 | Cursor UP/DOWN/LEFT/RIGHT | DM2000→host | zone 0x0D, sw 4/0/1/3 | `CSurf_OnArrow()` scroll | Verified |
 | INC | DM2000→host | zone 0x0D, sw 2 | next marker | Verified |
 | DEC | DM2000→host | zone 0x1B, sw 7 | previous marker | Verified |
-| ENTER | DM2000→host | zone 0x14, sw 0 | toggle cursor arrows: scroll <-> zoom (m_arrow_zoom) | Verified |
+| ENTER | DM2000→host | zone 0x14, sw 0 | cycle cursor arrows: scroll -> zoom -> bank-scroll (m_arrow_mode) | Verified |
 | Display Hist BACK | DM2000→host | zone 0x08, sw 2 | undo (action 40029) | Verified |
 | Display Hist FORWARD | DM2000→host | zone 0x08, sw 6 | redo (action 40030) | Verified |
 | LOCATE MEMORY 1 | DM2000→host | zone 0x13, sw 1 (+sw5 companion) | jump to REAPER marker 1 | Verified |
@@ -245,7 +245,7 @@ B0  0D  vv    - bits 0–5 = speed (1–6 observed), bit 6 SET = forward (hardwa
 ```
 Three modes, selected by the SCRUB/SHUTTLE keys (zone 0x0D sw 5/6, LEDs driven,
 mutually exclusive): default jog = `MoveEditCursor(speed * ±0.1s)`; SHUTTLE =
-coarse `MoveEditCursor(speed * ±1s)`; SCRUB = `CSurf_ScrubAmt(speed * ±0.05)`.
+coarse `MoveEditCursor(speed * ±1s)`; SCRUB = `CSurf_ScrubAmt(speed * ±0.5)`.
 Plain `CSurf_ScrubAmt()` as the only handler did nothing in normal operation
 (hardware-verified), hence the edit-cursor default. ENTER (zone 0x14 sw 0) cycles the cursor arrow keys: scroll -> zoom -> bank-scroll
 (mode 2 calls `AdjustBankOffset` + `SetMixerScroll` to keep the REAPER mixer view
@@ -261,7 +261,7 @@ B0  2C  vv      - value: bits 0–3 = switch number, bit 6 = on (0x40), 0 = off
 ```
 
 Channel LEDs (switch numbers): 1=SELECT, 2=MUTE, 3=SOLO, 7=REC/RDY
-Transport LEDs (target 0x0E, switch numbers): 3=STOP, 4=PLAY, 5=REC. LOOP LED is at target 0x0F sw4 (wired via SetRepeatState), not on transport row.
+Transport LEDs (target 0x0E, switch numbers): 3=STOP, 4=PLAY, 5=REC. LOOP LED is at target 0x0F sw3 (wired via SetRepeatState), not on transport row.
 
 **HUI meter (host → DM2000):**
 Polyphonic key pressure, one message per meter side:
@@ -353,8 +353,8 @@ Bidirectional: DM2000 sends PC on scene change, and responds to incoming PC to r
 Default table (manual p.218): scene N sends PC N (1-indexed - PC 1 = scene 1, PC 2 = scene 2, etc.).
 Both directions use the same mapping.
 
-Current implementation: PC receive on any of the 4 DAW HUI ports is handled (PC 1-9 jump to
-REAPER markers 1-9). The user must set GENERAL to one of the 4 DAW USB ports on the console
+Current implementation: PC receive on any of the 4 DAW HUI ports is handled (scenes 1-99 jump to
+REAPER markers 1-99). The user must set GENERAL to one of the 4 DAW USB ports on the console
 for this to work. PC send (REAPER → DM2000) and full scene dump via SysEx are not yet implemented.
 
 **CC table (Owner's Manual Appendix C, pp.353-368):**
@@ -431,7 +431,7 @@ Tasks:
 ### Layer 2 - Channel strip feedback
 
 Tasks:
-- [x] VU meters on channel strips via HUI meter messages (100ms poll of `Track_GetPeakInfo()`, –60..0 dB → 0x00–0x0C, 0x0E clip)
+- [x] VU meters on channel strips via HUI meter messages (100ms poll of `Track_GetPeakInfo()`, –60..0 dB → 0x00–0x0B; 0x0C = red OVER, sent only above 0 dBFS; the HUI 0x0E clip code is ignored by the DM2000)
 - [x] Pan position feedback: `SetSurfacePan()` → HUI pan ring messages (`B0 10+ch`); knob input on `B0 40+ch` relative deltas
 - [x] Selected channel highlight
 - [x] Track name truncated to 4 chars on scribble strip via HUI (`F0 00 00 66 05 00 10 <ch> <4 chars> F7`, per port)
@@ -601,8 +601,9 @@ Note: earlier versions stored a 9th value (sysex_out); it is now ignored on load
 - **macOS port complete**: hw-verified with DM2000 connected 2026-06-15 (v0.3+). Universal
   arm64+x86_64 dylib via SWELL Makefile (`Builds/Make/Makefile`). See `MACOS_BUILD.md`.
 - **8-char scribble strip names not achievable**: hardware test confirms the display is 4-char wide in DAW mode. Native SysEx pos=4..7 updates console memory but is not visible.
-- **Scene recall partial**: PC receive implemented (PC 1-9 → REAPER markers 1-9, 1-indexed per
-  manual p.218); user must set GENERAL port to a DAW USB port on the console. PC send and SysEx
+- **Scene recall partial**: PC receive implemented (scenes 1-99 → REAPER markers 1-99); wire
+  indexing (byte 0x00 → marker 1) is 0-indexed per the code, still unverified on hardware (see
+  TODO). User must set GENERAL port to a DAW USB port on the console. PC send and SysEx
   scene dump not yet implemented; SysEx address unconfirmed.
 - **Joystick / display knobs / dynamics knobs not implemented**: queued for Layer 4.
 
