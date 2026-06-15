@@ -89,10 +89,8 @@ Tasks tracked here to avoid scrolling chat history.
       the GENERAL port (channels 1-16, CC table on pp. 353-368). Layer 4 feature;
       requires GENERAL port open and a selected-channel UI concept.
 
-- [~] **macOS port** - SWELL Makefile + portability shims written; compiled on Mac
-      (2026-06-14, two fixes needed — see MACOS_BUILD.md). Plugin loads in REAPER
-      and appears in the control surface list. Remaining: hardware verification
-      with DM2000 connected (faders, transport, meters).
+- [x] **macOS port** - hardware-verified with DM2000 connected on 2026-06-15 (v0.3).
+      All features work on macOS.
 
 - [ ] **Scene recall full** - basic PC path implemented above; blocked on
       SysEx for full scene dump/restore and on GENERAL port config for send direction.

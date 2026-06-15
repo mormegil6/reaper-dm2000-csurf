@@ -157,7 +157,7 @@ Launch REAPER, then:
 6. With the DM2000 connected over USB, confirm the surface itself works (faders,
    transport, meters, scribble strips) - the surface logic is platform-independent, so
    once it loads it should behave exactly as on Windows.
-   *(Pending: hardware not yet available for verification as of 2026-06-14.)*
+   *(Verified 2026-06-15 with DM2000 connected: all features work on macOS.)*
 
 ---
 
