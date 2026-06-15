@@ -46,7 +46,7 @@ key = action_id
 
 | Key | Button | Default | Notes |
 |-----|--------|---------|-------|
-| `rtz` | RTZ | 0 (GoStart API) | Returns playhead to project start |
+| `rtz` | RETURN TO ZERO | 0 (GoStart API) | Returns playhead to project start |
 | `end` | END | 0 (GoEnd API) | Moves playhead to project end |
 | `online` | ONLINE | 0 | No standard REAPER equivalent; repurpose freely |
 | `loop` | LOOP | 1068 | Toggles repeat mode |

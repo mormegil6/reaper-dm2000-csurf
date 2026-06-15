@@ -44,12 +44,16 @@ Restart REAPER after copying.
 > with a connected DM2000: v0.3 (2026-06-15) and v0.5 on both Intel and Apple Silicon.
 > All features work on macOS.
 
-**User Keys (Locate section and UDK buttons):** the build/install step copies
-[doc/dm2000_keys.ini.example](doc/dm2000_keys.ini.example) to REAPER's
-resource folder as `dm2000_keys.ini` if the file does not already exist. The
-config dialog path field is pre-filled to this location. Edit the file to
-change action IDs or add your own. Without this file, RTZ and END use
-built-in go-to-start/end; all other Locate and UDK buttons do nothing.
+**User Keys (Locate section and UDK buttons):** without `dm2000_keys.ini`,
+RETURN TO ZERO and END use built-in go-to-start/end; all other Locate and
+UDK buttons do nothing. See [doc/dm2000_keys_guide.md](doc/dm2000_keys_guide.md).
+
+- **Pre-built release:** download `dm2000_keys.ini` from the
+  [Releases](../../releases) page and place it in `%APPDATA%\REAPER\` (Windows)
+  or `~/Library/Application Support/REAPER/` (macOS). The config dialog path
+  is pre-filled to that location.
+- **Building from source:** the post-build / `make install` step copies it
+  automatically on first build.
 
 ## Building from source
 

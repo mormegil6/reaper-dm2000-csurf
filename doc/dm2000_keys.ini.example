@@ -36,7 +36,7 @@
 
 ; --- Row 2 (zone 0x0F) ---
 
-; RTZ - Return to Zero: move playhead to project start.
+; RETURN TO ZERO - move playhead to project start.
 ; 0 = built-in CSurf_GoStart() API (recommended)
 ; Alternative: 40042  (Transport: Go to start of project)
 rtz = 0
