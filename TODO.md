@@ -59,6 +59,23 @@ Tasks tracked here to avoid scrolling chat history.
       REW/FF (zone 0x0E sw1/sw2) also support auto-repeat when held (400 ms delay,
       80 ms interval), matching the cursor arrow key behavior.
 
+- [x] **ENTER third mode** - ENTER now cycles three modes: scroll (CSurf_OnArrow
+      zoom=false), zoom (zoom=true), bank-scroll (left/right = AdjustBankOffset +-1,
+      with auto-repeat). Mode cycles: 0 -> 1 -> 2 -> 0.
+
+- [x] **LOCATE MEMORY 7-8** - zone 0x15 sw0=LM7, sw1=LM8 added (hw-captured 2026-06-15).
+      All 8 LOCATE MEMORY buttons now wired.
+
+- [x] **AUTO button fader reset** - zone 0-7 sw4 now resets that channel's fader to
+      0 dB (CSurf_OnVolumeChange to 1.0 = unity gain).
+
+- [x] **Scrub speed** - CSurf_ScrubAmt multiplier increased from 0.05 to 0.5 (10x).
+      Jog and shuttle unchanged.
+
+- [x] **GUI ini example link** - config dialog (IDD_SURFACEEDIT_DM2000) height increased
+      from 100 to 118 dialog units; second SysLink added linking to
+      doc/dm2000_keys.ini.example on GitHub.
+
 - [~] **HUI counter display** - `F0 00 00 66 05 00 11 <8 ASCII chars> F7` sent every 100ms
       in `Run()`. Command byte 0x11 and ASCII encoding are UNVERIFIED on the DM2000. Verify
       by checking the LED counter during playback; if blank/garbled, capture what Pro Tools
