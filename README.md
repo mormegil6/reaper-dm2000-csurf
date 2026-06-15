@@ -43,11 +43,12 @@ Restart REAPER after copying.
 > macOS note: the dylib is a universal binary (arm64 + x86_64). Hardware-verified
 > with a connected DM2000 on 2026-06-15 (v0.3); all features work on macOS.
 
-**User Keys (Locate section and UDK buttons):** copy
-[doc/dm2000_keys.ini.example](doc/dm2000_keys.ini.example) to a location of
-your choice, rename it (e.g. `dm2000_keys.ini`), edit the action IDs to taste,
-then enter the path in the surface config dialog. Without this file, RTZ and
-END use built-in go-to-start/end; all other Locate and UDK buttons do nothing.
+**User Keys (Locate section and UDK buttons):** the build/install step copies
+[doc/dm2000_keys.ini.example](doc/dm2000_keys.ini.example) to REAPER's
+resource folder as `dm2000_keys.ini` if the file does not already exist. The
+config dialog path field is pre-filled to this location. Edit the file to
+change action IDs or add your own. Without this file, RTZ and END use
+built-in go-to-start/end; all other Locate and UDK buttons do nothing.
 
 ## Building from source
 
@@ -87,7 +88,10 @@ WDL clone, `make`, binary verification, install).
 2. In the surface settings, pick the **port group** - with the default console
    setup that is the entry reading `Yamaha DM2000-1 ... Yamaha DM2000-4`.
    The plugin opens 4 consecutive HUI ports from that selection.
-3. OK.
+3. The **User Keys file** path is pre-filled with the default `dm2000_keys.ini`
+   location. Edit that file to configure Locate section and UDK button actions;
+   see [doc/dm2000_keys_guide.md](doc/dm2000_keys_guide.md) for the full reference.
+4. OK.
 
 <p align="center"><img src="doc/config-dialog.png" alt="Config dialog"></p>
 
@@ -148,11 +152,14 @@ Full button/zone/MIDI reference: [DESIGN.md - Button / function / MIDI reference
 
 ### Layer 3 - Native SysEx (port 8): partial
 
-- SysEx output port is user-configured (config dialog SysEx dropdown)
-- [x] Channel names via native SysEx - format captured 2026-06-12; sends pos=0..7 alongside HUI 4-char names; hardware-tested: scribble strip remains 4-char wide in DAW mode (physical limit)
+- Port 8 output not yet wired in the config dialog; `m_midiout8` is always NULL.
+  Port 8 support will be re-exposed in the UI when scene recall send is implemented.
+- [~] Channel names via native SysEx - format captured 2026-06-12, code written; not active
+      until port 8 is wired. Hardware test confirmed scribble strip is 4-char wide in DAW
+      mode regardless (HUI controls the visible strip; native SysEx updates internal memory only).
 - [x] Meter bridge - driven by existing HUI meter messages (Layer 2); no native SysEx needed
 - [~] Scene recall: PC receive implemented (DM2000 scene change → REAPER marker jump for
-      scenes 1-9); set GENERAL port to a DAW USB port on the console. PC send and SysEx
+      scenes 1-99); set GENERAL port to a DAW USB port on the console. PC send and SysEx
       scene dump not yet implemented.
 
 ### Layer 4 - future
@@ -170,8 +177,8 @@ USER DEFINED KEYS. See [DESIGN.md](DESIGN.md).
 - **Scribble strips show 4 characters only** - hardware-verified; the display is
   4-char wide in DAW mode regardless of what native SysEx sends.
 - **Scene recall partial** - PC receive is implemented (DM2000 scene recall sends PC on the
-  GENERAL port → REAPER jumps to the matching marker); user must set GENERAL to a DAW USB
-  port. PC send and SysEx scene dump not yet implemented.
+  GENERAL port → REAPER jumps to the matching marker, scenes 1-99); user must set GENERAL
+  to a DAW USB port. PC send and SysEx scene dump not yet implemented.
 
 ## License
 

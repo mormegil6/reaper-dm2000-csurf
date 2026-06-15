@@ -5,11 +5,11 @@
 A native REAPER control surface DLL (`reaper_csurf_dm2000`) that gives full
 bidirectional integration between the Yamaha DM2000 digital console and REAPER.
 The DLL speaks HUI on USB ports 1–4 (24 faders, transport, mute/solo/rec-arm,
-automation modes) and Yamaha native SysEx on USB port 8 (scribble strips,
-meter bridge, scene recall). No existing tool does this; this is the first
-open-source DM2000 csurf for REAPER.
+automation modes). Port 8 native SysEx (extended names, meter bridge, scene
+recall send) is partly stubbed and planned for Layer 3 - not yet active.
+No existing tool does this; this is the first open-source DM2000 csurf for REAPER.
 
-Version: v0.2
+Version: v0.5
 Homepage: bmroz.eu/projects/dm2000-csurf
 Repository: `git.pg.edu.pl/p829296` / `github.com/mormegil6`
 License: LGPL v3
@@ -176,22 +176,21 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 | REC | DM2000→host | zone 0x0E, sw 5 | `CSurf_OnRecord()` | Verified |
 | REW | DM2000→host | zone 0x0E, sw 1 | `CSurf_OnRew()` with auto-repeat (400ms delay, 80ms interval) | Verified |
 | FFWD | DM2000→host | zone 0x0E, sw 2 | `CSurf_OnFwd()` with auto-repeat (400ms delay, 80ms interval) | Verified |
-| AUDITION | DM2000→host | zone 0x10, sw 0 | no action | Verified |
-| PRE | DM2000→host | zone 0x10, sw 1 | no action | Verified |
-| IN | DM2000→host | zone 0x10, sw 2 | set loop in-point (action 40222) | Verified |
-| OUT | DM2000→host | zone 0x10, sw 3 | set loop out-point (action 40223) | Verified |
-| POST | DM2000→host | zone 0x10, sw 4 | no action | Verified |
-| RTZ | DM2000→host | zone 0x0F, sw 0 | `CSurf_GoStart()` | Verified |
-| END | DM2000→host | zone 0x0F, sw 1 | `CSurf_GoEnd()` | Verified |
-| ONLINE | DM2000→host | zone 0x0F, sw 2 | no action (DM2000 internal, no REAPER equivalent) | Verified |
-| LOOP | DM2000→host | zone 0x0F, sw 3 | toggle loop (`IDC_REPEAT`) | Verified |
+| AUDITION | DM2000→host | zone 0x10, sw 0 | no action (ini: `audition`) | Verified |
+| PRE | DM2000→host | zone 0x10, sw 1 | no action (ini: `pre`) | Verified |
+| IN | DM2000→host | zone 0x10, sw 2 | set loop in-point, default 40222 (ini: `in`) | Verified |
+| OUT | DM2000→host | zone 0x10, sw 3 | set loop out-point, default 40223 (ini: `out`) | Verified |
+| POST | DM2000→host | zone 0x10, sw 4 | insert region, default 40174 (ini: `post`) | Verified |
+| RTZ | DM2000→host | zone 0x0F, sw 0 | `CSurf_GoStart()` (ini: `rtz`, 0=API) | Verified |
+| END | DM2000→host | zone 0x0F, sw 1 | `CSurf_GoEnd()` (ini: `end`, 0=API) | Verified |
+| ONLINE | DM2000→host | zone 0x0F, sw 2 | no action (ini: `online`) | Verified |
+| LOOP | DM2000→host | zone 0x0F, sw 3 | toggle repeat, default 1068 (ini: `loop`) | Verified |
 | LOOP LED | host→DM2000 | target 0x0F, sw 3 | `SetRepeatState()` | Verified |
-| QUICK PUNCH | DM2000→host | zone 0x0F, sw 4 | insert marker at edit cursor (action 40157) | Verified |
+| QUICK PUNCH | DM2000→host | zone 0x0F, sw 4 | insert marker, default 40157 (ini: `qpunch`) | Verified |
 | SET | DM2000→host | — | does not transmit HUI - DM2000 internal only | Not mappable |
 | REHEARSAL | DM2000→host | — | does not transmit HUI | Not mappable |
 | MTR | DM2000→host | — | does not transmit HUI | Not mappable |
 | MASTER | DM2000→host | — | does not transmit HUI | Not mappable |
-| POST | DM2000→host | zone 0x10, sw 4 | insert region from time selection (action 40174) | Verified |
 | PLAY LED | host→DM2000 | target 0x0E, sw 4 | `SetPlayState()` | Verified |
 | STOP LED | host→DM2000 | target 0x0E, sw 3 | `SetPlayState()` | Verified |
 | REC LED | host→DM2000 | target 0x0E, sw 5 | `SetPlayState()` | Verified |
@@ -251,9 +250,8 @@ Plain `CSurf_ScrubAmt()` as the only handler did nothing in normal operation
 (hardware-verified), hence the edit-cursor default. ENTER (zone 0x14 sw 0) cycles the cursor arrow keys: scroll -> zoom -> bank-scroll
 (mode 2 calls `AdjustBankOffset` + `SetMixerScroll` to keep the REAPER mixer view
 in sync with the DM2000 bank). REW/FF (zone 0x0E sw1/sw2) support auto-repeat:
-first repeat after 400 ms, then every 80 ms. IN (zone 0x10 sw 2) sets the loop
-in-point; OUT (zone 0x10 sw 3) sets the loop out-point. SET/LOOP/RTZ buttons are
-in zone 0x10 at sw4+ but their exact switch numbers have not been captured yet.
+first repeat after 400 ms, then every 80 ms. Locate row 1 (zone 0x10) and row 2
+(zone 0x0F) buttons are fully configurable via dm2000_keys.ini; see doc/dm2000_keys_guide.md.
 
 **Switch/LED feedback (host → DM2000):**
 LEDs use a different CC pair to avoid confusion with the incoming zone-select:
@@ -409,7 +407,7 @@ Files: `Source\jmde\csurf\csurf_dm2000.cpp`
 Tasks:
 - [x] Skeleton: class registration, 4-port MIDI open/close, Run() loop
 - [x] HUI ping response (`90 00 7F` echo)
-- [x] Config dialog: "starting port" dropdown (4 consecutive ports) + separate SysEx output port selector
+- [x] Config dialog: "starting port" dropdown (4 consecutive ports) + ini path field + folder/edit buttons
 - [x] Fader touch detect: switch-matrix switch 0 sets touch state; fader CC pair (`B0 ch` / `B0 20+ch`) calls `CSurf_OnVolumeChange()`
 - [x] Fader feedback: implement `SetSurfaceVolume()` to send fader position to surface
 - [x] Mute buttons: channel zone switch 2, call `CSurf_OnMuteChange()`
@@ -417,9 +415,8 @@ Tasks:
 - [x] Solo buttons: channel zone switch 3
 - [x] Rec-arm buttons: channel zone switch 7
 - [x] Transport: play/stop/record/rewind/forward with LEDs
-- [~] Transport extensions: RTZ (zone 0x0E sw=0), END (sw=6), LOOP (sw=7) added; switch numbers
-      are unverified guesses - verify with MIDI-OX before relying on them. `SetRepeatState` wired
-      to LOOP LED (zone 0x0F, target 0x0F, sw=4; hw-verified 2026-06-15).
+- [x] Transport extensions: RTZ (zone 0x0F sw0), END (zone 0x0F sw1), LOOP (zone 0x0F sw3);
+      all hw-verified 2026-06-15. `SetRepeatState` wired to LOOP LED (target 0x0F sw3).
 - [x] Bank switching: left/right arrows to shift which 24 tracks are visible
 - [x] Automation modes: AUTOMIX section (zone 0x18, 7 buttons) mapped to REAPER global automation override; LED feedback on all 3 HUI ports
 
@@ -440,12 +437,11 @@ Tasks:
 - [x] Track name truncated to 4 chars on scribble strip via HUI (`F0 00 00 66 05 00 10 <ch> <4 chars> F7`, per port)
 - [x] Jog/scrub wheel: CC 0x0D, bits 0–5 = speed, bit 6 set = forward; jog/SHUTTLE/SCRUB modes (see protocol section)
 - [x] Cursor arrows (3-mode ENTER: scroll/zoom/bank-scroll+mixer-scroll), DEC/INC = prev/next marker, IN = set loop in-point, OUT = set loop out-point
-- [x] LOCATE MEMORY [1-8]: zone 0x0F sw 0-7 → jump to REAPER markers 1-8 (zone unverified)
-- [~] HUI counter (LED timecode) display: `F0 00 00 66 05 00 11 <8 ASCII chars> F7` sent
-      every 100ms from `Run()`; position from `GetPlayPosition()`/`GetCursorPosition()` +
-      `format_timestr_pos(..., -1)`, right-justified into 8 positions. Format/command byte
-      0x11 UNVERIFIED - check display shows correct position; if garbled, try 7-segment
-      encoding; if blank, capture what Pro Tools sends to port 1 with MIDI-OX.
+- [x] LOCATE MEMORY [1-8]: zones 0x13 (LM1-6) and 0x15 (LM7-8); hw-verified 2026-06-15.
+      Default action (from dm2000_keys.ini): jump to REAPER markers 1-8. Fully configurable.
+- [x] HUI counter (LED timecode) display: delta BCD protocol decoded 2026-06-15 from Pro Tools
+      loopMIDI capture (see "HUI counter display protocol" in protocol section). Follows REAPER
+      transport display format via `projectconfig_var_addr` timemode2/timemode. Hw-verified.
 
 **Test criteria for Layer 2:**
 - Play audio → DM2000 channel strip meters move
@@ -484,7 +480,7 @@ Tasks:
 - Talkback button integration
 - USER DEFINED KEYS mapping
 
-### macOS port (in progress)
+### macOS port (complete, hw-verified 2026-06-15)
 
 Build system: a hand-written SWELL Makefile (`Builds/Make/Makefile`), the convention
 Cockos uses for its own REAPER extensions (SWS, ReaPack). NOT CMake - the earlier
@@ -602,10 +598,8 @@ Note: earlier versions stored a 9th value (sysex_out); it is now ignored on load
 ## Known limitations
 
 - **Port 4 (MCS PANNER) not implemented**: port 4 is opened and keepalive-echoed but the MCS PANNER protocol (surround joystick) is not yet implemented. See Layer 4.
-- **macOS port in progress**: SWELL Makefile (`Builds/Make/Makefile`), universal
-  arm64+x86_64 dylib, all Windows-only code guarded behind `#ifdef _WIN32`. Compiles
-  and loads in REAPER on Mac (plugin appears in control surface list); hardware
-  verification with DM2000 connected is pending. See `MACOS_BUILD.md`.
+- **macOS port complete**: hw-verified with DM2000 connected 2026-06-15 (v0.3+). Universal
+  arm64+x86_64 dylib via SWELL Makefile (`Builds/Make/Makefile`). See `MACOS_BUILD.md`.
 - **8-char scribble strip names not achievable**: hardware test confirms the display is 4-char wide in DAW mode. Native SysEx pos=4..7 updates console memory but is not visible.
 - **Scene recall partial**: PC receive implemented (PC 1-9 → REAPER markers 1-9, 1-indexed per
   manual p.218); user must set GENERAL port to a DAW USB port on the console. PC send and SysEx
@@ -620,7 +614,8 @@ Note: earlier versions stored a 9th value (sysex_out); it is now ignored on load
 cd C:\dev\reaper_csurf_vs201x
 # Close REAPER first
 msbuild Builds\VisualStudio2019\reaper_csurf.sln /p:Configuration=Debug /p:Platform=x64
-# DLL auto-copies to %APPDATA%\REAPER\UserPlugins\
+# DLL auto-copies to %APPDATA%\REAPER\UserPlugins\reaper_csurf_dm2000_x64.dll
+# dm2000_keys.ini.example copied to %APPDATA%\REAPER\dm2000_keys.ini if not already present
 # Restart REAPER to load new DLL
 ```
 

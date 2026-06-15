@@ -83,6 +83,12 @@ $(OUTDIR)/$(PLUGIN): $(OBJS)
 install: all
 	mkdir -p "$$HOME/Library/Application Support/REAPER/UserPlugins"
 	cp $(OUTDIR)/$(PLUGIN) "$$HOME/Library/Application Support/REAPER/UserPlugins/"
+	@if [ ! -f "$$HOME/Library/Application Support/REAPER/dm2000_keys.ini" ]; then \
+		cp ../../doc/dm2000_keys.ini.example "$$HOME/Library/Application Support/REAPER/dm2000_keys.ini"; \
+		echo "installed dm2000_keys.ini to ~/Library/Application Support/REAPER/"; \
+	else \
+		echo "dm2000_keys.ini already exists, skipped"; \
+	fi
 	@echo "installed to ~/Library/Application Support/REAPER/UserPlugins/$(PLUGIN)"
 
 clean:

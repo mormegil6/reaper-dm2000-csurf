@@ -86,11 +86,13 @@ Tasks tracked here to avoid scrolling chat history.
       AUTOMIX section sw assignments also corrected (all were wrong previously).
 
 - [x] **Locate section INI-configurable** - all buttons in the Locate section (RTZ, END,
-      ONLINE, LOOP, QPUNCH, AUDITION, PRE, IN, OUT, POST, LM1-LM8) now read their REAPER
+      ONLINE, LOOP, QPUNCH, AUDITION, PRE, IN, OUT, POST, LM1-LM8) read their REAPER
       action IDs from the `[locate]` section of dm2000_keys.ini on plugin load.
-      0 = no action (RTZ/END: 0 = use CSurf_GoStart/GoEnd API). All defaults match the
-      hw-verified REAPER-native behavior. doc/dm2000_keys.ini.example updated with the full
-      section, comments, and Pro Tools vs REAPER-native notes.
+      0 = no action (RTZ/END: 0 = use CSurf_GoStart/GoEnd API). All constructor defaults
+      are 0; meaningful defaults (LOOP=1068, IN=40222, LM1-8=40161-40168, etc.) come from
+      dm2000_keys.ini.example which is auto-installed to REAPER's resource folder on first
+      build/install. doc/dm2000_keys_guide.md added with full action ID reference and
+      example configurations.
 
 - [ ] **Scene recall PC indexing verify** - implemented for all 99 scenes using
       0-indexed wire format (byte 0x00 = Scene 1 → marker 1). Per manual p.370
