@@ -149,8 +149,9 @@ Launch REAPER, then:
 1. Preferences -> Control/OSC/web -> Add. Confirm **Yamaha DM2000** is in the list.
    *(Verified 2026-06-14: plugin loads and appears in the list.)*
 2. Add it; confirm the config dialog renders: port-group combo populated, User Keys
-   edit field, "Open folder" button, etched divider, and the clickable bmroz.eu footer.
-3. Click the footer static -> default browser opens `https://bmroz.eu/projects/dm2000-csurf`.
+   edit field, "Open folder" button, etched divider, bmroz.eu footer, and a second
+   footer line linking to `dm2000_keys_guide.md`.
+3. Click the bmroz.eu footer static -> default browser opens `https://bmroz.eu/projects/dm2000-csurf`.
 4. Click "Open folder" -> Finder opens the keys-file directory.
 5. Confirm the keys-file path resolves under `~/Library/Application Support/REAPER`
    (via `GetResourcePath`).
@@ -158,19 +159,6 @@ Launch REAPER, then:
    transport, meters, scribble strips) - the surface logic is platform-independent, so
    once it loads it should behave exactly as on Windows.
    *(Verified 2026-06-15 with DM2000 connected: all features work on macOS.)*
-
----
-
-## Step 6 - confirm the Windows build is untouched
-
-```sh
-git status
-```
-
-Should show only: `Builds/Make/Makefile`, `Source/jmde/csurf/dm2000_compat.h`,
-`MACOS_BUILD.md`, untracked `Source/WDL/` and `res.rc_mac_*`, and edits that live inside
-`#ifdef` guards (`csurf_dm2000.cpp`, `csurf.h`, `csurf_main.cpp`, `res.rc`, `resource.h`).
-No `.vcxproj` / `.sln` changes.
 
 ---
 

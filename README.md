@@ -40,9 +40,8 @@ Download the latest release from the [Releases](../../releases) page.
 
 Restart REAPER after copying.
 
-> macOS note: the dylib is a universal binary (arm64 + x86_64). Hardware-verified
-> with a connected DM2000: v0.3 (2026-06-15) and v0.5 on both Intel and Apple Silicon.
-> All features work on macOS.
+> macOS note: the dylib is a universal binary (arm64 + x86_64), hardware-verified
+> on both Intel and Apple Silicon.
 
 **User Keys (Locate section and UDK buttons):** without `dm2000_keys.ini`,
 RETURN TO ZERO and END use built-in go-to-start/end; all other Locate and
