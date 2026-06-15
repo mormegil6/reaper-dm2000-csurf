@@ -1020,16 +1020,36 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 ShellExecute(hwndDlg, "open", folder, NULL, NULL, 0);
 #endif
             }
-#ifndef _WIN32
-            else if (id == IDC_DM2000_LINK)
-                // On macOS the footer is an SS_NOTIFY static (SWELL has no SysLink);
-                // its click arrives here as WM_COMMAND. SWELL ShellExecute opens the URL.
-                ShellExecute(hwndDlg, "open", "https://bmroz.eu/projects/dm2000-csurf", NULL, NULL, 0);
-            else if (id == IDC_DM2000_INIEXAMPLE)
-                ShellExecute(hwndDlg, "open", "https://github.com/mormegil6/reaper-dm2000-csurf/blob/main/doc/dm2000_keys.ini.example", NULL, NULL, 0);
-#endif
         }
         break;
+#ifndef _WIN32
+        case WM_LBUTTONDOWN:
+        {
+            // SWELL does not fire WM_COMMAND for SS_NOTIFY statics, so hit-test manually.
+            POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+            HWND hwndLink = GetDlgItem(hwndDlg, IDC_DM2000_LINK);
+            RECT rcLink;
+            GetWindowRect(hwndLink, &rcLink);
+            ScreenToClient(hwndDlg, (LPPOINT)&rcLink);
+            ScreenToClient(hwndDlg, (LPPOINT)&rcLink + 1);
+            if (PtInRect(&rcLink, pt))
+            {
+                ShellExecute(hwndDlg, "open", "https://bmroz.eu/projects/dm2000-csurf", NULL, NULL, 0);
+                return 1;
+            }
+            HWND hwndIni = GetDlgItem(hwndDlg, IDC_DM2000_INIEXAMPLE);
+            RECT rcIni;
+            GetWindowRect(hwndIni, &rcIni);
+            ScreenToClient(hwndDlg, (LPPOINT)&rcIni);
+            ScreenToClient(hwndDlg, (LPPOINT)&rcIni + 1);
+            if (PtInRect(&rcIni, pt))
+            {
+                ShellExecute(hwndDlg, "open", "https://github.com/mormegil6/reaper-dm2000-csurf/blob/main/doc/dm2000_keys.ini.example", NULL, NULL, 0);
+                return 1;
+            }
+        }
+        break;
+#endif
         case WM_USER + 1024:
             if (wParam > 1 && lParam)
             {
