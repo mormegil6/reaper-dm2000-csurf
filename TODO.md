@@ -32,7 +32,7 @@
       control" in the Software section). Joystick BE 02 (X) / BE 03 (Y, absolute), dynamics
       knobs BE 10-14 (relative), and the ROUTING buttons (BE 00/01 N) for object select drive
       the `[surround]` plugin on the selected track; the selected routing button's LED lights via
-      port 4 (`BE 01 N` on / `BE 00 N` off). Display/Stereo routing buttons don't transmit.
+      port 4 (`BE 00 N` on / `BE 01 N` off). Display/Stereo routing buttons don't transmit.
 
 - [ ] **Remote Meter receive** - manual appendix shows SysEx type 0x21 (Remote
       Meter) is rx/tx on port 8. Capture what the DM2000 sends on port 8 during
@@ -123,7 +123,7 @@
       dynamics-knob->param feel.
 
 - [x] **Routing-button LED feedback** - implemented 2026-06-16. The selected object's ROUTING
-      button lights via **port 4** (already open): `BE 01 N` lights, `BE 00 N` clears (N in the
+      button lights via **port 4** (already open): `BE 00 N` lights, `BE 01 N` clears (N in the
       2-column wire order). LEDs update on object/bank change and clear on close. (The earlier
       port-8 native-SysEx method `F0 43 10 3E 7F 01 22 03 ... NN F7` is abandoned - its NN=00
       "off" did not clear on the Remote layer; port 4 works cleanly with no port 8 needed.)
@@ -140,8 +140,8 @@
       the GENERAL port (channels 1-16, CC table on pp. 353-368). Layer 4 feature;
       requires GENERAL port open and a selected-channel UI concept.
 
-- [x] **macOS port** - hardware-verified with DM2000 connected on 2026-06-15 (v0.3).
-      All features work on macOS.
+- [x] **macOS port** - cross-platform SWELL build; every release is hardware-verified on
+      macOS (universal arm64+x86_64) as well as Windows.
 
 - [ ] **Scene recall full** - basic PC path implemented above; blocked on
       SysEx for full scene dump/restore and on GENERAL port config for send direction.

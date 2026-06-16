@@ -191,9 +191,8 @@ Still to come: EQ parameter control, sends/aux routing, talkback. See
   surround plugin (Layer 4, via `[surround]`), the ROUTING buttons 1-8 / Direct select
   which object, and the selected button's LED lights to show it. The MCS PANNER
   surround-divergence and routing/assign modes are not implemented.
-- **macOS hardware-verified** - universal (arm64 + x86_64) build verified with a
-  connected DM2000 on 2026-06-15 (v0.3). See [MACOS_BUILD.md](MACOS_BUILD.md)
-  for build instructions.
+- **macOS** - universal (arm64 + x86_64) SWELL build, hardware-verified on macOS each release
+  alongside Windows. See [MACOS_BUILD.md](MACOS_BUILD.md).
 - **Scribble strips show 4 characters only** - hardware-verified; the display is
   4-char wide in DAW mode regardless of what native SysEx sends.
 - **Scene recall partial** - PC receive is implemented (DM2000 scene recall sends PC on the

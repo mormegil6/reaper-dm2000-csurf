@@ -277,7 +277,7 @@ The plugin name, the 5 param indices, `stride` (params per object), and `objects
 clamp) are all ini-configurable; UDK 16 with no `[udk]` mapping dumps the selected FX's
 full parameter list to the REAPER console.
 - **Routing LEDs** (host → DM2000, port 4): the selected object's button lights via
-  `BE 01 N` (on) / `BE 00 N` (off), N in the same 2-column wire order. Updated on every
+  `BE 00 N` (on) / `BE 01 N` (off), N in the same 2-column wire order. Updated on every
   object/bank change and cleared on close. No port 8 needed.
 
 **Generic FX parameter editor (DM2000 → host, port 1):**
@@ -534,7 +534,7 @@ Tasks:
       the knobs+joystick drive (each adds `(object-1)*stride`), and Direct shifts the bank of 8
       (single press up, double down, no wrap). Plugin name, 5 param indices, `stride`, and `objects`
       (top clamp) are ini-configurable; UDK 16 (unmapped) dumps the selected FX's param list to the
-      console. The selected object's ROUTING button LED lights via port 4 (`BE 01 N` on / `BE 00 N`
+      console. The selected object's ROUTING button LED lights via port 4 (`BE 00 N` on / `BE 01 N`
       off) - no port 8 needed (the port-8 native-SysEx method could not clear on the Remote layer).
 - [x] Generic FX parameter editor (EFFECTS/PLUG-INS zone 0x1C + parameter knobs CC 0x48-0x4B
       + page arrows CC 0x4C, port 1): always-on - the 4 knobs (step 0.001) nudge the selected
@@ -543,7 +543,7 @@ Tasks:
       0. Slot/page logged to console. Hardware-tested 2026-06-16.
 - [ ] EQ parameter control via selected-channel knobs; sends/aux routing; talkback.
 
-### macOS port (complete, hw-verified 2026-06-15)
+### macOS port (complete, hardware-verified each release)
 
 Build system: a hand-written SWELL Makefile (`Builds/Make/Makefile`), the convention
 Cockos uses for its own REAPER extensions (SWS, ReaPack). NOT CMake - the earlier
@@ -661,8 +661,9 @@ Note: earlier versions stored a 9th value (sysex_out); it is now ignored on load
 ## Known limitations
 
 - **Port 4 (MCS PANNER) partial**: surround pan (joystick `BE 02/03`, dynamics knobs `BE 10..14`) drives the `[surround]` plugin on the selected track; ROUTING buttons 1-8 (`BE 00/01 N`) select the object (with LED feedback on the selected button), Direct shifts the bank (Layer 4). The remaining MCS PANNER routing/assign modes are not implemented.
-- **macOS port complete**: hw-verified with DM2000 connected 2026-06-15 (v0.3+). Universal
-  arm64+x86_64 dylib via SWELL Makefile (`Builds/Make/Makefile`). See `MACOS_BUILD.md`.
+- **macOS port**: cross-platform SWELL build, hardware-verified on macOS every release
+  alongside Windows. Universal arm64+x86_64 dylib via SWELL Makefile (`Builds/Make/Makefile`).
+  See `MACOS_BUILD.md`.
 - **8-char scribble strip names not achievable**: hardware test confirms the display is 4-char wide in DAW mode. Native SysEx pos=4..7 updates console memory but is not visible.
 - **Scene recall partial**: PC receive implemented (scenes 1-99 → REAPER markers 1-99); wire
   indexing (byte 0x00 → marker 1) is 0-indexed per the code, still unverified on hardware (see

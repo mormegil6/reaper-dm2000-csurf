@@ -251,6 +251,7 @@ public:
 
     m_midiout8 = NULL;
     SendCounter(true); // blank counter display and sync m_tc_lastbuf to known state
+    if (m_surround_plugin[0]) RefreshRoutingLEDs(); // show the default object's routing LED
   }
 
   ~CSurf_DM2000()
@@ -297,7 +298,7 @@ public:
       SendTransportLED(4, false);
       SendTransportLED(5, false);
       SendCounter(true); // blank the LED counter display
-      for (int w = 0; w < 8; ++w) SendRoutingLED(w, false); // clear MCS PANNER routing LEDs (port 4)
+      for (int w = 0; w < 8; ++w) SendRoutingLED(w, true); // restore MCS PANNER routing LEDs to default-on (port 4)
 
       // REAPER's MIDI outputs queue internally (CreateThreadedMIDIOutput is a
       // passthrough on Windows); deleting them immediately drops whatever the
@@ -1197,12 +1198,20 @@ private:
 
     // Light/clear a routing-button LED on port 4. pos = object-within-bank (0-7);
     // the console sends/expects N in a 2-column order, so wire[] maps pos -> N.
-    // `BE 01 N` lights, `BE 00 N` clears (hw-captured 2026-06-16).
+    // `BE 00 N` lights, `BE 01 N` clears (hw-captured 2026-06-16).
     void SendRoutingLED(int pos, bool on)
     {
         if (pos < 0 || pos > 7 || !m_midiouts[3]) return;
         static const int wire[8] = { 0, 4, 1, 5, 2, 6, 3, 7 };
-        m_midiouts[3]->Send(0xBE, on ? 0x01 : 0x00, (unsigned char)wire[pos], -1);
+        m_midiouts[3]->Send(0xBE, on ? 0x00 : 0x01, (unsigned char)wire[pos], -1);
+    }
+
+    // Light the selected object's routing button and clear the other 7 in the bank
+    // (the console powers the routing LEDs on by default, so the rest must be cleared).
+    void RefreshRoutingLEDs()
+    {
+        int sel = m_surround_obj % 8;
+        for (int p = 0; p < 8; ++p) SendRoutingLED(p, p == sel);
     }
 
     // Clamp + apply a new object selection (0-based); update routing LEDs and report.
@@ -1211,11 +1220,8 @@ private:
         if (obj < 0) obj = 0;
         if (m_surround_objects > 0 && obj > m_surround_objects - 1) obj = m_surround_objects - 1;
         if (obj == m_surround_obj) return;
-        int oldpos = m_surround_obj % 8;
         m_surround_obj = obj;
-        int newpos = m_surround_obj % 8;
-        if (oldpos != newpos) SendRoutingLED(oldpos, false); // unlight the old button
-        SendRoutingLED(newpos, true);                        // light the selected button
+        RefreshRoutingLEDs(); // light the selected button, clear the rest of the bank
         if (ShowConsoleMsg)
         {
             char msg[120];
