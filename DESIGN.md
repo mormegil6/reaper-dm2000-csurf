@@ -141,7 +141,7 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 | 0x17 | OVERWRITE section | 0=AUX ON, 1=PAN, 2=FADER, 3=AUX, 4=SURROUND, 5=ON |
 | 0x18 | AUTOMIX mode buttons | 0=TOUCH SENSE, 1=RETURN/READ, 2=RELATIVE, 4=ABORT/UNDO, 5=AUTO-REC/LATCH |
 | 0x19 | AUTOMIX ENABLE + UDK 6/7/8/14 | sw2=ENABLE (toggle bypass/read); sw5=UDK6, sw3=UDK7, sw4=UDK8, sw1=UDK14 (broadcast on all 3 ports, deduped on port 0) |
-| 0x1C | EFFECTS/PLUG-INS - generic FX parameter editor | sw0=INSERT/PARAM (toggle FX edit mode), sw1=ASSIGN (next FX slot), sw6=BYPASS (toggle FX enabled), sw7=COMPARE (stub), sw2-sw5=knob 1-4 press (punch stub). Page scroll is the 0x4C encoder, not these |
+| 0x1C | EFFECTS/PLUG-INS (F1-F4 below display) - FX parameter editor | F4=sw0 (home: FX slot 0 / page 0), F1=sw1 (next FX slot), F2=sw7 (prev FX slot), F3=sw6 (bypass slot), sw2-sw5=knob 1-4 press (reset that param to 0). The 4 param knobs + 0x4C page arrows are always live (no edit mode) |
 
 **DEC button (separate zone from INC)**
 | Zone | Meaning | Switches used |
@@ -220,12 +220,12 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 | Scribble strip (ch N) | host→DM2000 | `F0 00 00 66 05 00 10 N <4 chars> F7` (port P) | `SetTrackTitle()` 4-char | Verified |
 | LED counter display | host→DM2000 | see **HUI counter display protocol** section below | position from `format_timestr_pos()` following REAPER transport format | Verified 2026-06-15 |
 | USER DEFINED KEYS (UDK 1-16) | DM2000→host | all 16 zones hw-verified 2026-06-16 (full in-order capture) - see zone table | custom action via `[udk]` in dm2000_keys.ini (`Main_OnCommand`) | Verified |
-| Dynamics knobs (THRESHOLD/ATTACK/DECAY/RANGE/HOLD) | DM2000→host (port 4) | `BE 10..14 vv` (relative signed) | `[surround]` plugin param on selected track (relative nudge) | Inferred |
-| Surround joystick X / Y | DM2000→host (port 4) | `BE 02 / BE 03 vv` (absolute 0-127) | `[surround]` param_lr / param_front (absolute) | Inferred |
-| ROUTING [6] | DM2000→host (port 4) | `BE 01 06` | toggle surround position/divergence mode (divergence stub) | Inferred |
-| Parameter knobs 1-4 (below display) | DM2000→host | `B0 48..4B vv` (relative signed) | nudge current FX-slot param in FX edit mode (`TrackFX_SetParam`) | Verified |
-| Parameter page encoder | DM2000→host | `B0 4C vv` (relative signed) | FX param page up (+) / down (-) in edit mode | Verified |
-| EFFECTS/PLUG-INS section | DM2000→host | zone 0x1C sw0/1/6 | FX edit mode / next slot / bypass | Verified |
+| Dynamics knobs (THRESHOLD/ATTACK/DECAY/RANGE/HOLD) | DM2000→host (port 4) | `BE 10..14 vv` (relative signed) | `[surround]` plugin param on selected track (relative nudge) | Verified |
+| Surround joystick X / Y | DM2000→host (port 4) | `BE 02 / BE 03 vv` (absolute 0-127) | `[surround]` param_lr / param_front (absolute; Y inverted) | Verified |
+| ROUTING buttons 1-8 / Direct | DM2000→host (port 4) | `BE 00 N` + `BE 01 N` (N in 2-column order; Direct = 8) | `[surround]` object select (1-8 within the current bank); Direct shifts the bank of 8 (single press up, double down) | Verified |
+| Parameter knobs 1-4 (below display) | DM2000→host | `B0 48..4B vv` (relative signed) | nudge current FX-slot param, always-on (`TrackFX_SetParam`, step 0.001); press = reset param to 0 | Verified |
+| Page arrows (below display) | DM2000→host | `B0 4C vv` (up=`0x0A` / down=`0x4A`) | FX param page: up=next, down=prev, wraps; fires twice/press (250ms debounce) | Verified |
+| EFFECTS/PLUG-INS (F1-F4) | DM2000→host | zone 0x1C sw0/1/6/7 | home / next FX slot / bypass / prev FX slot | Verified |
 
 **Pan ring LED values:** 1=hard left, 6=centre, 11=hard right. `B0+(P) 10+(N%8) 0` = ring off.
 
@@ -261,27 +261,39 @@ first repeat after 400 ms, then every 80 ms. Locate row 1 (zone 0x10) and row 2
 
 **MCS PANNER surround control (DM2000 → host, port 4, status `0xBE` = ch 15):**
 In Pro Tools mode the DYNAMICS section and the surround joystick send MCS PANNER CC
-on port 4. They drive the `[surround]` plugin (default ReaSurroundPan) on the selected
-track; nothing happens if that plugin is not present (it is never auto-inserted).
+on port 4. They drive the `[surround]` plugin on the selected track (compiled default: none;
+the example ini targets ReaSurroundPan); nothing happens if that plugin is not present (it
+is never auto-inserted).
 - **Dynamics knobs** `BE 10..14 vv` - **7-bit signed relative** (`0x01..0x3F = +n`,
   `0x40..0x7F = -(0x80-n)`, so `0x7F = -1`). THRESHOLD/ATTACK/DECAY/RANGE/HOLD →
   `param_front`/`param_rear`/`param_lr`/`param_lfe`/`param_vol` (one step = 0.01 of range).
 - **Joystick** `BE 02 vv` (X) and `BE 03 vv` (Y) - **absolute** 0-127 → param_lr / param_front.
-- **ROUTING [6]** `BE 01 06` toggles position/divergence mode (divergence is a stub).
-The 5 param indices and the plugin name are ini-configurable; UDK 16 with no `[udk]`
-mapping dumps the selected FX's full parameter list to the REAPER console.
+- **ROUTING buttons 1-8** `BE 00 N` + `BE 01 N` (N arrives in a 2-column order:
+  buttons 1/3/5/7 -> N 0/1/2/3, buttons 2/4/6/8 -> N 4/5/6/7) select **object 1-8**
+  within the current bank. Each object adds `(object-1) * stride` to every `param_*`.
+- **Direct** (`N = 8`) shifts the bank of 8: a single press = up (objects 9-16, 17-24...),
+  a double press (within 400ms) = down. No wrap (sized for Atmos-scale object counts).
+The plugin name, the 5 param indices, `stride` (params per object), and `objects` (top
+clamp) are all ini-configurable; UDK 16 with no `[udk]` mapping dumps the selected FX's
+full parameter list to the REAPER console. (LED feedback on the routing buttons is a
+planned follow-up - needs the button-lighting message captured first.)
 
 **Generic FX parameter editor (DM2000 → host, port 1):**
-The EFFECTS/PLUG-INS section (zone 0x1C) plus the four parameter knobs and the page
-encoder below the display edit any FX on the selected track:
+The EFFECTS/PLUG-INS section (zone 0x1C) plus the four parameter knobs and the up/down
+page arrows below the display edit any FX on the selected track:
 - **Parameter knobs 1-4** `B0 48..4B vv` (7-bit signed relative) - nudge params
-  `page*4 + 0..3` of the current FX slot (one step = 0.01 of the normalized range).
-- **Page encoder** `B0 4C vv` (7-bit signed relative) - positive scrolls to the previous
-  4-param page, negative to the next; clamped to the slot's param count.
-- **INSERT/PARAM** (sw0) toggles edit mode (resets to slot 0 / page 0); **ASSIGN** (sw1)
-  cycles FX slots; **BYPASS** (sw6) toggles `TrackFX_SetEnabled` on the slot. The knob
-  presses (sw2-sw5) and COMPARE (sw7) are reserved for punch automation (stub). Current
-  slot/page are logged to the console while mapping.
+  `page*4 + 0..3` of the current FX slot (one step = 0.001 of the normalized range);
+  pressing a knob (zone 0x1C sw2-sw5) resets its param to 0.
+- **Page arrows** `B0 4C vv` (up = `0x0A`, down = `0x4A`) - the up/down arrows below the
+  display scroll the 4-param page (up = next, down = previous, **wrapping** at both ends).
+  Each press emits the CC **twice** (~145 ms apart, hw-verified), so a 250 ms debounce
+  collapses a burst into one page step.
+The knobs and arrows are **always live** (no edit mode to enter) - they act on the selected
+track's current FX slot. The F1-F4 buttons (zone 0x1C) just steer which FX: **F4** (sw0) homes
+to slot 0 / page 0 and reports; **F1** (sw1) next FX slot; **F2** (sw7) previous FX slot;
+**F3** (sw6) toggles
+`TrackFX_SetEnabled`; the knob presses (sw2-sw5) reset their param to 0. Current slot/page
+are logged to the console while mapping.
 
 **Switch/LED feedback (host → DM2000):**
 LEDs use a different CC pair to avoid confusion with the incoming zone-select:
@@ -511,17 +523,23 @@ Tasks:
       in-order capture) fire `[udk]` action IDs via `Main_OnCommand`. Zone 0x0A buttons
       (UDK 2/3/10/11 = BANK ◄/► and CH ◄/►) keep bank/channel navigation unless overridden
       by an ini entry.
-- [~] Surround pan control: USB port 4 MCS PANNER (manual ch.19 p.232). The DYNAMICS knobs
-      (`BE 10..14`, relative) and the surround joystick (`BE 02/03`, absolute) drive the
-      `[surround]` plugin (default ReaSurroundPan) on the selected track via `TrackFX_SetParam`;
-      no-op when the plugin is absent (never auto-inserts). Plugin name and the 5 param indices
-      are ini-configurable; UDK 16 (unmapped) dumps the selected FX's param list to the console.
-      ROUTING [6] toggles position/divergence (divergence is a stub). Hardware test pending;
-      param mapping confirmed against the console dump.
+- [x] Surround pan control: USB port 4 MCS PANNER (manual ch.19 p.232), all messages
+      hw-verified 2026-06-15/16. The DYNAMICS knobs (`BE 10..14`, relative) and the surround
+      joystick (`BE 02/03`, absolute 0-127) drive the `[surround]` plugin on the selected track
+      via `TrackFX_SetParam`; no-op when absent (never auto-inserts). The compiled-in default is
+      none (like `[locate]`/`[udk]`): the working ReaSurroundPan map (input 1: X=7/Y=8/Z=9/LFE=10/
+      gain=6) ships in dm2000_keys.ini.example. The ROUTING buttons 1-8 select which object/input
+      the knobs+joystick drive (each adds `(object-1)*stride`), and Direct shifts the bank of 8
+      (single press up, double down, no wrap). Plugin name, 5 param indices, `stride`, and `objects`
+      (top clamp) are ini-configurable; UDK 16 (unmapped) dumps the selected FX's param list to the
+      console. TODO: LED feedback on the routing buttons - captured 2026-06-16 as a port-8 native
+      SysEx (`F0 43 10 3E 7F 01 22 03 00 00 00 00 NN F7`); blocked on wiring port 8 and finding the
+      remote-layer clear (the `NN=00` off does not unlight on the Remote layer).
 - [x] Generic FX parameter editor (EFFECTS/PLUG-INS zone 0x1C + parameter knobs CC 0x48-0x4B
-      + page encoder CC 0x4C, port 1): INSERT/PARAM enters edit mode on the selected track,
-      ASSIGN cycles FX slots, the 4 knobs nudge the current 4-param page, the page encoder
-      scrolls pages, BYPASS toggles the slot. Slot/page logged to console. Hardware test pending.
+      + page arrows CC 0x4C, port 1): always-on - the 4 knobs (step 0.001) nudge the selected
+      track's current FX-slot page and the up/down arrows scroll pages (up=next, wrapping), no edit
+      mode. F1 next FX slot, F2 prev, F3 bypass, F4 home to slot 0, knob press resets its param to
+      0. Slot/page logged to console. Hardware-tested 2026-06-16.
 - [ ] EQ parameter control via selected-channel knobs; sends/aux routing; talkback.
 
 ### macOS port (complete, hw-verified 2026-06-15)
@@ -627,7 +645,7 @@ Note: earlier versions stored a 9th value (sysex_out); it is now ignored on load
 
 ## Known issues and caveats
 
-- Port 4 is MCS PANNER (surround joystick protocol), not a 4th HUI channel block - opened and keepalive-echoed but the protocol is not yet implemented (Layer 4)
+- Port 4 is MCS PANNER (surround joystick protocol), not a 4th HUI channel block - surround pan (joystick + dynamics knobs + ROUTING [6]) is implemented (Layer 4); the remaining MCS PANNER controls are not
 - Fader taper is CALIBRATED and applied (see protocol section): physical maximum
   is the printed +10 mark (wire 16383); REAPER volumes above +10 dB clamp there.
   Table recalibrated 2026-06-15 after running the DM2000's built-in fader
@@ -641,7 +659,7 @@ Note: earlier versions stored a 9th value (sysex_out); it is now ignored on load
 
 ## Known limitations
 
-- **Port 4 (MCS PANNER) not implemented**: port 4 is opened and keepalive-echoed but the MCS PANNER protocol (surround joystick) is not yet implemented. See Layer 4.
+- **Port 4 (MCS PANNER) partial**: surround pan (joystick `BE 02/03`, dynamics knobs `BE 10..14`) drives the `[surround]` plugin on the selected track; ROUTING buttons 1-8 (`BE 00/01 N`) select the object and Direct shifts the bank (Layer 4). Routing-button LED feedback (port 8) is not yet wired.
 - **macOS port complete**: hw-verified with DM2000 connected 2026-06-15 (v0.3+). Universal
   arm64+x86_64 dylib via SWELL Makefile (`Builds/Make/Makefile`). See `MACOS_BUILD.md`.
 - **8-char scribble strip names not achievable**: hardware test confirms the display is 4-char wide in DAW mode. Native SysEx pos=4..7 updates console memory but is not visible.
@@ -649,7 +667,8 @@ Note: earlier versions stored a 9th value (sysex_out); it is now ignored on load
   indexing (byte 0x00 → marker 1) is 0-indexed per the code, still unverified on hardware (see
   TODO). User must set GENERAL port to a DAW USB port on the console. PC send and SysEx
   scene dump not yet implemented; SysEx address unconfirmed.
-- **Joystick / display knobs / dynamics knobs not implemented**: queued for Layer 4.
+- **EQ / send / talkback control not implemented**: queued for Layer 4. (Surround joystick,
+  display parameter knobs, and dynamics knobs are implemented in v0.6.)
 
 ---
 

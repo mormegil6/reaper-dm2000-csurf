@@ -191,7 +191,10 @@ lm8 = 40168   ; Go to marker 8
 ;
 ; In Pro Tools mode the DM2000 DYNAMICS knobs and the surround joystick send
 ; MCS PANNER messages on USB port 4. The plugin maps them to parameters of a
-; surround plugin on the SELECTED track (it never auto-inserts one):
+; surround plugin on the SELECTED track (it never auto-inserts one).
+;
+; The compiled-in default is "none" - without this section the surround controls
+; do nothing. The settings below are the working example (input 1 of ReaSurroundPan):
 ;
 ;   plugin       = FX name to look for (TrackFX_GetByName match)
 ;   param_front  = THRESHOLD knob + joystick Y
@@ -200,16 +203,31 @@ lm8 = 40168   ; Go to marker 8
 ;   param_lfe    = RANGE knob
 ;   param_vol    = HOLD knob
 ;
-; Param values are ReaSurroundPan parameter indices. Don't know them? Select a
-; track with the plugin, then press UDK 16 with no key16 mapping - the plugin
-; dumps every parameter index and name to the REAPER console (View > Console).
+; Param values are the plugin's parameter indices. The defaults below target
+; INPUT 1 of a stock ReaSurroundPan (33 params); change them to taste:
+;   6=in 1 gain  7=in 1 X(L/R)  8=in 1 Y(F/B)  9=in 1 Z(height)  10=in 1 LFE
+;   11=in 1 divergence   (15+ = input 2, etc.)
+;
+; Different plugin or layout? Select a track that has it and press UDK 16 with
+; no key16 mapping - the plugin dumps every parameter index and name to the
+; REAPER console (View > Console). Copy the indices you want here.
 ; ===========================================================================
 
 [surround]
 
 plugin      = ReaSurroundPan
-param_front = 0
-param_rear  = 1
-param_lr    = 2
-param_lfe   = 3
-param_vol   = 4
+param_front = 8
+param_rear  = 9
+param_lr    = 7
+param_lfe   = 10
+param_vol   = 6
+
+; --- object/input switching (ROUTING buttons + Direct) ---
+; The param_* above are OBJECT 1. The ROUTING buttons 1-8 select object 1-8 within
+; the current bank; each one adds (object-1) * stride to every param_* index.
+; The Direct button shifts the bank of 8: single press = up (objects 9-16, 17-24...),
+; double press = down. stride = the panner's params-per-object (9 for ReaSurroundPan:
+; gain/X/Y/Z/LFE/divergence/delay/mute/solo). objects = max object count for the top
+; clamp (0 = no limit; set it to your session's object count to stop at the last one).
+stride      = 9
+objects     = 0

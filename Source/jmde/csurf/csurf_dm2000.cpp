@@ -108,13 +108,17 @@ class CSurf_DM2000 : public IReaperControlSurface
     int m_udk[16];                                   // UDK 1-16 action IDs from [udk]; 0 = no action
     int m_tc_interval;                               // LED counter refresh period (ms); [counter] refresh_ms
     DWORD m_tc_lastrun;                              // last counter refresh (decoupled from the meter poll)
-    char m_surround_plugin[64];                      // [surround] target FX name (default ReaSurroundPan)
-    int m_surround_param[5];                         // [surround] param indices: front, rear, lr, lfe, vol
-    int m_surround_mode;                             // MCS PANNER: 0=position, 1=divergence (stub)
+    char m_surround_plugin[64];                      // [surround] target FX name
+    int m_surround_param[5];                         // [surround] base param indices (object 1): front, rear, lr, lfe, vol
+    int m_surround_stride;                           // [surround] params per object (0 = no object switching)
+    int m_surround_objects;                          // [surround] max object count (0 = unlimited)
+    int m_surround_obj;                              // currently selected object (0-based)
+    DWORD m_direct_time;                             // Direct button press time (double-click detect)
+    bool m_direct_pending;                           // Direct single-click awaiting confirm
     int m_fx_loglast;                                // last console-logged fx*1000+param (de-spam)
-    bool m_fx_edit;                                  // EFFECTS/PLUG-INS param editor active (zone 0x1C)
-    int m_fx_slot;                                   // current FX slot on the selected track
+    int m_fx_slot;                                   // current FX slot on the selected track (FX editor)
     int m_fx_page;                                   // current parameter page (4 knobs per page)
+    DWORD m_fx_page_last;                            // last page-arrow event (debounce; arrows fire 0x4C twice)
 
 public:
   CSurf_DM2000(int indev1, int outdev1, int indev2, int outdev2, int indev3, int outdev3, int indev4, int outdev4, const char *iniPath, int *errStats)
@@ -169,17 +173,20 @@ public:
         m_udk[i] = 0;
     m_tc_interval = 33;   // ~30 Hz default; smooth SMPTE frame display
     m_tc_lastrun  = 0;
-    strcpy_s(m_surround_plugin, sizeof(m_surround_plugin), "ReaSurroundPan");
-    m_surround_param[0] = 0; // front
-    m_surround_param[1] = 1; // rear
-    m_surround_param[2] = 2; // lr
-    m_surround_param[3] = 3; // lfe
-    m_surround_param[4] = 4; // vol
-    m_surround_mode = 0;
+    // surround: compiled default is "none" (disabled), like [locate]/[udk]. The working
+    // ReaSurroundPan map ships in dm2000_keys.ini.example; with no [surround] section
+    // configured, the MCS PANNER knobs/joystick do nothing.
+    m_surround_plugin[0] = '\0';
+    for (int i = 0; i < 5; i++) m_surround_param[i] = -1;
+    m_surround_stride = 0;
+    m_surround_objects = 0;
+    m_surround_obj = 0;
+    m_direct_time = 0;
+    m_direct_pending = false;
     m_fx_loglast = -1;
-    m_fx_edit = false;
     m_fx_slot = 0;
     m_fx_page = 0;
+    m_fx_page_last = 0;
 
     // load [locate] overrides from ini
     char _la_ini[MAX_PATH];
@@ -223,6 +230,8 @@ public:
         m_surround_param[2] = GetPrivateProfileInt("surround", "param_lr",    m_surround_param[2], _la_ini);
         m_surround_param[3] = GetPrivateProfileInt("surround", "param_lfe",   m_surround_param[3], _la_ini);
         m_surround_param[4] = GetPrivateProfileInt("surround", "param_vol",   m_surround_param[4], _la_ini);
+        m_surround_stride   = GetPrivateProfileInt("surround", "stride",  m_surround_stride,  _la_ini);
+        m_surround_objects  = GetPrivateProfileInt("surround", "objects", m_surround_objects, _la_ini);
     }
 
     for (int i = 0; i < 4; ++i)
@@ -320,6 +329,14 @@ public:
       }
 
       DWORD now = timeGetTime();
+
+      // Direct (surround bank): a single press confirms as bank-up once the 400ms
+      // double-click window passes with no second press.
+      if (m_direct_pending && now - m_direct_time >= 400)
+      {
+          m_direct_pending = false;
+          SetSurroundObject(m_surround_obj + 8);
+      }
 
       // arrow auto-repeat: fire after 400ms hold, then every 80ms
       if (m_held_arrow >= 0 && now - m_arrow_held_since > 400)
@@ -1034,15 +1051,15 @@ private:
     // 0x40..0x7F = -(0x80-n) (CCW, so 0x7F = -1). 0 = no movement.
     static int relStep(unsigned char v) { return (v < 0x40) ? (int)v : ((int)v - 0x80); }
 
-    // Nudge an FX parameter by `steps` * 0.01 of its normalized range, then clamp.
-    void NudgeFXParam(MediaTrack *tr, int fx, int param, int steps)
+    // Nudge an FX parameter by `steps` * `scale` of its normalized range, then clamp.
+    void NudgeFXParam(MediaTrack *tr, int fx, int param, int steps, double scale = 0.01)
     {
         if (!TrackFX_GetParam || !TrackFX_SetParam) return;
         double mn = 0.0, mx = 1.0;
         double cur = TrackFX_GetParam(tr, fx, param, &mn, &mx);
         double range = mx - mn;
         if (range == 0.0) return;            // zero-range param: nothing to nudge
-        double norm = (cur - mn) / range + steps * 0.01;
+        double norm = (cur - mn) / range + steps * scale;
         if (norm < 0.0) norm = 0.0; else if (norm > 1.0) norm = 1.0;
         TrackFX_SetParam(tr, fx, param, mn + norm * range);
     }
@@ -1107,15 +1124,17 @@ private:
     // Returns true if the message was consumed.
     bool OnPannerCC(unsigned char data1, unsigned char data2)
     {
-        if (data1 == 0x01)                // ROUTING buttons; [6] toggles position/divergence
+        if (data1 == 0x00) return true;   // routing button companion (BE 00 N) - ignore
+        if (data1 == 0x01)                // routing buttons (BE 01 N): object 1-8 / Direct bank
         {
-            if (data2 == 0x06) m_surround_mode ^= 1; // divergence mode is a stub for now
+            OnRoutingButton(data2);
             return true;
         }
 
         // map this control to a configured surround param + how to apply it
         int param = -1;
         bool absolute = false;            // joystick = absolute position; knobs = relative
+        bool invert = false;              // joystick Y reads inverted vs the plugin's axis
         switch (data1)
         {
             case 0x10: param = m_surround_param[0]; break;                 // THRESHOLD -> front
@@ -1124,20 +1143,22 @@ private:
             case 0x13: param = m_surround_param[3]; break;                 // RANGE     -> lfe
             case 0x14: param = m_surround_param[4]; break;                 // HOLD      -> vol
             case 0x02: param = m_surround_param[2]; absolute = true; break; // joystick X -> lr
-            case 0x03: param = m_surround_param[0]; absolute = true; break; // joystick Y -> front
+            case 0x03: param = m_surround_param[0]; absolute = true; invert = true; break; // joystick Y -> front (inverted)
             default: return false;                                          // not a surround control
         }
 
+        if (!m_surround_plugin[0]) return true; // no [surround] plugin configured -> disabled
         MediaTrack *tr = GetSelectedTrack ? GetSelectedTrack(NULL, 0) : NULL;
         if (!tr || !TrackFX_GetByName) return true;
         int fx = TrackFX_GetByName(tr, m_surround_plugin, false);
         if (fx < 0) return true;          // not on the track -> do nothing (never auto-insert)
 
+        param += m_surround_obj * m_surround_stride; // shift to the selected object
         int np = TrackFX_GetNumParams ? TrackFX_GetNumParams(tr, fx) : 0;
         if (param < 0 || param >= np) return true;
 
         if (absolute)
-            SetFXParamNorm(tr, fx, param, data2 / 127.0); // joystick 0..127 -> 0..1
+            SetFXParamNorm(tr, fx, param, invert ? 1.0 - data2 / 127.0 : data2 / 127.0); // joystick 0..127
         else
         {
             int delta = relStep(data2);
@@ -1147,10 +1168,51 @@ private:
         return true;
     }
 
+    // ROUTING button (BE 01 N): buttons 1-8 pick an object within the current bank of 8;
+    // Direct (N=8) shifts the bank (single press up, double press down). The console sends
+    // N in a 2-column order, so off[] maps the wire value back to object-within-bank.
+    void OnRoutingButton(unsigned char n)
+    {
+        if (n == 8) { OnSurroundDirect(); return; } // Direct
+        if (n > 7) return;
+        static const int off[8] = { 0, 2, 4, 6, 1, 3, 5, 7 }; // wire N -> object-within-bank
+        m_direct_pending = false;                   // a routing press cancels a pending Direct
+        SetSurroundObject((m_surround_obj / 8) * 8 + off[n]);
+    }
+
+    // Direct button: one press = bank up (+8), confirmed after 400ms; a second press
+    // within that window = bank down (-8). Bidirectional, no wrap (good for 100+ objects).
+    void OnSurroundDirect()
+    {
+        DWORD now = timeGetTime();
+        if (m_direct_pending && now - m_direct_time < 400)
+        {
+            m_direct_pending = false;
+            SetSurroundObject(m_surround_obj - 8);  // double press -> bank down
+        }
+        else { m_direct_pending = true; m_direct_time = now; }
+    }
+
+    // Clamp + apply a new object selection (0-based) and report it to the console.
+    void SetSurroundObject(int obj)
+    {
+        if (obj < 0) obj = 0;
+        if (m_surround_objects > 0 && obj > m_surround_objects - 1) obj = m_surround_objects - 1;
+        if (obj == m_surround_obj) return;
+        m_surround_obj = obj;
+        if (ShowConsoleMsg)
+        {
+            char msg[120];
+            sprintf_s(msg, sizeof(msg), "[DM2000 surround] object %d (param base +%d)\n",
+                      m_surround_obj + 1, m_surround_obj * m_surround_stride);
+            ShowConsoleMsg(msg);
+        }
+    }
+
     // Parameter knob 1-4 (port 1, CC 0x48-0x4B) -> current FX slot param on this page.
+    // Always live: edits the selected track's current FX slot (no mode to enter).
     void OnParamKnob(int knob, unsigned char data2)
     {
-        if (!m_fx_edit) return;
         MediaTrack *tr = GetSelectedTrack ? GetSelectedTrack(NULL, 0) : NULL;
         if (!tr || !TrackFX_GetCount) return;
         int n = TrackFX_GetCount(tr);
@@ -1163,29 +1225,29 @@ private:
         int np = TrackFX_GetNumParams ? TrackFX_GetNumParams(tr, m_fx_slot) : 0;
         if (param < 0 || param >= np) return;
 
-        NudgeFXParam(tr, m_fx_slot, param, delta);
+        NudgeFXParam(tr, m_fx_slot, param, delta, 0.001); // finer than the surround knobs (0.01)
         LogFXParam("param", tr, m_fx_slot, param);
     }
 
-    // Page encoder (CC 0x4C): dir>0 = previous page (up), dir<0 = next page (down).
+    // Page arrows (CC 0x4C): up arrow (dir>0) = next page, down arrow (dir<0) = previous,
+    // wrapping at both ends. The arrows emit the CC twice per press (~145ms apart,
+    // hw-verified), so a short debounce collapses a burst into one page step.
     void OnFXPage(int dir)
     {
-        if (!m_fx_edit || dir == 0) return;
+        if (dir == 0) return;
+        DWORD now = timeGetTime();
+        if (now - m_fx_page_last < 250) return;
+        m_fx_page_last = now;
         MediaTrack *tr = GetSelectedTrack ? GetSelectedTrack(NULL, 0) : NULL;
         if (!tr || !TrackFX_GetCount) return;
         int n = TrackFX_GetCount(tr);
         if (m_fx_slot < 0 || m_fx_slot >= n) return;
+        int np = TrackFX_GetNumParams ? TrackFX_GetNumParams(tr, m_fx_slot) : 0;
+        int maxpage = np > 0 ? (np - 1) / 4 : 0;
 
-        if (dir > 0)
-        {
-            if (m_fx_page > 0) { m_fx_page--; FXReport(tr); }
-        }
-        else
-        {
-            int np = TrackFX_GetNumParams ? TrackFX_GetNumParams(tr, m_fx_slot) : 0;
-            int maxpage = np > 0 ? (np - 1) / 4 : 0;
-            if (m_fx_page < maxpage) { m_fx_page++; FXReport(tr); }
-        }
+        if (dir > 0) m_fx_page = (m_fx_page >= maxpage) ? 0 : m_fx_page + 1; // up = next, wrap
+        else         m_fx_page = (m_fx_page <= 0) ? maxpage : m_fx_page - 1; // down = prev, wrap
+        FXReport(tr);
     }
 
     // Report the current FX slot / page to the console (temporary debugging aid).
@@ -1206,36 +1268,58 @@ private:
         ShowConsoleMsg(msg);
     }
 
-    // EFFECTS/PLUG-INS button (zone 0x1C) state machine. Page scroll lives on the
-    // dedicated 0x4C arrow encoder, so the knob presses (sw2-sw5) are free for punch.
-    // sw0=INSERT/PARAM, sw1=ASSIGN, sw6=BYPASS, sw7=COMPARE (stub), sw2-sw5=knob press (stub).
+    // EFFECTS/PLUG-INS buttons (zone 0x1C) - the F1-F4 buttons below the display.
+    // The param knobs + page arrows are always live, so these just steer which FX:
+    //   F4 (sw0) = jump to FX slot 0 / page 0 and report   F1 (sw1) = next FX slot
+    //   F3 (sw6) = bypass current slot                      F2 (sw7) = previous FX slot
     void OnFXSwitch(int sw)
     {
         MediaTrack *tr = GetSelectedTrack ? GetSelectedTrack(NULL, 0) : NULL;
         switch (sw)
         {
-            case 0: // INSERT/PARAM (button 8): toggle FX edit mode on the selected track
-                m_fx_edit = !m_fx_edit;
-                if (m_fx_edit) { m_fx_slot = 0; m_fx_page = 0; FXReport(tr); }
-                else if (ShowConsoleMsg) ShowConsoleMsg("[DM2000 fx] edit mode off\n");
+            case 0: // F4 (INSERT/PARAM): home to FX slot 0, page 0, and report
+                m_fx_slot = 0; m_fx_page = 0; FXReport(tr);
                 break;
-            case 1: // ASSIGN (button 5): cycle to next FX slot
-                if (m_fx_edit && tr && TrackFX_GetCount)
+            case 1: // F1 (ASSIGN): cycle to next FX slot
+                if (tr && TrackFX_GetCount)
                 {
                     int n = TrackFX_GetCount(tr);
-                    if (n > 0) { m_fx_slot = (m_fx_slot + 1) % n; m_fx_page = 0; FXReport(tr); }
+                    if (n > 0) m_fx_slot = (m_fx_slot + 1) % n;
+                    m_fx_page = 0;
+                    FXReport(tr);
                 }
                 break;
-            case 6: // BYPASS (button 7): toggle enable on the current slot
-                if (m_fx_edit && tr && TrackFX_GetCount && TrackFX_GetEnabled && TrackFX_SetEnabled)
+            case 7: // F2 (COMPARE): cycle to previous FX slot
+                if (tr && TrackFX_GetCount)
+                {
+                    int n = TrackFX_GetCount(tr);
+                    if (n > 0) m_fx_slot = (m_fx_slot + n - 1) % n;
+                    m_fx_page = 0;
+                    FXReport(tr);
+                }
+                break;
+            case 6: // F3 (BYPASS): toggle enable on the current slot
+                if (tr && TrackFX_GetCount && TrackFX_GetEnabled && TrackFX_SetEnabled)
                 {
                     int n = TrackFX_GetCount(tr);
                     if (m_fx_slot >= 0 && m_fx_slot < n)
                         TrackFX_SetEnabled(tr, m_fx_slot, !TrackFX_GetEnabled(tr, m_fx_slot));
                 }
                 break;
-            // sw2-sw5: knob 1-4 press = punch parameter automation (stub)
-            // sw7: COMPARE (button 6) = stub
+            case 2: case 3: case 4: case 5: // knob 1-4 press: reset that param to 0 (minimum)
+                if (tr && TrackFX_GetCount)
+                {
+                    int n = TrackFX_GetCount(tr);
+                    int param = m_fx_page * 4 + (sw - 2);
+                    int np = (m_fx_slot >= 0 && m_fx_slot < n && TrackFX_GetNumParams)
+                             ? TrackFX_GetNumParams(tr, m_fx_slot) : 0;
+                    if (param >= 0 && param < np)
+                    {
+                        SetFXParamNorm(tr, m_fx_slot, param, 0.0);
+                        LogFXParam("reset", tr, m_fx_slot, param);
+                    }
+                }
+                break;
         }
     }
 };

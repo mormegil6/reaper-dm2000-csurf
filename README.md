@@ -177,18 +177,19 @@ Full button/zone/MIDI reference: [DESIGN.md - Button / function / MIDI reference
 - **USER DEFINED KEYS** - all 16 UDK buttons fire configurable REAPER actions
   via the `[udk]` section of `dm2000_keys.ini`.
 - **Surround pan** - the DYNAMICS knobs and surround joystick (port 4) drive a
-  surround plugin (default ReaSurroundPan) on the selected track, configured via
-  `[surround]`. Hardware test pending.
+  surround plugin on the selected track, configured via `[surround]` (ships
+  targeting ReaSurroundPan; no compiled-in default). Hardware-verified.
 - **FX parameter editor** - the EFFECTS/PLUG-INS section plus the parameter knobs
-  and page encoder edit any FX on the selected track. Hardware test pending.
+  and page arrows edit any FX on the selected track. Hardware test pending.
 
 Still to come: EQ parameter control, sends/aux routing, talkback. See
 [DESIGN.md](DESIGN.md).
 
 ## Known limitations
 
-- **Port 4 (MCS PANNER) not implemented** - port 4 is opened and keepalive-echoed
-  but the MCS PANNER protocol (surround joystick) is not yet implemented.
+- **Port 4 (MCS PANNER) partial** - the surround joystick and dynamics knobs drive a
+  surround plugin (Layer 4, via `[surround]`), and the ROUTING buttons 1-8 / Direct
+  select which object; lighting the routing-button LEDs (port 8) is not yet wired.
 - **macOS hardware-verified** - universal (arm64 + x86_64) build verified with a
   connected DM2000 on 2026-06-15 (v0.3). See [MACOS_BUILD.md](MACOS_BUILD.md)
   for build instructions.

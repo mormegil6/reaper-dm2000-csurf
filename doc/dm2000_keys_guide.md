@@ -202,29 +202,49 @@ In Pro Tools mode the DM2000 **DYNAMICS** knobs and the **surround joystick**
 (USB port 4) drive a surround plugin on the *selected* track - they never insert
 one. Configure which plugin and which of its parameters each control moves:
 
-| Key | Control | Default |
-|-----|---------|---------|
-| `plugin` | FX name to match (`TrackFX_GetByName`) | `ReaSurroundPan` |
-| `param_front` | THRESHOLD knob + joystick Y | 0 |
-| `param_rear` | ATTACK knob | 1 |
-| `param_lr` | DECAY knob + joystick X | 2 |
-| `param_lfe` | RANGE knob | 3 |
-| `param_vol` | HOLD knob | 4 |
+| Key | Control | Default | ReaSurroundPan param |
+|-----|---------|---------|----------------------|
+| `plugin` | FX name to match (`TrackFX_GetByName`) | `ReaSurroundPan` | - |
+| `param_front` | THRESHOLD knob + joystick Y | 8 | in 1 Y (front/back) |
+| `param_rear` | ATTACK knob | 9 | in 1 Z (height) |
+| `param_lr` | DECAY knob + joystick X | 7 | in 1 X (left/right) |
+| `param_lfe` | RANGE knob | 10 | in 1 LFE |
+| `param_vol` | HOLD knob | 6 | in 1 gain |
 
-The `param_*` values are the plugin's parameter indices. To discover them, select
-a track that has the plugin and press **UDK 16** with no `key16` mapping - the
-plugin prints every parameter index and name to the REAPER console
-(`View > Console`). Copy the indices you want into this section.
+The compiled-in default is **none** - without a `[surround]` section the MCS
+PANNER controls do nothing (same convention as `[locate]`/`[udk]`). The values
+below ship in `dm2000_keys.ini.example` and target **input 1** of a stock
+ReaSurroundPan. The `param_*` values are plain parameter indices - change them
+for a different plugin, a different input, or a different feel. To discover
+indices, select a track that has the plugin and press **UDK 16** with no `key16`
+mapping: the plugin prints every parameter index and name to the REAPER console
+(`View > Console`).
 
 ```ini
 [surround]
 plugin = ReaSurroundPan
-param_front = 0
-param_rear  = 1
-param_lr    = 2
-param_lfe   = 3
-param_vol   = 4
+param_front = 8
+param_rear  = 9
+param_lr    = 7
+param_lfe   = 10
+param_vol   = 6
+stride  = 9   ; params per object (see below)
+objects = 0   ; max object count, 0 = no limit
 ```
+
+### Switching the controlled object (ROUTING buttons + Direct)
+
+The `param_*` above are **object 1**. The **ROUTING buttons 1-8** select object 1-8
+within the current bank - each adds `(object-1) x stride` to every `param_*` index.
+The **Direct** button shifts the bank of 8: **single press = up** (objects 9-16,
+17-24...), **double press = down** (no wrapping, so it scales to Atmos-size sessions).
+
+- `stride` = the panner's parameters-per-object. ReaSurroundPan is **9** (gain, X, Y,
+  Z, LFE, divergence, delay, mute, solo). `0` disables object switching.
+- `objects` = how many objects to stop at when banking up (`0` = no top limit).
+
+The selected object is printed to the REAPER console as you switch. (Lighting the
+routing buttons to show the selection is a planned addition.)
 
 ## SWS extension actions
 

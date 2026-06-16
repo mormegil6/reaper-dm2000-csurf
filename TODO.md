@@ -28,10 +28,11 @@
       LM4=sw2, LM5=sw4, LM6=sw7; sw5 is a companion event that fires
       alongside every press (ignore it). Code fixed 2026-06-15.
 
-- [ ] **Port 4 MCS PANNER** - protocol captured 2026-06-15: surround joystick
-      uses BE 02 (X-axis) and BE 03 (Y-axis) CC on MIDI channel 15 (port 4).
-      Routing buttons use BE 00/01 pairs; dynamics knobs use BE 10-14.
-      Implementation pending; Layer 4 feature.
+- [x] **Port 4 MCS PANNER** - surround pan implemented 2026-06-16 (see "Surround pan
+      control" in the Software section). Joystick BE 02 (X) / BE 03 (Y, absolute), dynamics
+      knobs BE 10-14 (relative), and the ROUTING buttons (BE 00/01 N) for object select drive
+      the `[surround]` plugin on the selected track. Not yet wired: routing-button LED feedback
+      (see the dedicated LED task); Display/Stereo routing buttons don't transmit.
 
 - [ ] **Remote Meter receive** - manual appendix shows SysEx type 0x21 (Remote
       Meter) is rx/tx on port 8. Capture what the DM2000 sends on port 8 during
@@ -113,21 +114,27 @@
       own timer; `[counter] refresh_ms` in dm2000_keys.ini (default 33 ms ≈ 30 Hz, clamped
       20-1000) for smooth SMPTE frames. Delta-encoding means only changed digits transmit.
 
-- [ ] **Surround pan control (port 4 MCS PANNER)** - implemented 2026-06-16. DYNAMICS knobs
-      (`BE 10..14`, relative) + joystick (`BE 02/03`, absolute) drive the `[surround]` plugin
-      (default ReaSurroundPan) on the selected track; ROUTING [6] (`BE 01 06`) toggles position/
-      divergence (divergence stub). Plugin name + 5 param indices ini-configurable; UDK 16
-      (unmapped) dumps the selected FX param list to console. NEEDS HW TEST: verify joystick is
-      absolute (not relative); confirm param indices via the console dump and set them in
-      [surround]; confirm ROUTING [6] is one event per press. ReaSurround/ReaSurroundPan
-      param 0-4 were scale X/Y/Z + trim + gain in testing, so defaults likely need adjusting.
+- [x] **Surround pan control (port 4 MCS PANNER)** - implemented + hw-verified 2026-06-16.
+      DYNAMICS knobs (`BE 10..14`, relative) + joystick (`BE 02`=X / `BE 03`=Y, absolute 0-127,
+      Y inverted) drive the `[surround]` plugin on the selected track. ROUTING buttons 1-8 select
+      object/input (param += (obj-1)*stride); Direct shifts the bank of 8 (single up, double down,
+      no wrap). Compiled default none; example ini targets ReaSurroundPan input 1 (front=8/rear=9/
+      lr=7/lfe=10/vol=6). stride/objects/plugin/indices ini-configurable. Remaining: pick the final
+      dynamics-knob->param feel.
 
-- [ ] **Generic FX parameter editor** - implemented 2026-06-16. Zone 0x1C: sw0=INSERT/PARAM
-      (toggle edit mode), sw1=ASSIGN (next FX slot), sw6=BYPASS (toggle slot). Parameter knobs
-      1-4 (`B0 48..4B`, port 1) nudge the current 4-param page; page encoder (`B0 4C`) scrolls
-      pages. Knob press/sw2-5 and COMPARE/sw7 are punch-automation stubs. Slot/page console-logged.
-      Knob CCs 0x48-0x4B and page encoder 0x4C hw-confirmed 2026-06-16. NEEDS HW TEST: the 0x4C
-      encoder may emit 2 events per press (observed) - if it double-pages, debounce it.
+- [ ] **Routing-button LED feedback** - light the selected object's ROUTING button. Captured
+      2026-06-16: the LED is driven on **port 8** native SysEx -
+      `F0 43 10 3E 7F 01 22 03 00 00 00 00 [NN] F7` (NN=01 lights routing 1). Blockers: (1) port 8
+      output isn't wired (`m_midiout8` always NULL - needs re-exposing); (2) the `NN=00` "off"
+      message does NOT clear the LED on the Remote layer (works on the channel layer but changes
+      actual routing). Need to find the proper clear/refresh for the remote layer.
+
+- [ ] **Generic FX parameter editor** - implemented + hw-tested 2026-06-16, always-on (no edit
+      mode). Zone 0x1C F-buttons: F4=sw0 (home slot0/page0), F1=sw1 (next FX slot), F2=sw7 (prev
+      FX slot), F3=sw6 (bypass), sw2-sw5=knob 1-4 press (reset that param to 0). Param knobs 1-4
+      (`B0 48..4B`, port 1, step 0.001) nudge the current 4-param page; up/down page arrows
+      (`B0 4C`, up=next/down=prev, wrapping) scroll pages with a 250ms debounce (arrows fire twice
+      per press). Slot/page console-logged.
 
 - [ ] **EQ / parameter control via CC** - manual appendix confirms EQ ATT (input
       attenuation), EQ ON/OFF, and all faders/pans are accessible as MIDI CC on
