@@ -110,9 +110,9 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 **Display, navigation & user-defined keys**
 | Zone | Meaning | Switches used |
 |------|---------|---------------|
-| 0x08 | Display History + UDK 4/5/13/14 | sw2=BACK, sw6=FORWARD; UDK: sw1=UDK4, sw5=UDK5, sw3=UDK13, sw7=UDK14 |
-| 0x09 | Display buttons + UDK 1/2/9/10 | sw3=LOCATOR DISPLAY, sw4=UDK DISPLAY, sw5=EFFECT DISPLAY; UDK 1/2/9/10 at unconfirmed sw values |
-| 0x0A | Bank/channel navigation - these ARE UDK buttons 2/3/10/11 (factory-labeled BANK ◄/►, CH ◄/►; manual ch.19) | 0=ch-left, 1=bank-left, 2=ch-right, 3=bank-right |
+| 0x08 | Display History + UDK 4/5/12/13/15/16 | sw2=BACK (undo), sw6=FORWARD (redo); UDK: sw1=UDK4, sw5=UDK5, sw0=UDK12, sw4=UDK13, sw3=UDK15, sw7=UDK16 (dispatch via [udk]; port 0) |
+| 0x09 | Display buttons + UDK 1/9 | sw2=UDK1, sw0=UDK9 (sw1 fires alongside UDK9 - ignored); dispatch via [udk], port 0. Remaining sw = DM2000 display selects |
+| 0x0A | BANK ◄/►, CH ◄/► = UDK 2/3/10/11 (manual ch.19) | 0=CH◄/UDK10, 1=BANK◄/UDK2, 2=CH►/UDK11, 3=BANK►/UDK3. Navigation by default; an [udk] entry (key2/3/10/11) overrides that button |
 
 **EQ & routing control**
 | Zone | Meaning | Switches used |
@@ -140,7 +140,7 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 |------|---------|---------------|
 | 0x17 | OVERWRITE section | 0=AUX ON, 1=PAN, 2=FADER, 3=AUX, 4=SURROUND, 5=ON |
 | 0x18 | AUTOMIX mode buttons | 0=TOUCH SENSE, 1=RETURN/READ, 2=RELATIVE, 4=ABORT/UNDO, 5=AUTO-REC/LATCH |
-| 0x19 | AUTOMIX ENABLE + UDK 6-8 | sw2=ENABLE; sw3=UDK6, sw4=UDK7, sw5=UDK8 (fire on all 3 ports) |
+| 0x19 | AUTOMIX ENABLE + UDK 6/7/8/14 | sw2=ENABLE (toggle bypass/read); sw5=UDK6, sw3=UDK7, sw4=UDK8, sw1=UDK14 (broadcast on all 3 ports, deduped on port 0) |
 
 **DEC button (separate zone from INC)**
 | Zone | Meaning | Switches used |
@@ -218,8 +218,7 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 | AUTOMIX ABORT/UNDO | DM2000→host | zone 0x18, sw 4 (all 3 ports) | undo (`IDC_EDIT_UNDO`) | Verified |
 | Scribble strip (ch N) | host→DM2000 | `F0 00 00 66 05 00 10 N <4 chars> F7` (port P) | `SetTrackTitle()` 4-char | Verified |
 | LED counter display | host→DM2000 | see **HUI counter display protocol** section below | position from `format_timestr_pos()` following REAPER transport format | Verified 2026-06-15 |
-| USER DEFINED KEYS (UDK 4/5/6/7/8/13/14) | DM2000→host | zones confirmed - see zone table | custom action via dm2000_keys.ini (dispatcher not yet implemented) | Not implemented |
-| USER DEFINED KEYS (UDK 1/2/3/9/10/11/12/15/16) | DM2000→host | zones unconfirmed - need MIDI-OX capture | custom action via dm2000_keys.ini | Not implemented |
+| USER DEFINED KEYS (UDK 1-16) | DM2000→host | all 16 zones hw-verified 2026-06-16 (full in-order capture) - see zone table | custom action via `[udk]` in dm2000_keys.ini (`Main_OnCommand`) | Verified |
 
 **Pan ring LED values:** 1=hard left, 6=centre, 11=hard right. `B0+(P) 10+(N%8) 0` = ring off.
 
@@ -313,7 +312,11 @@ If only the frame/sub-second digits changed (positions 5–7), only 3 bytes foll
 
 **Implementation note:** the display format (SMPTE, minutes:seconds, measures:beats, etc.)
 is determined by `projectconfig_var_addr(NULL, __g_projectconfig_timemode2)`, with fallback
-to `__g_projectconfig_timemode` - matching csurf_mcu.cpp behaviour. Updated every 100ms.
+to `__g_projectconfig_timemode` - matching csurf_mcu.cpp behaviour. Refreshed on its own timer,
+decoupled from the 100ms meter poll: `[counter] refresh_ms` in dm2000_keys.ini (default 33 ms
+≈ 30 Hz, clamped 20-1000) drives smooth SMPTE frame counting. Only digit positions that changed
+since the last message are transmitted, so a fast refresh adds negligible MIDI traffic and is
+silent when the transport is stopped.
 
 **Verified captures at known playback positions:**
 | Pro Tools display | Data bytes (after `F0 00 00 66 05 00 11`) |
@@ -471,14 +474,16 @@ Tasks:
 - DM2000 scene recall (via PC on GENERAL port) triggers REAPER marker jump
 - Meter bridge shows signal during playback
 
-### Layer 4 - Extended features (future)
+### Layer 4 - Extended features
 
-- EQ parameter control via selected channel knobs
-- Dynamics (compressor/gate) parameter control
-- Sends/aux routing
-- [ ] Surround panner joystick: USB port 4 uses MCS PANNER protocol (manual p.223); V2 firmware only; protocol capture needed; implement after Layer 3 is complete
-- Talkback button integration
-- USER DEFINED KEYS mapping
+- [x] USER DEFINED KEYS dispatch: all 16 UDK buttons (zones hw-verified 2026-06-16 full
+      in-order capture) fire `[udk]` action IDs via `Main_OnCommand`. Zone 0x0A buttons
+      (UDK 2/3/10/11 = BANK ◄/► and CH ◄/►) keep bank/channel navigation unless overridden
+      by an ini entry.
+- [ ] Surround pan control: USB port 4 MCS PANNER (dynamics knobs + joystick, manual p.223);
+      V2 only; drive ReaSurroundPan on the selected track.
+- [ ] Generic FX parameter control via the display parameter knobs (CC 0x48-0x4B).
+- [ ] EQ parameter control via selected-channel knobs; sends/aux routing; talkback.
 
 ### macOS port (complete, hw-verified 2026-06-15)
 

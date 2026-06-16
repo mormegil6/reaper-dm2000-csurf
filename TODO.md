@@ -1,9 +1,5 @@
 # TODO
 
-Tasks tracked here to avoid scrolling chat history.
-
----
-
 ## Hardware / on-site
 
 - [x] **Fader recalibration** - DM2000 built-in fader calibration utility run
@@ -104,13 +100,18 @@ Tasks tracked here to avoid scrolling chat history.
       send PC to DM2000 to recall the matching scene. Requires knowing which port
       is GENERAL; plan to add as optional 5th port in config, or reuse port 4.
 
-- [ ] **USER DEFINED KEYS dispatch** - config dialog has ini path field; the `[locate]`
-      section is now implemented (see above), but the `[udk]` dispatcher that maps UDK
-      button N to a REAPER action ID is not yet written. Format documented in
-      doc/dm2000_keys.ini.example under `[udk]`. Confirmed UDK zones: 4/5/13/14=zone 0x08,
-      6/7/8=zone 0x19. Keys 2/3 duplicate bank navigation (zone 0x0A sw1/sw3) and 10/11
-      duplicate ch navigation (zone 0x0A sw0/sw2) per manual ch.19; zones for
-      1/9/12/15/16 unconfirmed.
+- [x] **USER DEFINED KEYS dispatch** - `[udk]` dispatcher implemented 2026-06-16. key1..key16
+      -> Main_OnCommand(id,0) on press. ALL 16 zones hw-verified 2026-06-16 (full in-order
+      capture, corrected an earlier off-by-one): UDK 1=0x09 sw2, 2=0x0A sw1, 3=0x0A sw3,
+      4=0x08 sw1, 5=0x08 sw5, 6=0x19 sw5, 7=0x19 sw3, 8=0x19 sw4, 9=0x09 sw0(+sw1 companion),
+      10=0x0A sw0, 11=0x0A sw2, 12=0x08 sw0, 13=0x08 sw4, 14=0x19 sw1, 15=0x08 sw3, 16=0x08 sw7.
+      UDK 2/3/10/11 are the BANK ◄/► and CH ◄/► buttons: they keep navigation unless their ini
+      key is set (per-button override fallback). zone 0x19 UDK deduped via port 0 (same proven
+      path as AUTOMIX ENABLE). Hardware-verified working 2026-06-16.
+
+- [x] **HUI counter refresh rate** - LED timecode decoupled from the 100ms meter poll onto its
+      own timer; `[counter] refresh_ms` in dm2000_keys.ini (default 33 ms ≈ 30 Hz, clamped
+      20-1000) for smooth SMPTE frames. Delta-encoding means only changed digits transmit.
 
 - [ ] **EQ / parameter control via CC** - manual appendix confirms EQ ATT (input
       attenuation), EQ ON/OFF, and all faders/pans are accessible as MIDI CC on

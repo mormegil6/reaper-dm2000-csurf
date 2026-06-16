@@ -105,6 +105,9 @@ class CSurf_DM2000 : public IReaperControlSurface
     int m_la_rtz, m_la_end, m_la_loop, m_la_qpunch; // zone 0x0F hw-verified buttons
     int m_la_in, m_la_out, m_la_post;                // zone 0x10 hw-verified buttons
     int m_la_lm[8];                                  // LM1-LM8 locate memory buttons
+    int m_udk[16];                                   // UDK 1-16 action IDs from [udk]; 0 = no action
+    int m_tc_interval;                               // LED counter refresh period (ms); [counter] refresh_ms
+    DWORD m_tc_lastrun;                              // last counter refresh (decoupled from the meter poll)
 
 public:
   CSurf_DM2000(int indev1, int outdev1, int indev2, int outdev2, int indev3, int outdev3, int indev4, int outdev4, const char *iniPath, int *errStats)
@@ -154,6 +157,12 @@ public:
     for (int i = 0; i < 8; i++)
         m_la_lm[i] = 0;
 
+    // UDK 1-16: all no-op until configured via [udk] in dm2000_keys.ini
+    for (int i = 0; i < 16; i++)
+        m_udk[i] = 0;
+    m_tc_interval = 33;   // ~30 Hz default; smooth SMPTE frame display
+    m_tc_lastrun  = 0;
+
     // load [locate] overrides from ini
     char _la_ini[MAX_PATH];
     if (m_ini_path[0])
@@ -175,6 +184,17 @@ public:
             sprintf_s(key, sizeof(key), "lm%d", i + 1);
             m_la_lm[i] = GetPrivateProfileInt("locate", key, m_la_lm[i], _la_ini);
         }
+        // [udk] key1..key16 -> Main_OnCommand action IDs (0 = no action)
+        for (int i = 0; i < 16; i++)
+        {
+            char key[8];
+            sprintf_s(key, sizeof(key), "key%d", i + 1);
+            m_udk[i] = GetPrivateProfileInt("udk", key, m_udk[i], _la_ini);
+        }
+        // [counter] refresh_ms: LED timecode refresh period (clamped 20..1000 ms)
+        m_tc_interval = GetPrivateProfileInt("counter", "refresh_ms", m_tc_interval, _la_ini);
+        if (m_tc_interval < 20) m_tc_interval = 20;
+        else if (m_tc_interval > 1000) m_tc_interval = 1000;
     }
 
     for (int i = 0; i < 4; ++i)
@@ -308,10 +328,18 @@ public:
           }
       }
 
+      // LED counter: refresh faster than the 100ms meter poll for smooth SMPTE
+      // frames. SendCounter() only emits MIDI for digits that actually changed, so
+      // a fast tick costs a string format + compare and stays silent when stopped.
+      if (now - m_tc_lastrun >= (DWORD)m_tc_interval)
+      {
+          m_tc_lastrun = now;
+          SendCounter();
+      }
+
       if (now - m_meter_lastrun >= 100) // unsigned diff also handles timer wrap
       {
           m_meter_lastrun = now;
-          SendCounter();
           m_meter_histpos = (m_meter_histpos + 1) % 3;
           for (int i = 0; i < 32; ++i)
           {
@@ -747,24 +775,42 @@ private:
                 }
             }
         }
-        else if (zone == 0x08 && press && port == 0) // BACK=sw2 FORWARD=sw6 -> undo/redo (hw-verified 2026-06-15)
+        else if (zone == 0x08 && press && port == 0) // BACK/FORWARD (hw-verified) + UDK 4/5/12/13/15/16
         {
-            if (sw == 2)
-                SendMessage(g_hwnd, WM_COMMAND, IDC_EDIT_UNDO, 0);
-            else if (sw == 6)
-                SendMessage(g_hwnd, WM_COMMAND, IDC_EDIT_REDO, 0);
-        }
-        else if (zone == 0x0A && press)          // bank/channel arrows
-        {
-            int amt = 0;
-            switch (sw)
+            switch (sw)                              // full zone hw-verified 2026-06-16 in-order capture
             {
-                case 0: amt = -1; break;         // channel left
-                case 1: amt = -24; break;        // bank left
-                case 2: amt = 1; break;          // channel right
-                case 3: amt = 24; break;         // bank right
+                case 2: SendMessage(g_hwnd, WM_COMMAND, IDC_EDIT_UNDO, 0); break; // BACK -> undo
+                case 6: SendMessage(g_hwnd, WM_COMMAND, IDC_EDIT_REDO, 0); break; // FORWARD -> redo
+                case 1: DispatchUDK(3);  break;  // UDK 4
+                case 5: DispatchUDK(4);  break;  // UDK 5
+                case 0: DispatchUDK(11); break;  // UDK 12
+                case 4: DispatchUDK(12); break;  // UDK 13
+                case 3: DispatchUDK(14); break;  // UDK 15
+                case 7: DispatchUDK(15); break;  // UDK 16
             }
-            if (amt) AdjustBankOffset(amt);
+        }
+        else if (zone == 0x09 && press && port == 0) // UDK 1 (sw2), UDK 9 (sw0; sw1 fires alongside - ignore)
+        {
+            if (sw == 2)      DispatchUDK(0); // UDK 1
+            else if (sw == 0) DispatchUDK(8); // UDK 9
+        }
+        else if (zone == 0x0A && press)          // BANK/CH arrows; also UDK 3/4/10/11
+        {
+            // These four buttons double as UDK 3/4/10/11. An ini [udk] action takes
+            // priority; with no ini entry they keep factory bank/channel navigation.
+            static const int udk_idx[4] = { 9, 1, 10, 2 }; // sw0=UDK10 sw1=UDK2 sw2=UDK11 sw3=UDK3
+            if (sw > 3 || !DispatchUDK(udk_idx[sw]))
+            {
+                int amt = 0;
+                switch (sw)
+                {
+                    case 0: amt = -1; break;     // channel left
+                    case 1: amt = -24; break;    // bank left
+                    case 2: amt = 1; break;      // channel right
+                    case 3: amt = 24; break;     // bank right
+                }
+                if (amt) AdjustBankOffset(amt);
+            }
         }
         else if (zone == 0x0E && !press && (sw == 1 || sw == 2))
         {
@@ -862,12 +908,23 @@ private:
         {
             m_arrow_mode = (m_arrow_mode + 1) % 3;
         }
-        else if (zone == 0x19 && sw == 2 && press && port == 0) // AUTOMIX ENABLE (hw-verified; all 3 ports)
+        else if (zone == 0x19 && press && port == 0) // AUTOMIX ENABLE (sw2) + UDK 6/7/8/14 (broadcast, deduped via port 0)
         {
-            int newMode = (m_auto_mode == 0) ? 1 : 0; // toggle bypass <-> read
-            CSurf_SetAutoMode(newMode, this);
-            m_auto_mode = newMode;
-            SendAutomixLEDs(newMode);
+            switch (sw)
+            {
+                case 2:
+                {
+                    int newMode = (m_auto_mode == 0) ? 1 : 0; // toggle bypass <-> read
+                    CSurf_SetAutoMode(newMode, this);
+                    m_auto_mode = newMode;
+                    SendAutomixLEDs(newMode);
+                    break;
+                }
+                case 5: DispatchUDK(5);  break; // UDK 6
+                case 3: DispatchUDK(6);  break; // UDK 7
+                case 4: DispatchUDK(7);  break; // UDK 8
+                case 1: DispatchUDK(13); break; // UDK 14
+            }
         }
         else if (zone == 0x0C && sw == 2 && press && port == 0) // AUTOMIX REC/WRITE (hw-verified)
         {
@@ -915,6 +972,15 @@ private:
         memset(m_fader_touch, 0, sizeof(m_fader_touch));
         TrackList_UpdateAllExternalSurfaces(); // repaint faders/LEDs for the new bank
         SetTrackListChange();                  // blank scribbles on channels past the last track
+    }
+
+    // Fire a User Defined Key's configured action. idx 0-15 = UDK 1-16.
+    // Returns true if an action was dispatched (used for the zone 0x0A nav fallback).
+    bool DispatchUDK(int idx)
+    {
+        if (idx < 0 || idx >= 16 || !m_udk[idx] || !Main_OnCommand) return false;
+        Main_OnCommand(m_udk[idx], 0);
+        return true;
     }
 };
 

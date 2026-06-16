@@ -136,22 +136,22 @@ lm8 = 40168   ; Go to marker 8
 ; ===========================================================================
 ; [udk] - User Defined Keys (UDK 1-16)
 ;
-; NOTE: the UDK dispatcher is not yet implemented in the plugin.
-;       Entries below are placeholders for a future release.
+; The UDK dispatcher IS implemented. On press, the key's action ID is sent via
+; Main_OnCommand. key1..key16 = UDK 1..16. 0 / omitted = no action.
 ;
-; Zone/switch reference for confirmed UDK button MIDI positions:
-;   UDK  4: zone 0x08 sw1      UDK 13: zone 0x08 sw3
-;   UDK  5: zone 0x08 sw5      UDK 14: zone 0x08 sw7
-;   UDK  6: zone 0x19 sw3
-;   UDK  7: zone 0x19 sw4
-;   UDK  8: zone 0x19 sw5
-;   UDK 1/2/3/9/10/11/12/15/16: zone/sw unconfirmed (capture with MIDI-OX)
+; Zone/switch map (hardware-verified 2026-06-16, full in-order capture; all 16 dispatchable):
+;   UDK  1: zone 0x09 sw2      UDK  9: zone 0x09 sw0
+;   UDK  2: zone 0x0A sw1      UDK 10: zone 0x0A sw0      (BANK ◄ / CH ◄)
+;   UDK  3: zone 0x0A sw3      UDK 11: zone 0x0A sw2      (BANK ► / CH ►)
+;   UDK  4: zone 0x08 sw1      UDK 12: zone 0x08 sw0
+;   UDK  5: zone 0x08 sw5      UDK 13: zone 0x08 sw4
+;   UDK  6: zone 0x19 sw5      UDK 14: zone 0x19 sw1
+;   UDK  7: zone 0x19 sw3      UDK 15: zone 0x08 sw3
+;   UDK  8: zone 0x19 sw4      UDK 16: zone 0x08 sw7
 ;
-; Per manual ch.19 and hardware verification:
-;   UDK  2 = BANK <  (zone 0x0A sw1) - already handled by the csurf
-;   UDK  3 = BANK >  (zone 0x0A sw3) - already handled by the csurf
-;   UDK 10 = CH <    (zone 0x0A sw0) - already handled by the csurf
-;   UDK 11 = CH >    (zone 0x0A sw2) - already handled by the csurf
+; NAVIGATION FALLBACK: UDK 2/3/10/11 are the BANK ◄/► and CH ◄/► buttons. They
+; keep their built-in bank/channel navigation UNLESS you set key2/key3/key10/key11
+; here - then your action overrides navigation on that button.
 ;
 ; Full protocol reference: DESIGN.md "Zone assignments" section.
 ; ===========================================================================
@@ -160,10 +160,27 @@ lm8 = 40168   ; Go to marker 8
 
 ; Suggestions (uncomment and adjust as needed):
 
-; key4  = 40029   ; Undo
-; key5  = 40030   ; Redo
-; key6  = 40022   ; Save project
-; key7  = 40157   ; Insert marker at edit cursor
-; key8  = 0
-; key13 = 0
-; key14 = 0
+; key1  = 40029   ; UDK 1  -> Undo
+; key4  = 40030   ; UDK 4  -> Redo
+; key5  = 40022   ; UDK 5  -> Save project
+; key6  = 40157   ; UDK 6  -> Insert marker at edit cursor
+; key7  = 40173   ; UDK 7  -> Insert marker and prompt for name
+; key8  = 1013    ; UDK 8  -> Toggle metronome
+; key9  = 40029   ; UDK 9
+; key12 = 0       ; UDK 12
+; key2  = 0       ; UDK 2  (set non-zero to override BANK ◄ navigation)
+; key3  = 0       ; UDK 3  (set non-zero to override BANK ► navigation)
+
+
+; ===========================================================================
+; [counter] - LED timecode display
+;
+; refresh_ms = how often the 8-digit LED counter is repainted (20..1000 ms).
+; Default 33 (~30 Hz) gives smooth SMPTE frame counting; only digits that change
+; are actually transmitted, so a fast refresh adds little MIDI traffic. Raise it
+; (e.g. 100) to reduce traffic if you only display minutes:seconds.
+; ===========================================================================
+
+[counter]
+
+; refresh_ms = 33

@@ -158,9 +158,43 @@ out    = 40223  ; set loop end
 
 ## [udk] section - User Defined Keys
 
-The UDK dispatcher is not yet implemented. The `[udk]` section is reserved for
-a future release. Zone/switch assignments for the confirmed UDK buttons are
-documented in `dm2000_keys.ini.example` and in `DESIGN.md`.
+The UDK dispatcher is implemented. Each `keyN = action_id` maps User Defined Key
+N (1-16) to a REAPER action fired via `Main_OnCommand` on press; `0` or an omitted
+key does nothing.
+
+| Key | UDK | Zone/sw | | Key | UDK | Zone/sw |
+|-----|-----|---------|---|-----|-----|---------|
+| `key1` | 1 | 0x09 sw2 | | `key9` | 9 | 0x09 sw0 |
+| `key2` | 2 | 0x0A sw1 (BANK ◄) | | `key10` | 10 | 0x0A sw0 (CH ◄) |
+| `key3` | 3 | 0x0A sw3 (BANK ►) | | `key11` | 11 | 0x0A sw2 (CH ►) |
+| `key4` | 4 | 0x08 sw1 | | `key12` | 12 | 0x08 sw0 |
+| `key5` | 5 | 0x08 sw5 | | `key13` | 13 | 0x08 sw4 |
+| `key6` | 6 | 0x19 sw5 | | `key14` | 14 | 0x19 sw1 |
+| `key7` | 7 | 0x19 sw3 | | `key15` | 15 | 0x08 sw3 |
+| `key8` | 8 | 0x19 sw4 | | `key16` | 16 | 0x08 sw7 |
+
+All 16 buttons are hardware-verified (2026-06-16 full in-order capture) and
+dispatchable.
+
+**Navigation fallback:** UDK 2/3/10/11 are physically the **BANK ◄/►** and **CH
+◄/►** buttons, which move the fader bank by default. They keep that behavior
+*unless* you set the matching key here - then your action overrides navigation on
+that one button. Leave them unset to keep banking.
+
+Zone/switch assignments are also documented in `dm2000_keys.ini.example` and
+`DESIGN.md`.
+
+## [counter] section - LED timecode refresh
+
+`refresh_ms` sets how often the 8-digit LED timecode display repaints (20-1000 ms,
+default 33 ≈ 30 Hz). The default gives smooth SMPTE frame counting; only digits
+that changed are transmitted, so a fast refresh costs little. Raise it (e.g. 100)
+to cut MIDI traffic if you only show minutes:seconds.
+
+```ini
+[counter]
+refresh_ms = 33
+```
 
 ## SWS extension actions
 
