@@ -34,14 +34,13 @@
       the `[surround]` plugin on the selected track; the selected routing button's LED lights via
       port 4 (`BE 00 N` on / `BE 01 N` off). Display/Stereo routing buttons don't transmit.
 
-- [ ] **Remote Meter receive** - manual appendix shows SysEx type 0x21 (Remote Meter) is rx/tx on
-      port 8. NOTE 2026-06-16: the console does not talk back unsolicited - a counter-display value
-      pushed via Bome SendSX updated the display but the DM2000 sent nothing in return (the display
-      path is host->console only). So passive listening won't reveal meters; Remote Meter almost
-      certainly needs the Studio Manager SUBSCRIPTION SysEx sent first
-      (`F0 43 37 3E 06 21 00 <sub> 00 00 18 F7`, sub=0x05 peak) on port 8, THEN capture what streams
-      back. LOW PRIORITY - HUI meter polling already drives the bridge fine; only worth it if polling
-      ever proves too coarse.
+- **Remote Meter receive - NOT PURSUING (parked 2026-06-16).** The idea was to read SysEx type 0x21
+      (Remote Meter) on port 8 and drive the meter bridge by push instead of polling. Finding: the
+      console does not talk back unsolicited - a counter value pushed via Bome SendSX updated the
+      display, but the DM2000 returned nothing (the display path is host->console only). A push feed
+      would require sending the Studio Manager SUBSCRIPTION SysEx first
+      (`F0 43 37 3E 06 21 00 <sub> 00 00 18 F7`, sub=0x05 peak) - untested, and pointless anyway since
+      HUI meter polling already drives the bridge fine. Dropped unless polling ever proves too coarse.
 
 - [x] **Full button zone map** - complete MIDI-OX surface capture done
       2026-06-15 (every button, fader, knob). Raw data: doc/midi-capture-2026-06-15.txt.

@@ -436,9 +436,11 @@ Ch5-8 = EQ ATT/EQ ON; Ch9-16 = surround parameters. Controllable via GENERAL por
 NRPN: parameter number on 62h/63h, data on 06h/26h.
 
 **Remote Meter SysEx type 0x21 (Owner's Manual Appendix C):**
-The DM2000 can push peak meter data to the host on port 8. Studio Manager subscription message
-captured: `F0 43 37 3E 06 21 00 [sub] 00 00 18 F7` (sub=0x00 current, sub=0x05 peak; 0x18=24 ch).
-Not yet implemented on the receive side.
+The DM2000 can push peak meter data to the host on port 8, but only after a Studio Manager
+subscription message: `F0 43 37 3E 06 21 00 [sub] 00 00 18 F7` (sub=0x00 current, sub=0x05 peak;
+0x18=24 ch). NOT PURSUED: the console sends nothing unsolicited (confirmed 2026-06-16 - a pushed
+counter-display value got no reply; the display path is host->console only), and HUI meter polling
+already drives the bridge, so the push feed buys nothing. Parked unless polling proves too coarse.
 
 ---
 
