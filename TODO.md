@@ -122,6 +122,13 @@
       [surround]; confirm ROUTING [6] is one event per press. ReaSurround/ReaSurroundPan
       param 0-4 were scale X/Y/Z + trim + gain in testing, so defaults likely need adjusting.
 
+- [ ] **Generic FX parameter editor** - implemented 2026-06-16. Zone 0x1C: sw0=INSERT/PARAM
+      (toggle edit mode), sw1=ASSIGN (next FX slot), sw6=BYPASS (toggle slot). Parameter knobs
+      1-4 (`B0 48..4B`, port 1) nudge the current 4-param page; page encoder (`B0 4C`) scrolls
+      pages. Knob press/sw2-5 and COMPARE/sw7 are punch-automation stubs. Slot/page console-logged.
+      Knob CCs 0x48-0x4B and page encoder 0x4C hw-confirmed 2026-06-16. NEEDS HW TEST: the 0x4C
+      encoder may emit 2 events per press (observed) - if it double-pages, debounce it.
+
 - [ ] **EQ / parameter control via CC** - manual appendix confirms EQ ATT (input
       attenuation), EQ ON/OFF, and all faders/pans are accessible as MIDI CC on
       the GENERAL port (channels 1-16, CC table on pp. 353-368). Layer 4 feature;

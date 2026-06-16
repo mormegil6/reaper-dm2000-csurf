@@ -116,6 +116,8 @@ GUID *(*GetTrackGUID)(MediaTrack *tr);
 MediaTrack *(*GetSelectedTrack)(void *proj, int seltrackidx);
 int (*TrackFX_GetByName)(MediaTrack *tr, const char *fxname, bool instantiate);
 void (*ShowConsoleMsg)(const char *msg);
+bool (*TrackFX_GetEnabled)(MediaTrack *tr, int fx);
+bool (*TrackFX_SetEnabled)(MediaTrack *tr, int fx, bool en);
 
 
 int *g_config_csurf_rate,*g_config_zoommode;
@@ -246,6 +248,8 @@ REAPER_PLUGIN_DLL_EXPORT int REAPER_PLUGIN_ENTRYPOINT(REAPER_PLUGIN_HINSTANCE hI
   *(void **)&GetSelectedTrack   = (void *)rec->GetFunc("GetSelectedTrack");
   *(void **)&TrackFX_GetByName  = (void *)rec->GetFunc("TrackFX_GetByName");
   *(void **)&ShowConsoleMsg     = (void *)rec->GetFunc("ShowConsoleMsg");
+  *(void **)&TrackFX_GetEnabled = (void *)rec->GetFunc("TrackFX_GetEnabled");
+  *(void **)&TrackFX_SetEnabled = (void *)rec->GetFunc("TrackFX_SetEnabled");
 
 
   rec->Register("csurf",&csurf_bcf_reg);

@@ -141,6 +141,7 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 | 0x17 | OVERWRITE section | 0=AUX ON, 1=PAN, 2=FADER, 3=AUX, 4=SURROUND, 5=ON |
 | 0x18 | AUTOMIX mode buttons | 0=TOUCH SENSE, 1=RETURN/READ, 2=RELATIVE, 4=ABORT/UNDO, 5=AUTO-REC/LATCH |
 | 0x19 | AUTOMIX ENABLE + UDK 6/7/8/14 | sw2=ENABLE (toggle bypass/read); sw5=UDK6, sw3=UDK7, sw4=UDK8, sw1=UDK14 (broadcast on all 3 ports, deduped on port 0) |
+| 0x1C | EFFECTS/PLUG-INS - generic FX parameter editor | sw0=INSERT/PARAM (toggle FX edit mode), sw1=ASSIGN (next FX slot), sw6=BYPASS (toggle FX enabled), sw7=COMPARE (stub), sw2-sw5=knob 1-4 press (punch stub). Page scroll is the 0x4C encoder, not these |
 
 **DEC button (separate zone from INC)**
 | Zone | Meaning | Switches used |
@@ -222,6 +223,9 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 | Dynamics knobs (THRESHOLD/ATTACK/DECAY/RANGE/HOLD) | DM2000→host (port 4) | `BE 10..14 vv` (relative signed) | `[surround]` plugin param on selected track (relative nudge) | Inferred |
 | Surround joystick X / Y | DM2000→host (port 4) | `BE 02 / BE 03 vv` (absolute 0-127) | `[surround]` param_lr / param_front (absolute) | Inferred |
 | ROUTING [6] | DM2000→host (port 4) | `BE 01 06` | toggle surround position/divergence mode (divergence stub) | Inferred |
+| Parameter knobs 1-4 (below display) | DM2000→host | `B0 48..4B vv` (relative signed) | nudge current FX-slot param in FX edit mode (`TrackFX_SetParam`) | Verified |
+| Parameter page encoder | DM2000→host | `B0 4C vv` (relative signed) | FX param page up (+) / down (-) in edit mode | Verified |
+| EFFECTS/PLUG-INS section | DM2000→host | zone 0x1C sw0/1/6 | FX edit mode / next slot / bypass | Verified |
 
 **Pan ring LED values:** 1=hard left, 6=centre, 11=hard right. `B0+(P) 10+(N%8) 0` = ring off.
 
@@ -266,6 +270,18 @@ track; nothing happens if that plugin is not present (it is never auto-inserted)
 - **ROUTING [6]** `BE 01 06` toggles position/divergence mode (divergence is a stub).
 The 5 param indices and the plugin name are ini-configurable; UDK 16 with no `[udk]`
 mapping dumps the selected FX's full parameter list to the REAPER console.
+
+**Generic FX parameter editor (DM2000 → host, port 1):**
+The EFFECTS/PLUG-INS section (zone 0x1C) plus the four parameter knobs and the page
+encoder below the display edit any FX on the selected track:
+- **Parameter knobs 1-4** `B0 48..4B vv` (7-bit signed relative) - nudge params
+  `page*4 + 0..3` of the current FX slot (one step = 0.01 of the normalized range).
+- **Page encoder** `B0 4C vv` (7-bit signed relative) - positive scrolls to the previous
+  4-param page, negative to the next; clamped to the slot's param count.
+- **INSERT/PARAM** (sw0) toggles edit mode (resets to slot 0 / page 0); **ASSIGN** (sw1)
+  cycles FX slots; **BYPASS** (sw6) toggles `TrackFX_SetEnabled` on the slot. The knob
+  presses (sw2-sw5) and COMPARE (sw7) are reserved for punch automation (stub). Current
+  slot/page are logged to the console while mapping.
 
 **Switch/LED feedback (host → DM2000):**
 LEDs use a different CC pair to avoid confusion with the incoming zone-select:
@@ -502,7 +518,10 @@ Tasks:
       are ini-configurable; UDK 16 (unmapped) dumps the selected FX's param list to the console.
       ROUTING [6] toggles position/divergence (divergence is a stub). Hardware test pending;
       param mapping confirmed against the console dump.
-- [ ] Generic FX parameter control via the display parameter knobs (CC 0x48-0x4B).
+- [x] Generic FX parameter editor (EFFECTS/PLUG-INS zone 0x1C + parameter knobs CC 0x48-0x4B
+      + page encoder CC 0x4C, port 1): INSERT/PARAM enters edit mode on the selected track,
+      ASSIGN cycles FX slots, the 4 knobs nudge the current 4-param page, the page encoder
+      scrolls pages, BYPASS toggles the slot. Slot/page logged to console. Hardware test pending.
 - [ ] EQ parameter control via selected-channel knobs; sends/aux routing; talkback.
 
 ### macOS port (complete, hw-verified 2026-06-15)

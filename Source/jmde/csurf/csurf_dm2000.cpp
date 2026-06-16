@@ -112,6 +112,9 @@ class CSurf_DM2000 : public IReaperControlSurface
     int m_surround_param[5];                         // [surround] param indices: front, rear, lr, lfe, vol
     int m_surround_mode;                             // MCS PANNER: 0=position, 1=divergence (stub)
     int m_fx_loglast;                                // last console-logged fx*1000+param (de-spam)
+    bool m_fx_edit;                                  // EFFECTS/PLUG-INS param editor active (zone 0x1C)
+    int m_fx_slot;                                   // current FX slot on the selected track
+    int m_fx_page;                                   // current parameter page (4 knobs per page)
 
 public:
   CSurf_DM2000(int indev1, int outdev1, int indev2, int outdev2, int indev3, int outdev3, int indev4, int outdev4, const char *iniPath, int *errStats)
@@ -174,6 +177,9 @@ public:
     m_surround_param[4] = 4; // vol
     m_surround_mode = 0;
     m_fx_loglast = -1;
+    m_fx_edit = false;
+    m_fx_slot = 0;
+    m_fx_page = 0;
 
     // load [locate] overrides from ini
     char _la_ini[MAX_PATH];
@@ -483,7 +489,12 @@ public:
       memset(m_vol_lastpos, 0xff, sizeof(m_vol_lastpos));
       memset(m_pan_lastpos, 0xff, sizeof(m_pan_lastpos));
   }
-  void OnTrackSelection(MediaTrack *trackid) {}
+  void OnTrackSelection(MediaTrack *trackid)
+  {
+      // FX editor follows the selected track: reset to its first slot / first page
+      m_fx_slot = 0;
+      m_fx_page = 0;
+  }
 
   bool IsKeyDown(int key) { return false; }
 
@@ -766,6 +777,11 @@ private:
 
             m_pan_lasttouch[gch] = timeGetTime();
         }
+        else if (data1 >= 0x48 && data1 <= 0x4C && port == 0) // FX editor: param knobs 1-4 + page arrows
+        {
+            if (data1 == 0x4C) OnFXPage(relStep(data2)); // dedicated page encoder
+            else               OnParamKnob(data1 - 0x48, data2);
+        }
     }
 
     // val: 0x40|sw = press, 0x00|sw = release
@@ -978,6 +994,10 @@ private:
                 SendAutomixLEDs(newMode);
             }
         }
+        else if (zone == 0x1C && press && port == 0) // EFFECTS/PLUG-INS section: generic FX parameter editor
+        {
+            OnFXSwitch(sw);
+        }
     }
 
     void AdjustBankOffset(int amt)
@@ -1125,6 +1145,98 @@ private:
         }
         LogFXParam("surround", tr, fx, param);
         return true;
+    }
+
+    // Parameter knob 1-4 (port 1, CC 0x48-0x4B) -> current FX slot param on this page.
+    void OnParamKnob(int knob, unsigned char data2)
+    {
+        if (!m_fx_edit) return;
+        MediaTrack *tr = GetSelectedTrack ? GetSelectedTrack(NULL, 0) : NULL;
+        if (!tr || !TrackFX_GetCount) return;
+        int n = TrackFX_GetCount(tr);
+        if (m_fx_slot < 0 || m_fx_slot >= n) return;
+
+        int delta = relStep(data2);
+        if (!delta) return;
+
+        int param = m_fx_page * 4 + knob;
+        int np = TrackFX_GetNumParams ? TrackFX_GetNumParams(tr, m_fx_slot) : 0;
+        if (param < 0 || param >= np) return;
+
+        NudgeFXParam(tr, m_fx_slot, param, delta);
+        LogFXParam("param", tr, m_fx_slot, param);
+    }
+
+    // Page encoder (CC 0x4C): dir>0 = previous page (up), dir<0 = next page (down).
+    void OnFXPage(int dir)
+    {
+        if (!m_fx_edit || dir == 0) return;
+        MediaTrack *tr = GetSelectedTrack ? GetSelectedTrack(NULL, 0) : NULL;
+        if (!tr || !TrackFX_GetCount) return;
+        int n = TrackFX_GetCount(tr);
+        if (m_fx_slot < 0 || m_fx_slot >= n) return;
+
+        if (dir > 0)
+        {
+            if (m_fx_page > 0) { m_fx_page--; FXReport(tr); }
+        }
+        else
+        {
+            int np = TrackFX_GetNumParams ? TrackFX_GetNumParams(tr, m_fx_slot) : 0;
+            int maxpage = np > 0 ? (np - 1) / 4 : 0;
+            if (m_fx_page < maxpage) { m_fx_page++; FXReport(tr); }
+        }
+    }
+
+    // Report the current FX slot / page to the console (temporary debugging aid).
+    void FXReport(MediaTrack *tr)
+    {
+        if (!ShowConsoleMsg) return;
+        if (!tr) { ShowConsoleMsg("[DM2000 fx] no selected track\n"); return; }
+        if (!TrackFX_GetCount) return;
+        int n = TrackFX_GetCount(tr);
+        if (n <= 0) { ShowConsoleMsg("[DM2000 fx] selected track has no FX\n"); return; }
+        if (m_fx_slot >= n) m_fx_slot = n - 1;
+        char fxname[128] = "";
+        if (TrackFX_GetFXName) TrackFX_GetFXName(tr, m_fx_slot, fxname, sizeof(fxname));
+        int np = TrackFX_GetNumParams ? TrackFX_GetNumParams(tr, m_fx_slot) : -1;
+        char msg[360];
+        sprintf_s(msg, sizeof(msg), "[DM2000 fx] slot %d/%d '%s', %d params; page %d (params %d-%d)\n",
+                  m_fx_slot, n, fxname, np, m_fx_page, m_fx_page * 4, m_fx_page * 4 + 3);
+        ShowConsoleMsg(msg);
+    }
+
+    // EFFECTS/PLUG-INS button (zone 0x1C) state machine. Page scroll lives on the
+    // dedicated 0x4C arrow encoder, so the knob presses (sw2-sw5) are free for punch.
+    // sw0=INSERT/PARAM, sw1=ASSIGN, sw6=BYPASS, sw7=COMPARE (stub), sw2-sw5=knob press (stub).
+    void OnFXSwitch(int sw)
+    {
+        MediaTrack *tr = GetSelectedTrack ? GetSelectedTrack(NULL, 0) : NULL;
+        switch (sw)
+        {
+            case 0: // INSERT/PARAM (button 8): toggle FX edit mode on the selected track
+                m_fx_edit = !m_fx_edit;
+                if (m_fx_edit) { m_fx_slot = 0; m_fx_page = 0; FXReport(tr); }
+                else if (ShowConsoleMsg) ShowConsoleMsg("[DM2000 fx] edit mode off\n");
+                break;
+            case 1: // ASSIGN (button 5): cycle to next FX slot
+                if (m_fx_edit && tr && TrackFX_GetCount)
+                {
+                    int n = TrackFX_GetCount(tr);
+                    if (n > 0) { m_fx_slot = (m_fx_slot + 1) % n; m_fx_page = 0; FXReport(tr); }
+                }
+                break;
+            case 6: // BYPASS (button 7): toggle enable on the current slot
+                if (m_fx_edit && tr && TrackFX_GetCount && TrackFX_GetEnabled && TrackFX_SetEnabled)
+                {
+                    int n = TrackFX_GetCount(tr);
+                    if (m_fx_slot >= 0 && m_fx_slot < n)
+                        TrackFX_SetEnabled(tr, m_fx_slot, !TrackFX_GetEnabled(tr, m_fx_slot));
+                }
+                break;
+            // sw2-sw5: knob 1-4 press = punch parameter automation (stub)
+            // sw7: COMPARE (button 6) = stub
+        }
     }
 };
 

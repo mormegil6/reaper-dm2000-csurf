@@ -122,6 +122,8 @@ extern bool (*TrackFX_GetFXName)(MediaTrack *tr, int fx, char *buf, int buflen);
 extern MediaTrack *(*GetSelectedTrack)(void *proj, int seltrackidx);
 extern int (*TrackFX_GetByName)(MediaTrack *tr, const char *fxname, bool instantiate);
 extern void (*ShowConsoleMsg)(const char *msg);
+extern bool (*TrackFX_GetEnabled)(MediaTrack *tr, int fx);
+extern bool (*TrackFX_SetEnabled)(MediaTrack *tr, int fx, bool en);
 extern GUID *(*GetTrackGUID)(MediaTrack *tr);
 
 extern int *g_config_csurf_rate,*g_config_zoommode;
