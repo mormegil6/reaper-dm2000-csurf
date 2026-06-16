@@ -169,7 +169,7 @@ Full button/zone/MIDI reference: [DESIGN.md - Button / function / MIDI reference
 
 - [x] **Scene recall** (GENERAL port) - bidirectional, hardware-verified 2026-06-16. See
       [Scene recall](#scene-recall-general-port) below. Full SysEx scene *dump/restore* (an
-      entire scene's contents) is still future work.
+      entire scene's contents) is out of scope - PC recall covers the live workflow.
 - [x] Meter bridge - driven by existing HUI meter messages (Layer 2); no native SysEx needed
 - [ ] (in progress) Channel names via native SysEx (port 8) - format captured 2026-06-12, code
       written; not active until port 8 is wired (`m_midiout8` is NULL). Hardware test confirmed the

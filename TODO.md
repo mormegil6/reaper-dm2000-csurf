@@ -34,10 +34,14 @@
       the `[surround]` plugin on the selected track; the selected routing button's LED lights via
       port 4 (`BE 00 N` on / `BE 01 N` off). Display/Stereo routing buttons don't transmit.
 
-- [ ] **Remote Meter receive** - manual appendix shows SysEx type 0x21 (Remote
-      Meter) is rx/tx on port 8. Capture what the DM2000 sends on port 8 during
-      playback to see if it pushes peak data to the host (would enable meter
-      bridge without polling).
+- [ ] **Remote Meter receive** - manual appendix shows SysEx type 0x21 (Remote Meter) is rx/tx on
+      port 8. NOTE 2026-06-16: the console does not talk back unsolicited - a counter-display value
+      pushed via Bome SendSX updated the display but the DM2000 sent nothing in return (the display
+      path is host->console only). So passive listening won't reveal meters; Remote Meter almost
+      certainly needs the Studio Manager SUBSCRIPTION SysEx sent first
+      (`F0 43 37 3E 06 21 00 <sub> 00 00 18 F7`, sub=0x05 peak) on port 8, THEN capture what streams
+      back. LOW PRIORITY - HUI meter polling already drives the bridge fine; only worth it if polling
+      ever proves too coarse.
 
 - [x] **Full button zone map** - complete MIDI-OX surface capture done
       2026-06-15 (every button, fader, knob). Raw data: doc/midi-capture-2026-06-15.txt.
@@ -140,14 +144,17 @@
       (`B0 4C`, up=next/down=prev, wrapping) scroll pages with a 250ms debounce (arrows fire twice
       per press). Slot/page console-logged.
 
-- [ ] **EQ / parameter control via CC** - manual appendix confirms EQ ATT (input
-      attenuation), EQ ON/OFF, and all faders/pans are accessible as MIDI CC on
-      the GENERAL port (channels 1-16, CC table on pp. 353-368). Layer 4 feature;
-      requires GENERAL port open and a selected-channel UI concept.
+- [ ] **EQ / parameter control via CC** - manual appendix shows EQ ATT, EQ ON/OFF, faders and pans
+      are addressable as MIDI CC on the GENERAL port (channels 1-16, CC table pp. 353-368). OPEN
+      QUESTION (capture first): does turning the SELECTED CHANNEL EQ knobs actually *transmit* CC on
+      the GENERAL port (or port 5/8)? In Pro Tools/HUI mode the dedicated EQ knobs likely drive the
+      console's internal EQ, not the DAW remote layer, so this may emit nothing. If it emits nothing,
+      the path is dead. If it does emit, a dedicated EQ->ReaEQ mapping (real EQ knobs + the console's
+      EQ display) would beat the generic param knobs ergonomically - but it's a sizable Layer-4 feature
+      (16-ch CC decode + a selected-channel-EQ concept + feedback to the console display). The
+      below-display FX parameter editor ALREADY covers EQ editing functionally (assign ReaEQ, use the
+      4 knobs/pages), so this is nice-to-have, not essential. Verdict: capture the GENERAL port while
+      turning EQ knobs; only build if it transmits and the dedicated-knob feel is wanted.
 
 - [x] **macOS port** - cross-platform SWELL build; every release is hardware-verified on
       macOS (universal arm64+x86_64) as well as Windows.
-
-- [ ] **Scene recall — SysEx scene dump/restore** - bidirectional PC recall/scroll is done (above).
-      Remaining: read/write an entire scene's *contents* via SysEx (the Yamaha scene bulk-dump address
-      block is unconfirmed and needs a capture). Lower priority - PC recall covers the live workflow.

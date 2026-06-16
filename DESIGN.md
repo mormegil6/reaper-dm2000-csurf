@@ -539,8 +539,9 @@ Tasks:
         `#SCENE n` scrolls the display only. Default off (drives the desk); forward crossings
         during playback, owning-scene resync on play-start/loop/seek, optional `follow_cursor`
         while stopped. Selected via the config-dialog GENERAL-port dropdown.
-  - [ ] Full SysEx scene dump/restore (read/write an entire scene's contents): separate feature;
-        address block unconfirmed, needs capture.
+  - Full SysEx scene dump/restore (read/write an entire scene's *contents*) is **out of scope** -
+    PC recall/scroll covers the live workflow, the Yamaha scene bulk-dump address block is
+    unconfirmed, and it adds little for REAPER integration. Not planned.
 
 **Test criteria for Layer 3:**
 - Track named "Bass Guitar" shows "Bass Gui" on DM2000 display
@@ -702,8 +703,9 @@ runs on the GENERAL port, not port 8.)
 - **8-char scribble strip names not achievable**: hardware test confirms the display is 4-char wide in DAW mode. Native SysEx pos=4..7 updates console memory but is not visible.
 - **Scene recall - bidirectional, hardware-verified 2026-06-16**: a console recall jumps REAPER to
   the matching marker (receive, default on); `!SCENE`/`#SCENE` markers recall/scroll scenes on the
-  console (send, default off). Runs on a dedicated GENERAL port chosen in the config dialog. Only
-  full SysEx scene *dump/restore* (an entire scene's contents) remains unimplemented.
+  console (send, default off). Runs on a dedicated GENERAL port chosen in the config dialog. Full
+  SysEx scene *dump/restore* (an entire scene's contents) is out of scope - PC recall covers the
+  live workflow.
 - **EQ / send / talkback control not implemented**: queued for Layer 4. (Surround joystick,
   display parameter knobs, and dynamics knobs are implemented in v0.6.)
 
