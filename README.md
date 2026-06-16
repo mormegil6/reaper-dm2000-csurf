@@ -1,4 +1,4 @@
-[![C++](https://img.shields.io/badge/C++-14-blue.svg)]() [![Windows](https://img.shields.io/badge/Windows-x64-0078D4.svg?logo=windows&logoColor=white)]() [![macOS](https://img.shields.io/badge/macOS-arm64%2Fx86__64-000000.svg?logo=apple&logoColor=white)]() [![REAPER](https://img.shields.io/badge/REAPER-6+-darkgreen.svg)]() [![v0.5](https://img.shields.io/badge/version-v0.5-lightgrey.svg)](https://bmroz.eu/projects/dm2000-csurf) [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
+[![C++](https://img.shields.io/badge/C++-14-blue.svg)]() [![Windows](https://img.shields.io/badge/Windows-x64-0078D4.svg?logo=windows&logoColor=white)]() [![macOS](https://img.shields.io/badge/macOS-arm64%2Fx86__64-000000.svg?logo=apple&logoColor=white)]() [![REAPER](https://img.shields.io/badge/REAPER-6+-darkgreen.svg)]() [![v0.6](https://img.shields.io/badge/version-v0.6-lightgrey.svg)](https://bmroz.eu/projects/dm2000-csurf) [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
 
 # reaper_csurf_dm2000 - Yamaha DM2000 control surface for REAPER
 
@@ -172,10 +172,18 @@ Full button/zone/MIDI reference: [DESIGN.md - Button / function / MIDI reference
       scenes 1-99); set GENERAL port to a DAW USB port on the console. PC send and SysEx
       scene dump not yet implemented.
 
-### Layer 4 - future
+### Layer 4 - partial (new in v0.6)
 
-EQ/dynamics parameter control, sends, surround panner joystick, talkback,
-USER DEFINED KEYS. See [DESIGN.md](DESIGN.md).
+- **USER DEFINED KEYS** - all 16 UDK buttons fire configurable REAPER actions
+  via the `[udk]` section of `dm2000_keys.ini`.
+- **Surround pan** - the DYNAMICS knobs and surround joystick (port 4) drive a
+  surround plugin (default ReaSurroundPan) on the selected track, configured via
+  `[surround]`. Hardware test pending.
+- **FX parameter editor** - the EFFECTS/PLUG-INS section plus the parameter knobs
+  and page encoder edit any FX on the selected track. Hardware test pending.
+
+Still to come: EQ parameter control, sends/aux routing, talkback. See
+[DESIGN.md](DESIGN.md).
 
 ## Known limitations
 

@@ -9,7 +9,7 @@ automation modes). Port 8 native SysEx (extended names, meter bridge, scene
 recall send) is partly stubbed and planned for Layer 3 - not yet active.
 No existing tool does this; this is the first open-source DM2000 csurf for REAPER.
 
-Version: v0.5
+Version: v0.6
 Homepage: bmroz.eu/projects/dm2000-csurf
 Repository: `git.pg.edu.pl/p829296` / `github.com/mormegil6`
 License: LGPL v3
