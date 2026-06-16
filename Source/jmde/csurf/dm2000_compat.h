@@ -22,6 +22,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstddef>
+#include <cstdlib>   // atoi (scene-marker / config parsing) - transitive on Win32, explicit here
 
 // MSVC secure-CRT helpers used by the DM2000 code. Every call site passes the
 // buffer size explicitly as the 2nd argument, so the snprintf/bounded-copy

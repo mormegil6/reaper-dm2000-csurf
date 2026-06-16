@@ -5,8 +5,9 @@
 A native REAPER control surface DLL (`reaper_csurf_dm2000`) that gives full
 bidirectional integration between the Yamaha DM2000 digital console and REAPER.
 The DLL speaks HUI on USB ports 1–4 (24 faders, transport, mute/solo/rec-arm,
-automation modes). Port 8 native SysEx (extended names, meter bridge, scene
-recall send) is partly stubbed and planned for Layer 3 - not yet active.
+automation modes). Scene recall runs bidirectionally over a dedicated GENERAL
+port (Layer 3); port 8 native SysEx (extended scribble names, meter bridge) is
+partly stubbed and not yet active.
 No existing tool does this; this is the first open-source DM2000 csurf for REAPER.
 
 Version: v0.6
@@ -351,11 +352,11 @@ F0 00 00 66 05 00 11  [N bytes]  F7   (N = 1–8)
 Bytes cover only the positions that changed since the last message, sent **right-to-left**
 (position 7 first, then 6, ..., down to the leftmost changed position).
 
-**Example - display showing `1:23.626`:**
-Positions 2–7: `1[:]`, `2`, `3[.]`, `6`, `2`, `6`
-Encoded: `0x11 0x02 0x13 0x06 0x02 0x06`
-Sent right-to-left (pos 7→2): `06 02 06 13 02 11`
-Full message: `F0 00 00 66 05 00 11 06 02 06 13 02 11 F7`
+**Example - display showing `4:20.2137`:**
+Positions 1–7: `4[:]`, `2`, `0[.]`, `2`, `1`, `3`, `7`
+Encoded: `0x14 0x02 0x10 0x02 0x01 0x03 0x07`
+Sent right-to-left (pos 7→1): `07 03 01 02 10 02 14`
+Full message: `F0 00 00 66 05 00 11 07 03 01 02 10 02 14 F7`
 
 If only the frame/sub-second digits changed (positions 5–7), only 3 bytes follow the header.
 
@@ -399,15 +400,35 @@ F0 43 1n 3E 06  tt ee pp cc  DD...DD  F7
 
 The DM2000 has a separate GENERAL MIDI port (configurable: `SETUP → MIDI/HOST SETUP → GENERAL`).
 It carries Program Change, CC (EQ ATT, faders, pans), and NRPN independently of the DAW/HUI ports.
+The console will **not** let a GENERAL port share a USB number with a DAW (HUI) port, so it must be
+a separate, otherwise-unused USB port. The plugin therefore opens it as its own MIDI in/out pair,
+chosen via the **GENERAL port** dropdown in the config dialog (separate from the HUI port group);
+"None" leaves scene recall disabled.
 
-**Program Change - scene recall (Owner's Manual ch.18, p.215):**
-Bidirectional: DM2000 sends PC on scene change, and responds to incoming PC to recall a scene.
-Default table (manual p.218): scene N sends PC N (1-indexed - PC 1 = scene 1, PC 2 = scene 2, etc.).
-Both directions use the same mapping.
+**Scene wire format - hardware-captured 2026-06-16 (MIDI-OX on the GENERAL port):**
+The console emits two distinct messages, and they are *not* the same event:
+- **Scroll / display** (every turn of the scene dial, even over empty scenes - does NOT recall):
+  `F0 43 10 3E 06 04 0A 00 00 00 00 00 <scene+1> F7`  (display byte = scene + 1)
+- **Recall** (only when RECALL is pressed on an existing scene):
+  `C0 <scene-1>`  (Program Change, value = scene - 1)
 
-Current implementation: PC receive on any of the 4 DAW HUI ports is handled (scenes 1-99 jump to
-REAPER markers 1-99). The user must set GENERAL to one of the 4 DAW USB ports on the console
-for this to work. PC send (REAPER → DM2000) and full scene dump via SysEx are not yet implemented.
+So for scene N: display byte = N+1 (1..100), Program Change = N-1 (0..98). Scenes 1-99 are user
+scenes; scene 0 is the read-only init scene. (A boundary status message `F0 43 10 3E 7F 10 00 00
+01 02 00 F7` appears at the scene-0 edge; not needed for recall.)
+
+**Implementation (bidirectional, hardware-verified 2026-06-16, `[scene]` in dm2000_keys.ini):**
+- **Receive** (default on): an incoming Program Change recalls scene N=PC+1 and moves the REAPER
+  edit cursor to the project marker *numbered* N (matched by number, since names may repeat - the
+  same jump the Locate Memory buttons make). The scroll SysEx is ignored so it can't double-fire.
+- **Send** (default off): project markers drive the console. `#SCENE n` scrolls the display to
+  scene n (scroll SysEx only); `!SCENE n` scrolls **and** recalls (scroll SysEx + Program Change).
+  The number is the first token after the prefix; trailing text is a free label (`!SCENE 4 Chorus`).
+  During playback every marker the play cursor crosses fires in order; on play-start or a backward
+  jump (loop/seek) the console resyncs to the scene owning the new position. While stopped,
+  `follow_cursor` optionally makes the console track the edit cursor once it settles.
+
+Both directions are inert unless a GENERAL port is selected. Full SysEx scene *dump/restore*
+(reading/writing an entire scene's contents) is a separate feature and is not implemented.
 
 **CC table (Owner's Manual Appendix C, pp.353-368):**
 16 MIDI channels, CC 0-119 per channel. Ch1-4 = input faders/mute/pan for inputs 1-96;
@@ -442,9 +463,11 @@ Also captured: Studio Manager's Remote Meter subscription request (sent to port 
 Bulk Dump types 32–34 = Key Remote, Remote Meter, Remote Counter.
 Send meter data via parameter-change messages to address block for meters.
 
-**Scene recall:**
-`F0 43 10 3E 06 [scene_addr] [scene_number] F7`
-Allows REAPER marker positions to trigger DM2000 scene changes.
+**Scene recall (implemented via the GENERAL port, not port 8):**
+The scene scroll/recall protocol was captured on the GENERAL port - scroll
+`F0 43 10 3E 06 04 0A 00 00 00 00 00 <scene+1> F7`, recall `C0 <scene-1>` - and is wired
+bidirectionally (see **GENERAL MIDI port** above). REAPER marker positions trigger DM2000 scene
+changes via `!SCENE`/`#SCENE` markers; DM2000 recalls jump REAPER to the matching marker.
 
 ---
 
@@ -508,15 +531,16 @@ Tasks:
   - Implemented in `SendTrackTitle()`: sends pos=0..7 on port 8 alongside HUI 4-char names
   - Hardware test result: display shows 4 chars only - scribble strip is physically 4-char wide in DAW mode; native SysEx updates console memory but HUI controls the visible strip
 - [x] Meter bridge - already driven by HUI `A0 ch (side<<4)|level` messages (Layer 2); the DM2000 has no separate channel-strip VU display, so HUI meters ARE the meter bridge. No native SysEx needed.
-- [ ] (in progress) Scene recall:
-  - [x] PC receive: all 99 scenes (bytes 0x00-0x62) jump to REAPER markers 1-99.
-        Wire format is 0-indexed per manual p.370 ("Program number 0-127"):
-        byte 0x00 = PC 1 = Scene 1 → marker 1. UNVERIFIED: some Yamaha devices
-        use 1-indexed bytes; verify with MIDI-OX on the GENERAL port.
-        Requires GENERAL port on the console set to one of the 4 DAW USB ports.
-  - [ ] PC send: REAPER marker → send PC to DM2000 to recall matching scene. Needs a 5th
-        port or reusing port 4; not yet implemented.
-  - [ ] Full SysEx scene dump/restore: address block unconfirmed; needs capture.
+- [x] Scene recall - bidirectional over the GENERAL port, hardware-verified 2026-06-16
+      (wire format captured on the GENERAL port; see "GENERAL MIDI port" in the protocol section):
+  - [x] PC receive: a console scene recall (`C0 scene-1`) jumps REAPER to the marker *numbered*
+        = scene. Default on; ignores the scroll/display SysEx so it can't double-fire.
+  - [x] PC send: `!SCENE n` markers recall scene n on the console (scroll SysEx + `C0 n-1`),
+        `#SCENE n` scrolls the display only. Default off (drives the desk); forward crossings
+        during playback, owning-scene resync on play-start/loop/seek, optional `follow_cursor`
+        while stopped. Selected via the config-dialog GENERAL-port dropdown.
+  - [ ] Full SysEx scene dump/restore (read/write an entire scene's contents): separate feature;
+        address block unconfirmed, needs capture.
 
 **Test criteria for Layer 3:**
 - Track named "Bass Guitar" shows "Bass Gui" on DM2000 display
@@ -640,12 +664,18 @@ int val14 = (int)(DB2SLIDER(VAL2DB(vol)) * 16383.0 / 1000.0 + 0.5);
 
 ## Config string format
 
-Stored as: `in1 out1 in2 out2 in3 out3 in4 out4` (8 integers, MIDI device indices, -1=none)
+Stored as: `in1 out1 in2 out2 in3 out3 in4 out4 genin genout` (10 integers, MIDI device indices,
+-1=none). `genin`/`genout` are the optional GENERAL port for scene recall.
 
-The UI has one control:
-- "Starting port" dropdown: selects 4 consecutive HUI port pairs. If user selects port N: in1=N, out1=N, in2=N+1, out2=N+1, in3=N+2, out3=N+2, in4=N+3, out4=N+3
+The UI has two controls:
+- **Port group** dropdown: selects 4 consecutive HUI port pairs. If user selects port N: in1=N,
+  out1=N, in2=N+1, out2=N+1, in3=N+2, out3=N+2, in4=N+3, out4=N+3.
+- **GENERAL port** dropdown: one arbitrary MIDI input for scene recall (`genin`); its output
+  (`genout`) is matched by name. "None" stores -1/-1 (scene recall disabled).
 
-Note: earlier versions stored a 9th value (sysex_out); it is now ignored on load. The SysEx port (m_midiout8) is reserved for scene recall (Layer 3) and will be re-exposed in the UI when that feature is implemented.
+Backward compatible: an old 8-integer config string parses fine, leaving `genin`/`genout` at -1.
+(An even older 9th value `sysex_out` is no longer used; `m_midiout8` stays NULL - scene recall
+runs on the GENERAL port, not port 8.)
 
 ---
 
@@ -670,10 +700,10 @@ Note: earlier versions stored a 9th value (sysex_out); it is now ignored on load
   alongside Windows. Universal arm64+x86_64 dylib via SWELL Makefile (`Builds/Make/Makefile`).
   See `MACOS_BUILD.md`.
 - **8-char scribble strip names not achievable**: hardware test confirms the display is 4-char wide in DAW mode. Native SysEx pos=4..7 updates console memory but is not visible.
-- **Scene recall partial**: PC receive implemented (scenes 1-99 → REAPER markers 1-99); wire
-  indexing (byte 0x00 → marker 1) is 0-indexed per the code, still unverified on hardware (see
-  TODO). User must set GENERAL port to a DAW USB port on the console. PC send and SysEx
-  scene dump not yet implemented; SysEx address unconfirmed.
+- **Scene recall - bidirectional, hardware-verified 2026-06-16**: a console recall jumps REAPER to
+  the matching marker (receive, default on); `!SCENE`/`#SCENE` markers recall/scroll scenes on the
+  console (send, default off). Runs on a dedicated GENERAL port chosen in the config dialog. Only
+  full SysEx scene *dump/restore* (an entire scene's contents) remains unimplemented.
 - **EQ / send / talkback control not implemented**: queued for Layer 4. (Surround joystick,
   display parameter knobs, and dynamics knobs are implemented in v0.6.)
 

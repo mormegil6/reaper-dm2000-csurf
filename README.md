@@ -95,10 +95,13 @@ WDL clone, `make`, binary verification, install).
 2. In the surface settings, pick the **port group** - with the default console
    setup that is the entry reading `Yamaha DM2000-1 ... Yamaha DM2000-4`.
    The plugin opens 4 consecutive HUI ports from that selection.
-3. The **User Keys file** path is pre-filled with the default `dm2000_keys.ini`
+3. *(Optional)* Pick a **GENERAL port** for scene recall - a separate, unused USB port
+   set as the console's GENERAL Rx/Tx (`SETUP → MIDI/HOST SETUP → GENERAL`). Leave it on
+   "None" if you don't use scene recall. See [Scene recall](#scene-recall-general-port).
+4. The **User Keys file** path is pre-filled with the default `dm2000_keys.ini`
    location. Edit that file to configure Locate section and UDK button actions;
    see [doc/dm2000_keys_guide.md](doc/dm2000_keys_guide.md) for the full reference.
-4. OK.
+5. OK.
 
 <table align="center"><tr>
 <td align="center"><img src="doc/config-dialog.png" alt="Config dialog - Windows" width="320"><br><sub>Windows</sub></td>
@@ -139,8 +142,10 @@ WDL clone, `make`, binary verification, install).
 - [x] REW/FF (zone 0x0E sw1/sw2) support auto-repeat when held (400 ms delay, 80 ms interval), same as cursor arrows.
 - [x] AUTO button (per-channel, zone 0-7 sw4) resets that channel's fader to 0 dB.
 - [x] Scrub wheel speed increased (10x); jog wheel unchanged.
-- [x] Scene recall: DM2000 scenes 1-99 jump to REAPER markers 1-99 via Program
-      Change on the GENERAL port (0-indexed wire format per manual p.370, unverified)
+- [x] Scene recall (bidirectional, hardware-verified 2026-06-16): a DM2000 scene recall
+      jumps REAPER to the matching marker, and `!SCENE`/`#SCENE` markers recall/scroll console
+      scenes - over a dedicated GENERAL port chosen in the config dialog. Optional; see
+      [Scene recall](#scene-recall-general-port) below
 - [x] LED counter display: position sent every 100ms as HUI SysEx. Protocol decoded
       2026-06-15 from Pro Tools loopMIDI capture - delta BCD update, bytes right-to-left,
       each byte `(sep_flag<<4)|digit`. Follows REAPER's transport display format setting
@@ -160,17 +165,16 @@ Full button/zone/MIDI reference: [DESIGN.md - Button / function / MIDI reference
   model in sync.
 - On close, the plugin drives all faders to -inf, then clears meters, LEDs, pan rings, and scribbles.
 
-### Layer 3 - Native SysEx (port 8): partial
+### Layer 3 - extended SysEx: partial
 
-- Port 8 output not yet wired in the config dialog; `m_midiout8` is always NULL.
-  Port 8 support will be re-exposed in the UI when scene recall send is implemented.
-- [ ] (in progress) Channel names via native SysEx - format captured 2026-06-12, code written; not active
-      until port 8 is wired. Hardware test confirmed scribble strip is 4-char wide in DAW
-      mode regardless (HUI controls the visible strip; native SysEx updates internal memory only).
+- [x] **Scene recall** (GENERAL port) - bidirectional, hardware-verified 2026-06-16. See
+      [Scene recall](#scene-recall-general-port) below. Full SysEx scene *dump/restore* (an
+      entire scene's contents) is still future work.
 - [x] Meter bridge - driven by existing HUI meter messages (Layer 2); no native SysEx needed
-- [ ] (in progress) Scene recall: PC receive implemented (DM2000 scene change → REAPER marker jump for
-      scenes 1-99); set GENERAL port to a DAW USB port on the console. PC send and SysEx
-      scene dump not yet implemented.
+- [ ] (in progress) Channel names via native SysEx (port 8) - format captured 2026-06-12, code
+      written; not active until port 8 is wired (`m_midiout8` is NULL). Hardware test confirmed the
+      scribble strip is 4-char wide in DAW mode regardless (HUI controls the visible strip; native
+      SysEx updates internal memory only).
 
 ### Layer 4 - partial (new in v0.6)
 
@@ -185,6 +189,23 @@ Full button/zone/MIDI reference: [DESIGN.md - Button / function / MIDI reference
 Still to come: EQ parameter control, sends/aux routing, talkback. See
 [DESIGN.md](DESIGN.md).
 
+## Scene recall (GENERAL port)
+
+*Optional - does nothing unless you set it up.* Links REAPER project markers to DM2000
+scene memories, both directions, over the console's **GENERAL Rx/Tx port**. That must be a
+separate, unused USB port (the console won't share a DAW port number with GENERAL). Set the
+GENERAL port on the console (`SETUP → MIDI/HOST SETUP → GENERAL`), pick that same port in the
+config dialog's **GENERAL port** dropdown, then enable it in `[scene]` of `dm2000_keys.ini`:
+
+- **Receive** (default on) - recalling a scene on the desk jumps REAPER to the marker
+  *numbered* the same (scene 4 → marker 4; matched by number, since marker names can repeat).
+- **Send** (default off) - markers drive the desk as playback crosses them:
+  - `!SCENE 4 Chorus` → recalls scene 4 (any text after the number is a free label)
+  - `#SCENE 4` → only scrolls the desk's scene display, no recall
+  - `follow_cursor` optionally makes the desk track the edit cursor while stopped
+
+Scenes 1-99. Full reference: [doc/dm2000_keys_guide.md](doc/dm2000_keys_guide.md).
+
 ## Known limitations
 
 - **Port 4 (MCS PANNER) partial** - the surround joystick and dynamics knobs drive a
@@ -195,9 +216,9 @@ Still to come: EQ parameter control, sends/aux routing, talkback. See
   alongside Windows. See [MACOS_BUILD.md](MACOS_BUILD.md).
 - **Scribble strips show 4 characters only** - hardware-verified; the display is
   4-char wide in DAW mode regardless of what native SysEx sends.
-- **Scene recall partial** - PC receive is implemented (DM2000 scene recall sends PC on the
-  GENERAL port → REAPER jumps to the matching marker, scenes 1-99); user must set GENERAL
-  to a DAW USB port. PC send and SysEx scene dump not yet implemented.
+- **Scene recall** - bidirectional and hardware-verified (see [Scene recall](#scene-recall-general-port)),
+  but only PC recall/scroll: full SysEx scene *dump/restore* (reading/writing an entire scene's
+  contents) is not implemented. Needs a GENERAL port set on the console and in the config dialog.
 
 ## License
 

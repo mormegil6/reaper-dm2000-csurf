@@ -8,12 +8,12 @@
       updated to 11-point post-calibration table (-inf, -50..+10). Previous table
       (2026-06-12, 6 points) had systematic offset in -20 to -5 dB range; fixed.
 
-- [ ] **Scene recall — verify GENERAL port** - manual ch.18 confirms Program Change
-      on the GENERAL port recalls DM2000 scenes bidirectionally. On the console:
-      `SETUP → MIDI/HOST SETUP → GENERAL`, set to one of the 4 DAW USB ports
-      (whichever the csurf already opens). PC receive is implemented in code;
-      test by recalling a DM2000 scene and confirming REAPER jumps to the
-      matching marker.
+- [x] **Scene recall — GENERAL port verified 2026-06-16** - captured the wire format on the
+      GENERAL port with MIDI-OX: scroll/display `F0 43 10 3E 06 04 0A 00*5 <scene+1> F7` (fires on
+      every dial turn, even empty scenes) vs. recall `C0 <scene-1>` (only on RECALL). The console
+      recalls on an incoming `C0 <scene-1>`, confirmed on hardware. The GENERAL port is a separate,
+      unused USB port (the console refuses to share a DAW port number) and is selected in the config
+      dialog, not derived from the HUI ports.
 
 - [x] **Transport sw verification** - RTZ, END are zone 0x0F sw0/1; LOOP is zone 0x0F sw3
       (Locate row 2, not transport zone 0x0E). All hw-verified 2026-06-15, code fixed.
@@ -92,14 +92,19 @@
       build/install. doc/dm2000_keys_guide.md added with full action ID reference and
       example configurations.
 
-- [ ] **Scene recall PC indexing verify** - implemented for all 99 scenes using
-      0-indexed wire format (byte 0x00 = Scene 1 → marker 1). Per manual p.370
-      ("Program number 0-127"). UNVERIFIED: test by recalling scenes 1 and 2 and
-      checking which REAPER markers are jumped to; if off by one, flip to 1-indexed.
+- [x] **Scene recall PC indexing — verified 2026-06-16** - receive maps `C0 <scene-1>` → scene N
+      → REAPER marker *numbered* N (matched via EnumProjectMarkers, not the "go to marker NN" actions
+      which only exist for 1-10 and would fire a stray edit). Default on; the scroll SysEx is ignored
+      so a recall can't double-fire. Hardware-confirmed: recalling scene 3/4 on the desk jumps REAPER
+      to markers 3/4.
 
-- [ ] **Scene recall PC send** - REAPER → DM2000: when playback crosses a marker,
-      send PC to DM2000 to recall the matching scene. Requires knowing which port
-      is GENERAL; plan to add as optional 5th port in config, or reuse port 4.
+- [x] **Scene recall PC send — implemented + hw-verified 2026-06-16** - `!SCENE n` markers recall
+      scene n on the desk (scroll SysEx + `C0 n-1`), `#SCENE n` scrolls the display only; number is
+      the first token, trailing text is a free label. Forward crossings during playback; owning-scene
+      resync on play-start / loop wrap / backward seek; optional `follow_cursor` while stopped (0 off /
+      1 recall-on-settle / 2 scroll-only). GENERAL port chosen in the config dialog (10-int config
+      string, backward compatible). Default off. `[scene] send/receive/follow_cursor/marker_prefix/
+      marker_recall` in dm2000_keys.ini.
 
 - [x] **USER DEFINED KEYS dispatch** - `[udk]` dispatcher implemented 2026-06-16. key1..key16
       -> Main_OnCommand(id,0) on press. ALL 16 zones hw-verified 2026-06-16 (full in-order
@@ -143,5 +148,6 @@
 - [x] **macOS port** - cross-platform SWELL build; every release is hardware-verified on
       macOS (universal arm64+x86_64) as well as Windows.
 
-- [ ] **Scene recall full** - basic PC path implemented above; blocked on
-      SysEx for full scene dump/restore and on GENERAL port config for send direction.
+- [ ] **Scene recall — SysEx scene dump/restore** - bidirectional PC recall/scroll is done (above).
+      Remaining: read/write an entire scene's *contents* via SysEx (the Yamaha scene bulk-dump address
+      block is unconfirmed and needs a capture). Lower priority - PC recall covers the live workflow.

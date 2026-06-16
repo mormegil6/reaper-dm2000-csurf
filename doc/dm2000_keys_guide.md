@@ -249,6 +249,49 @@ The selected object's ROUTING button lights to show the selection (and clears wh
 selected track has no panner). For console logging of the param/object changes while
 mapping, set `console = 1` under `[debug]`; otherwise it stays quiet.
 
+## [scene] section - scene recall (GENERAL port)
+
+Links REAPER project markers to DM2000 scene memories, both directions. **Optional and
+inert** unless you (1) pick a **GENERAL port** in the config dialog and (2) enable `send`
+and/or `receive` below.
+
+**The GENERAL port.** The 4 USB ports the plugin uses for HUI are the console's DAW ports.
+Scene recall travels over the console's **GENERAL Rx/Tx** port instead, which must be a
+*different*, unused USB port - the DM2000 won't let a DAW port and a GENERAL port share the
+same number. Set it on the console (`SETUP → MIDI/HOST SETUP → GENERAL`), then choose that
+same MIDI port in the config dialog's **GENERAL port** dropdown ("None" = scene recall off).
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `receive` | `1` (on) | A scene RECALL on the desk jumps REAPER to the marker *numbered* = scene (scene 4 → marker 4). Matched by number, not name (names can repeat). Harmless - it only moves the cursor - and inert without a GENERAL port, so it ships on. |
+| `send` | `0` (off) | As playback crosses a scene marker, REAPER drives the desk's scene section. Off by default because recall physically reloads the console (faders sweep). |
+| `follow_cursor` | `0` | What `send` does while **stopped**: `0` = nothing (timeline only); `1` = when the edit cursor settles (~0.3 s), apply the scene owning that spot, honouring its `#`/`!` intent; `2` = same but scroll the number only, never recall. |
+| `marker_prefix` | `#SCENE` | Marker-name prefix that **scrolls** the desk's scene number (no recall). |
+| `marker_recall` | `!SCENE` | Marker-name prefix that scrolls **and recalls**. |
+
+**Marker naming (send).** The scene number is the first word after the prefix; anything after
+it is a free label for your own use. If no number is given, the marker's own number is used.
+Matching is case-insensitive.
+
+```
+!SCENE 4 Chorus    -> recall scene 4   (the "Chorus" label is ignored)
+#SCENE 12          -> scroll the display to scene 12, no recall
+!SCENE Intro       -> recall the scene matching this marker's number
+```
+
+During playback every scene marker the play cursor crosses fires in order; on play-start or a
+backward jump (loop wrap / seek) the desk resyncs to the scene owning the new position. Scenes
+1-99 are supported (scene 0 is the console's read-only init scene).
+
+```ini
+[scene]
+send          = 0
+receive       = 1
+follow_cursor = 0
+; marker_prefix = #SCENE
+; marker_recall = !SCENE
+```
+
 ## SWS extension actions
 
 If you have the [SWS extension](https://www.sws-extension.org/) installed, its

@@ -124,6 +124,8 @@ extern int (*TrackFX_GetByName)(MediaTrack *tr, const char *fxname, bool instant
 extern void (*ShowConsoleMsg)(const char *msg);
 extern bool (*TrackFX_GetEnabled)(MediaTrack *tr, int fx);
 extern bool (*TrackFX_SetEnabled)(MediaTrack *tr, int fx, bool en);
+extern int (*EnumProjectMarkers)(int idx, bool *isrgnOut, double *posOut, double *rgnendOut, const char **nameOut, int *markrgnindexnumberOut);
+extern void (*SetEditCurPos)(double time, bool moveview, bool seekplay);
 extern GUID *(*GetTrackGUID)(MediaTrack *tr);
 
 extern int *g_config_csurf_rate,*g_config_zoommode;

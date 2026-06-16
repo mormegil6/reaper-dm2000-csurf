@@ -18,6 +18,7 @@
 #define IDC_BTN_EDITFILE                1014
 #define IDC_DM2000_LINK                 1015
 #define IDC_DM2000_INIEXAMPLE           1016
+#define IDC_COMBO_GENERAL               1017
 #define IDC_EDIT1_LBL                   1276
 #define IDC_EDIT2_LBL                   1277
 #define IDC_EDIT2_LBL2                  1278

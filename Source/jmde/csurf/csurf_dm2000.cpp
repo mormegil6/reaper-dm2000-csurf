@@ -121,10 +121,35 @@ class CSurf_DM2000 : public IReaperControlSurface
     int m_fx_slot;                                   // current FX slot on the selected track (FX editor)
     int m_fx_page;                                   // current parameter page (4 knobs per page)
     DWORD m_fx_page_last;                            // last page-arrow event (debounce; arrows fire 0x4C twice)
+    int m_general_in, m_general_out;                 // GENERAL port device indices (-1 = none/disabled)
+    midi_Input *m_general_midiin;                    // GENERAL port input (scene-recall PC receive)
+    midi_Output *m_general_midiout;                  // GENERAL port output (scene-recall PC send)
+    bool m_scene_send;                               // [scene] send: #SCENE/!SCENE marker -> drive console
+    bool m_scene_receive;                            // [scene] receive: DM2000 scene PC -> marker jump
+    char m_scene_prefix[32];                         // [scene] marker_prefix: set scene number only (default "#SCENE")
+    char m_scene_recall_prefix[32];                  // [scene] marker_recall: set number AND recall (default "!SCENE")
+    int m_scene_follow;                              // [scene] follow_cursor: stopped send 0=off 1=recall-on-settle 2=scroll-only
+    double m_scene_lastpos;                          // last play position, for marker-cross detection (playback)
+    double m_scene_cursorpos;                        // last edit-cursor position seen while stopped (settle detect)
+    DWORD m_scene_cursortime;                        // when the stopped cursor last moved (settle timer)
+    int m_scene_applied;                             // last scene number driven to the console (de-dupe re-fires)
 
 public:
-  CSurf_DM2000(int indev1, int outdev1, int indev2, int outdev2, int indev3, int outdev3, int indev4, int outdev4, const char *iniPath, int *errStats)
+  CSurf_DM2000(int indev1, int outdev1, int indev2, int outdev2, int indev3, int outdev3, int indev4, int outdev4, int genIn, int genOut, const char *iniPath, int *errStats)
   {
+    m_general_in = genIn;
+    m_general_out = genOut;
+    m_general_midiin = NULL;
+    m_general_midiout = NULL;
+    m_scene_send = false;
+    m_scene_receive = true;  // documented default ON; matches the ini default even when no ini path resolves (macOS)
+    strcpy_s(m_scene_prefix, sizeof(m_scene_prefix), "#SCENE");
+    strcpy_s(m_scene_recall_prefix, sizeof(m_scene_recall_prefix), "!SCENE");
+    m_scene_follow = 0;
+    m_scene_lastpos = -1.0;
+    m_scene_cursorpos = -1.0;
+    m_scene_cursortime = 0;
+    m_scene_applied = -1;
     m_midi_in_devs[0] = indev1;
     m_midi_out_devs[0] = outdev1;
     m_midi_in_devs[1] = indev2;
@@ -237,6 +262,18 @@ public:
         m_surround_stride   = GetPrivateProfileInt("surround", "stride",  m_surround_stride,  _la_ini);
         m_surround_objects  = GetPrivateProfileInt("surround", "objects", m_surround_objects, _la_ini);
         m_console_log = GetPrivateProfileInt("debug", "console", 0, _la_ini) != 0;
+
+        // [scene] scene recall via the GENERAL port (only active if a GENERAL port is set).
+        // receive defaults ON (harmless - just moves the cursor, and inert without a
+        // GENERAL port); send defaults OFF (it actively drives the console's scenes).
+        m_scene_send    = GetPrivateProfileInt("scene", "send",    0, _la_ini) != 0;
+        m_scene_receive = GetPrivateProfileInt("scene", "receive", 1, _la_ini) != 0;
+        m_scene_follow  = GetPrivateProfileInt("scene", "follow_cursor", 0, _la_ini);
+        char sbuf[32];
+        GetPrivateProfileString("scene", "marker_prefix", m_scene_prefix, sbuf, sizeof(sbuf), _la_ini);
+        if (sbuf[0]) strcpy_s(m_scene_prefix, sizeof(m_scene_prefix), sbuf);
+        GetPrivateProfileString("scene", "marker_recall", m_scene_recall_prefix, sbuf, sizeof(sbuf), _la_ini);
+        if (sbuf[0]) strcpy_s(m_scene_recall_prefix, sizeof(m_scene_recall_prefix), sbuf);
     }
 
     for (int i = 0; i < 4; ++i)
@@ -255,6 +292,20 @@ public:
     }
 
     m_midiout8 = NULL;
+
+    // GENERAL port (arbitrary USB port set as the console's GENERAL Rx/Tx) - opened
+    // separately from the 4 HUI ports, only when configured, for scene recall.
+    // Deliberately NOT reported via errStats like the HUI ports: scene recall is an
+    // optional add-on, so a busy/absent GENERAL port silently disables just that
+    // feature (all call sites are NULL-guarded) instead of flagging the whole surface.
+    if (m_general_in >= 0)
+    {
+        m_general_midiin = CreateMIDIInput(m_general_in);
+        if (m_general_midiin) m_general_midiin->start();
+    }
+    if (m_general_out >= 0)
+        m_general_midiout = CreateThreadedMIDIOutput(CreateMIDIOutput(m_general_out, false, NULL));
+
     SendCounter(true); // blank counter display and sync m_tc_lastbuf to known state
   }
 
@@ -269,9 +320,9 @@ public:
   {
     static char configtmp[512];
     if (m_ini_path[0])
-        sprintf(configtmp, "%d %d %d %d %d %d %d %d|%s", m_midi_in_devs[0], m_midi_out_devs[0], m_midi_in_devs[1], m_midi_out_devs[1], m_midi_in_devs[2], m_midi_out_devs[2], m_midi_in_devs[3], m_midi_out_devs[3], m_ini_path);
+        sprintf(configtmp, "%d %d %d %d %d %d %d %d %d %d|%s", m_midi_in_devs[0], m_midi_out_devs[0], m_midi_in_devs[1], m_midi_out_devs[1], m_midi_in_devs[2], m_midi_out_devs[2], m_midi_in_devs[3], m_midi_out_devs[3], m_general_in, m_general_out, m_ini_path);
     else
-        sprintf(configtmp, "%d %d %d %d %d %d %d %d", m_midi_in_devs[0], m_midi_out_devs[0], m_midi_in_devs[1], m_midi_out_devs[1], m_midi_in_devs[2], m_midi_out_devs[2], m_midi_in_devs[3], m_midi_out_devs[3]);
+        sprintf(configtmp, "%d %d %d %d %d %d %d %d %d %d", m_midi_in_devs[0], m_midi_out_devs[0], m_midi_in_devs[1], m_midi_out_devs[1], m_midi_in_devs[2], m_midi_out_devs[2], m_midi_in_devs[3], m_midi_out_devs[3], m_general_in, m_general_out);
     return configtmp;
   }
 
@@ -319,6 +370,10 @@ public:
       }
       delete m_midiout8;
       m_midiout8 = nullptr;
+      delete m_general_midiout;
+      m_general_midiout = nullptr;
+      delete m_general_midiin;
+      m_general_midiin = nullptr;
   }
 
   void Run()
@@ -334,6 +389,22 @@ public:
               while ((evts = list->EnumItems(&l))) OnMIDIEvent(evts, i);
           }
       }
+
+      // GENERAL port: receive console scene recalls (Program Change) and jump to the
+      // matching project marker. The scroll/display SysEx the console also emits is
+      // ignored -- only the PC means "recall". scene N <-> marker N (PC = scene-1).
+      if (m_general_midiin)
+      {
+          m_general_midiin->SwapBufs(timeGetTime());
+          int gl = 0;
+          MIDI_eventlist *glist = m_general_midiin->GetReadBuf();
+          MIDI_event_t *gevt;
+          while ((gevt = glist->EnumItems(&gl)))
+              if (m_scene_receive && (gevt->midi_message[0] & 0xF0) == 0xC0)
+                  GotoSceneMarker(gevt->midi_message[1] + 1); // PC n -> scene n+1
+      }
+
+      PollSceneMarkers(); // GENERAL port send: drive the console as playback crosses #SCENE/!SCENE markers
 
       DWORD now = timeGetTime();
 
@@ -675,6 +746,168 @@ private:
         m_midiout8->SendMsg(msg, -1);
     }
 
+    // ---- Scene recall over the GENERAL port -------------------------------------
+    // case-insensitive prefix test with a trailing word boundary, so "#SCENERY" does
+    // not match "#SCENE". On a match, *out_rest points just past the prefix.
+    static bool MatchScenePrefix(const char *name, const char *prefix, const char **out_rest)
+    {
+        if (!prefix || !prefix[0]) return false;
+        int pl = (int)strlen(prefix);
+        if (strnicmp(name, prefix, pl) != 0) return false;
+        char nx = name[pl];
+        if (nx != 0 && nx != ' ' && nx != '\t' && !(nx >= '0' && nx <= '9')) return false;
+        *out_rest = name + pl;
+        return true;
+    }
+
+    // Match a marker name against the two scene prefixes. The scene number is the
+    // first token after the prefix; if it is absent or non-numeric, the marker's own
+    // number (mnum) is used. Anything after the number is a free label and ignored,
+    // e.g. "!SCENE 4 Chorus" -> recall scene 4. Returns false for non-scene markers.
+    bool ParseSceneMarker(const char *name, int mnum, int *scene, bool *recall)
+    {
+        if (!name) return false;
+        const char *rest = NULL;
+        if      (MatchScenePrefix(name, m_scene_recall_prefix, &rest)) *recall = true;
+        else if (MatchScenePrefix(name, m_scene_prefix,        &rest)) *recall = false;
+        else return false;
+        while (*rest == ' ' || *rest == '\t') ++rest;
+        *scene = (*rest >= '0' && *rest <= '9') ? atoi(rest) : mnum;
+        return true;
+    }
+
+    // Scroll/display message: sets the console's pending scene number WITHOUT
+    // recalling. Mirrors what the DM2000 emits while turning its scene dial:
+    //   F0 43 10 3E 06 04 0A 00 00 00 00 00 <scene+1> F7   (hw-captured 2026-06-16)
+    void SendSceneDisplay(int scene)
+    {
+        if (!m_general_midiout || scene < 0 || scene > 99) return;
+        unsigned char sx[14] = { 0xF0, 0x43, 0x10, 0x3E, 0x06, 0x04, 0x0A,
+                                 0x00, 0x00, 0x00, 0x00, 0x00,
+                                 (unsigned char)(scene + 1), 0xF7 };
+        char buf[sizeof(MIDI_event_t) + 14];
+        MIDI_event_t *msg = (MIDI_event_t *)buf;
+        msg->frame_offset = -1;
+        msg->size = 14;
+        memcpy(msg->midi_message, sx, 14);
+        m_general_midiout->SendMsg(msg, -1);
+    }
+
+    // Recall: the DM2000 emits Program Change (scene-1) when RECALL is pressed, so we
+    // send the same to make the console load the scene. scenes 1-99 (PC 0-98).
+    void SendSceneRecall(int scene)
+    {
+        if (!m_general_midiout || scene < 1 || scene > 99) return;
+        m_general_midiout->Send(0xC0, (unsigned char)(scene - 1), 0, -1);
+    }
+
+    // Receive: a console scene recall moves the REAPER cursor to the project marker
+    // whose NUMBER matches the scene (names may repeat, so we match by number -- the
+    // same target the Locate Memory "go to marker N" buttons use). No-op if no such
+    // marker exists, so an unmapped scene recall never fires a stray action.
+    void GotoSceneMarker(int scene)
+    {
+        if (scene < 1 || scene > 99 || !EnumProjectMarkers || !SetEditCurPos) return;
+        int idx = 0;
+        bool isrgn; double mpos; const char *mname; int mnum;
+        while ((idx = EnumProjectMarkers(idx, &isrgn, &mpos, NULL, &mname, &mnum)))
+            if (!isrgn && mnum == scene)
+            {
+                SetEditCurPos(mpos, true, (GetPlayState() & 1) != 0); // seek too if playing
+                // Record the scene the console just recalled so the send/follow de-dup
+                // won't echo this same recall straight back to the desk a moment later.
+                m_scene_applied = scene;
+                return;
+            }
+    }
+
+    // Scene that owns a timeline position: the latest scene marker at or before it
+    // (false if none). Shared by the playback resync and the stopped follow path.
+    bool OwningScene(double atpos, int *scene, bool *recall)
+    {
+        int own = -1; bool rc = false; double best = -1.0;
+        int idx = 0;
+        bool isrgn; double mpos; const char *mname; int mnum;
+        while ((idx = EnumProjectMarkers(idx, &isrgn, &mpos, NULL, &mname, &mnum)))
+        {
+            if (isrgn || mpos > atpos) continue;
+            int s; bool r;
+            if (ParseSceneMarker(mname, mnum, &s, &r) && mpos >= best) { best = mpos; own = s; rc = r; }
+        }
+        if (own < 0) return false;
+        *scene = own; *recall = rc; return true;
+    }
+
+    // Send: drive the console's scene section from project markers. "#SCENE n" scrolls
+    // the display to scene n; "!SCENE n" scrolls AND recalls. During playback every
+    // marker the play cursor crosses forward fires in order; on play-start or a backward
+    // jump (loop wrap / seek) we resync to the scene owning the new position. While
+    // stopped, [scene] follow_cursor governs: 0 = nothing; 1 = once the edit cursor
+    // settles, apply the owning scene (honouring that marker's #/! intent); 2 = same but
+    // scroll-only, never recalls. m_scene_applied de-dupes so the desk is driven only when
+    // the scene actually changes -- no snapshot reload on every loop pass or nudge.
+    void PollSceneMarkers()
+    {
+        if (!m_scene_send || !m_general_midiout || !EnumProjectMarkers)
+        {
+            m_scene_lastpos = -1.0; m_scene_applied = -1; return;
+        }
+
+        if (GetPlayState() & 1)
+        {
+            double pos = GetPlayPosition();
+            if (m_scene_lastpos < 0.0 || pos < m_scene_lastpos)
+            {
+                // play just started, or the play cursor jumped backwards (loop wrap or
+                // seek): resync to the scene that owns the new position, de-duped.
+                int scene; bool recall;
+                if (OwningScene(pos, &scene, &recall) && scene != m_scene_applied)
+                {
+                    SendSceneDisplay(scene);
+                    if (recall) SendSceneRecall(scene);
+                    m_scene_applied = scene;
+                }
+            }
+            else if (pos > m_scene_lastpos)
+            {
+                // forward crossing: fire every scene marker in (lastpos, pos], in order
+                int idx = 0;
+                bool isrgn; double mpos; const char *mname; int mnum;
+                while ((idx = EnumProjectMarkers(idx, &isrgn, &mpos, NULL, &mname, &mnum)))
+                {
+                    if (isrgn || mpos <= m_scene_lastpos || mpos > pos) continue;
+                    int scene; bool recall;
+                    if (ParseSceneMarker(mname, mnum, &scene, &recall))
+                    {
+                        SendSceneDisplay(scene);
+                        if (recall) SendSceneRecall(scene);
+                        m_scene_applied = scene; // carry into stop so we don't re-recall on stop
+                    }
+                }
+            }
+            m_scene_lastpos = pos;
+            m_scene_cursorpos = -1.0; // re-arm the stopped settle timer
+            return;
+        }
+
+        // stopped
+        m_scene_lastpos = -1.0;            // re-arm playback crossing detection
+        if (m_scene_follow == 0) return;
+
+        double cur = GetCursorPosition();
+        DWORD now = timeGetTime();
+        if (cur != m_scene_cursorpos) { m_scene_cursorpos = cur; m_scene_cursortime = now; return; }
+        if (now - m_scene_cursortime < 300) return; // wait for the cursor to settle
+
+        int scene; bool recall;
+        if (OwningScene(cur, &scene, &recall) && scene != m_scene_applied)
+        {
+            m_scene_applied = scene;
+            SendSceneDisplay(scene);
+            if (m_scene_follow == 1 && recall) SendSceneRecall(scene);
+        }
+    }
+
     // host->surface switch LED: zone select on 0x0C, switch|state on 0x2C
     void SendChannelLED(int id, int sw, bool state)
     {
@@ -728,19 +961,8 @@ private:
         unsigned char data1  = evt->midi_message[1];
         unsigned char data2  = evt->midi_message[2];
 
-        // Program Change on any port: DM2000 GENERAL port scene recall.
-        // User must assign GENERAL to one of the 4 DAW USB ports on the console.
-        // Wire format is 0-indexed (manual p.370: "Program number 0-127"):
-        //   byte 0x00 = PC 1 = Scene 1 -> marker 1
-        //   byte 0x62 = PC 99 = Scene 99 -> marker 99
-        //   byte 0x63 = PC 100 = Scene 0 (no marker jump)
-        // UNVERIFIED: some Yamaha devices use 1-indexed bytes; test with MIDI-OX.
-        if (status == 0xC0)
-        {
-            if (data1 <= 98)
-                SendMessage(g_hwnd, WM_COMMAND, ID_GOTO_MARKER1 + data1, 0);
-            return;
-        }
+        // Scene recall (Program Change) arrives on the dedicated GENERAL port, polled
+        // separately in Run() -- the 4 DAW/HUI ports here carry no scene traffic.
 
         // HUI keepalive ping - must echo back or surface goes offline
         if (status == 0x90 && data1 == 0x00 && data2 == 0x7F)
@@ -1417,16 +1639,19 @@ static void GetIniPath(char *buf, int bufsz)
 #endif
 }
 
-static void parseParms(const char *str, int parms[8], char *iniPath, int iniPathSz)
+// parms[0..7] = 4 HUI in/out device pairs; parms[8]/parms[9] = GENERAL in/out
+// (-1 = none). The GENERAL pair is appended for scene recall; older 8-int config
+// strings parse fine and leave it at -1 (disabled).
+static void parseParms(const char *str, int parms[10], char *iniPath, int iniPathSz)
 {
-    for (int i = 0; i < 8; ++i) parms[i] = -1;
+    for (int i = 0; i < 10; ++i) parms[i] = -1;
     if (iniPath) iniPath[0] = '\0';
 
     const char *p = str;
     if (p)
     {
         int x = 0;
-        while (x < 8 && *p)
+        while (x < 10 && *p)
         {
             while (*p == ' ') p++;
             if (*p == '|' || ((*p < '0' || *p > '9') && *p != '-')) break;
@@ -1440,11 +1665,11 @@ static void parseParms(const char *str, int parms[8], char *iniPath, int iniPath
 
 static IReaperControlSurface *createFunc(const char *type_string, const char *configString, int *errStats)
 {
-    int parms[8];
+    int parms[10];
     char iniPath[MAX_PATH] = "";
     parseParms(configString, parms, iniPath, sizeof(iniPath));
 
-    return new CSurf_DM2000(parms[0], parms[1], parms[2], parms[3], parms[4], parms[5], parms[6], parms[7], iniPath, errStats);
+    return new CSurf_DM2000(parms[0], parms[1], parms[2], parms[3], parms[4], parms[5], parms[6], parms[7], parms[8], parms[9], iniPath, errStats);
 }
 
 static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -1453,7 +1678,7 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         case WM_INITDIALOG:
         {
-            int parms[8];
+            int parms[10];
             char iniPath[MAX_PATH] = "";
             parseParms((const char *)lParam, parms, iniPath, sizeof(iniPath));
             if (!iniPath[0]) GetIniPath(iniPath, sizeof(iniPath));
@@ -1473,6 +1698,22 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                     int a = SendDlgItemMessage(hwndDlg, IDC_COMBO_PORTGROUP, CB_ADDSTRING, 0, (LPARAM)buf);
                     SendDlgItemMessage(hwndDlg, IDC_COMBO_PORTGROUP, CB_SETITEMDATA, a, j);
                     if (j == parms[0]) SendDlgItemMessage(hwndDlg, IDC_COMBO_PORTGROUP, CB_SETCURSEL, a, 0);
+                }
+            }
+
+            // GENERAL port combo: a single arbitrary MIDI input (the console's GENERAL
+            // Rx/Tx port) for optional scene recall. "None" leaves it disabled.
+            int gx = SendDlgItemMessage(hwndDlg, IDC_COMBO_GENERAL, CB_ADDSTRING, 0, (LPARAM)"None");
+            SendDlgItemMessage(hwndDlg, IDC_COMBO_GENERAL, CB_SETITEMDATA, gx, -1);
+            SendDlgItemMessage(hwndDlg, IDC_COMBO_GENERAL, CB_SETCURSEL, gx, 0);
+            for (int j = 0; j < n; ++j)
+            {
+                char nm[256];
+                if (GetMIDIInputName(j, nm, sizeof(nm)))
+                {
+                    int a = SendDlgItemMessage(hwndDlg, IDC_COMBO_GENERAL, CB_ADDSTRING, 0, (LPARAM)nm);
+                    SendDlgItemMessage(hwndDlg, IDC_COMBO_GENERAL, CB_SETITEMDATA, a, j);
+                    if (j == parms[8]) SendDlgItemMessage(hwndDlg, IDC_COMBO_GENERAL, CB_SETCURSEL, a, 0);
                 }
             }
 
@@ -1561,7 +1802,7 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
         case WM_USER + 1024:
             if (wParam > 1 && lParam)
             {
-                char tmp[MAX_PATH + 64];
+                char tmp[MAX_PATH + 128];
 
                 int indevs[4] = { -1, -1, -1, -1 }, outdevs[4] = { -1, -1, -1, -1 };
                 int start = -1;
@@ -1596,12 +1837,35 @@ static WDL_DLGRET dlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                     }
                 }
 
+                // GENERAL port: the selected MIDI input index; its output is located
+                // by name (output list is enumerated separately from inputs).
+                int genin = -1, genout = -1;
+                int gr = SendDlgItemMessage(hwndDlg, IDC_COMBO_GENERAL, CB_GETCURSEL, 0, 0);
+                if (gr != CB_ERR) genin = SendDlgItemMessage(hwndDlg, IDC_COMBO_GENERAL, CB_GETITEMDATA, gr, 0);
+                if (genin >= 0)
+                {
+                    char gname[256];
+                    if (GetMIDIInputName(genin, gname, sizeof(gname)))
+                    {
+                        int nout = GetNumMIDIOutputs();
+                        for (int j = 0; j < nout; ++j)
+                        {
+                            char outname[256];
+                            if (GetMIDIOutputName(j, outname, sizeof(outname)) && !strcmp(outname, gname))
+                            {
+                                genout = j;
+                                break;
+                            }
+                        }
+                    }
+                }
+
                 char iniPath[MAX_PATH] = "";
                 GetDlgItemTextA(hwndDlg, IDC_EDIT_INIPATH, iniPath, sizeof(iniPath));
                 if (iniPath[0])
-                    sprintf(tmp, "%d %d %d %d %d %d %d %d|%s", indevs[0], outdevs[0], indevs[1], outdevs[1], indevs[2], outdevs[2], indevs[3], outdevs[3], iniPath);
+                    sprintf(tmp, "%d %d %d %d %d %d %d %d %d %d|%s", indevs[0], outdevs[0], indevs[1], outdevs[1], indevs[2], outdevs[2], indevs[3], outdevs[3], genin, genout, iniPath);
                 else
-                    sprintf(tmp, "%d %d %d %d %d %d %d %d", indevs[0], outdevs[0], indevs[1], outdevs[1], indevs[2], outdevs[2], indevs[3], outdevs[3]);
+                    sprintf(tmp, "%d %d %d %d %d %d %d %d %d %d", indevs[0], outdevs[0], indevs[1], outdevs[1], indevs[2], outdevs[2], indevs[3], outdevs[3], genin, genout);
                 lstrcpyn((char *)lParam, tmp, wParam);
             }
         break;

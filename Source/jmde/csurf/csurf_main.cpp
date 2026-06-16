@@ -118,6 +118,8 @@ int (*TrackFX_GetByName)(MediaTrack *tr, const char *fxname, bool instantiate);
 void (*ShowConsoleMsg)(const char *msg);
 bool (*TrackFX_GetEnabled)(MediaTrack *tr, int fx);
 bool (*TrackFX_SetEnabled)(MediaTrack *tr, int fx, bool en);
+int (*EnumProjectMarkers)(int idx, bool *isrgnOut, double *posOut, double *rgnendOut, const char **nameOut, int *markrgnindexnumberOut);
+void (*SetEditCurPos)(double time, bool moveview, bool seekplay);
 
 
 int *g_config_csurf_rate,*g_config_zoommode;
@@ -250,6 +252,8 @@ REAPER_PLUGIN_DLL_EXPORT int REAPER_PLUGIN_ENTRYPOINT(REAPER_PLUGIN_HINSTANCE hI
   *(void **)&ShowConsoleMsg     = (void *)rec->GetFunc("ShowConsoleMsg");
   *(void **)&TrackFX_GetEnabled = (void *)rec->GetFunc("TrackFX_GetEnabled");
   *(void **)&TrackFX_SetEnabled = (void *)rec->GetFunc("TrackFX_SetEnabled");
+  *(void **)&EnumProjectMarkers = (void *)rec->GetFunc("EnumProjectMarkers");
+  *(void **)&SetEditCurPos      = (void *)rec->GetFunc("SetEditCurPos");
 
 
   rec->Register("csurf",&csurf_bcf_reg);

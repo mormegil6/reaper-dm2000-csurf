@@ -245,3 +245,69 @@ objects     = 0
 [debug]
 
 console = 0
+
+
+; ===========================================================================
+; [scene] - DM2000 scene recall via the GENERAL port (OPTIONAL, off by default)
+;
+; This links REAPER project markers to DM2000 scene memories, both ways. It is
+; entirely optional and does nothing unless you (1) pick a GENERAL port in the
+; control-surface settings dialog and (2) turn on send and/or receive below.
+;
+; THE GENERAL PORT
+;   The 4 USB ports the plugin uses for HUI are the console's DAW (Pro Tools)
+;   ports. Scene recall instead travels over the console's GENERAL Rx/Tx port,
+;   which MUST be a different USB port - the DM2000 will not let a DAW port and
+;   a GENERAL port share the same number. Set the GENERAL Rx/Tx port on the
+;   console (DISPLAY ACCESS [MIDI] > "Setup"), then choose that same MIDI port
+;   in the "GENERAL port" dropdown of the control-surface settings dialog. Leave
+;   the dropdown on "None" to disable scene recall completely.
+;
+; receive  (default 1 = on)
+;   A scene RECALL on the console moves the REAPER edit cursor to the project
+;   marker whose NUMBER matches the scene: scene N -> marker numbered N (the
+;   console sends Program Change N-1; the scroll/display messages it also sends
+;   are ignored). Matching is by number, not name, since marker names may repeat
+;   - this is the same "go to marker N" jump the Locate Memory buttons perform,
+;   just triggered by a console scene recall instead of a button press. Harmless
+;   (it only moves the cursor) and inert unless a GENERAL port is set, so it is
+;   on by default; set receive = 0 to disable.
+;
+; send  (default 0 = off)
+;   As playback crosses a scene marker (named below), REAPER drives the console's
+;   scene section over the GENERAL port. Off by default because recall physically
+;   reloads the console (faders sweep); opt in with send = 1.
+;
+; follow_cursor  (default 0; only matters when send = 1)
+;   What send does while STOPPED (not just during playback):
+;     0 = nothing - scenes follow the timeline only when you play (safe default).
+;     1 = when the edit cursor settles (~0.3 s) on a new spot, apply the scene
+;         that owns it, honouring that marker's #/! intent (recall if it is a
+;         !SCENE marker). Good for "jump to the chorus and the desk follows."
+;     2 = same, but scroll the console's scene NUMBER only - never recall while
+;         stopped. The desk previews the upcoming scene; recall waits for play.
+;   Continuous scrubbing does not spam: it fires once after the cursor settles.
+;
+; MARKER NAMING (send direction)
+;   Two marker-name prefixes, mirroring the console's own two-step scroll/recall:
+;     marker_prefix  (default "#SCENE")  - scrolls the console's scene display to
+;                                          the number, WITHOUT recalling.
+;     marker_recall  (default "!SCENE")  - scrolls AND recalls the scene.
+;   The scene number is the first word after the prefix; anything after it is a
+;   free label for your own reference. If no number is given, the marker's own
+;   number is used. Examples:
+;     "!SCENE 4 Chorus"  -> recall scene 4   (the "Chorus" label is ignored)
+;     "#SCENE 12"        -> display scene 12, no recall
+;     "!SCENE Intro"     -> recall the scene matching this marker's number
+;   Matching is case-insensitive. Markers without a scene prefix are untouched.
+;
+; Scenes 1-99 are supported (scene 0 is the console's read-only init scene).
+; ===========================================================================
+
+[scene]
+
+send          = 0
+receive       = 1
+follow_cursor = 0
+; marker_prefix = #SCENE
+; marker_recall = !SCENE
