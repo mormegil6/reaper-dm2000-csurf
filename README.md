@@ -1,4 +1,4 @@
-[![C++](https://img.shields.io/badge/C++-14-blue.svg)]() [![Windows](https://img.shields.io/badge/Windows-x64-0078D4.svg?logo=windows&logoColor=white)]() [![macOS](https://img.shields.io/badge/macOS-arm64%2Fx86__64-000000.svg?logo=apple&logoColor=white)]() [![REAPER](https://img.shields.io/badge/REAPER-6+-darkgreen.svg)]() [![v0.6](https://img.shields.io/badge/version-v0.6-lightgrey.svg)](https://bmroz.eu/projects/dm2000-csurf) [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
+[![C++](https://img.shields.io/badge/C++-14-blue.svg)]() [![Windows](https://img.shields.io/badge/Windows-x64-0078D4.svg?logo=windows&logoColor=white)]() [![macOS](https://img.shields.io/badge/macOS-arm64%2Fx86__64-000000.svg?logo=apple&logoColor=white)]() [![REAPER](https://img.shields.io/badge/REAPER-6+-darkgreen.svg)]() [![v0.7](https://img.shields.io/badge/version-v0.7-lightgrey.svg)](https://bmroz.eu/projects/dm2000-csurf) [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
 
 # reaper_csurf_dm2000 - Yamaha DM2000 control surface for REAPER
 
@@ -191,7 +191,7 @@ Still to come: EQ parameter control, sends/aux routing, talkback. See
 
 ## Scene recall (GENERAL port)
 
-*Optional - does nothing unless you set it up.* Links REAPER project markers to DM2000
+*New in v0.7. Optional - does nothing unless you set it up.* Links REAPER project markers to DM2000
 scene memories, both directions, over the console's **GENERAL Rx/Tx port**. That must be a
 separate, unused USB port (the console won't share a DAW port number with GENERAL). Set the
 GENERAL port on the console (`SETUP → MIDI/HOST SETUP → GENERAL`), pick that same port in the

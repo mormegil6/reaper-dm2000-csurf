@@ -112,10 +112,10 @@ BEGIN
     PUSHBUTTON      "Open folder",IDC_BTN_OPENFOLDER,81,77,58,12
     CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,8,110,284,1
 #ifdef _WIN32
-    CONTROL         "Yamaha DM2000 csurf v0.6  -  <a href=""https://bmroz.eu/projects/dm2000-csurf"">bmroz.eu/projects/dm2000-csurf</a>",IDC_STATIC,"SysLink",0x50000001,8,115,284,10
+    CONTROL         "Yamaha DM2000 csurf v0.7  -  <a href=""https://bmroz.eu/projects/dm2000-csurf"">bmroz.eu/projects/dm2000-csurf</a>",IDC_STATIC,"SysLink",0x50000001,8,115,284,10
     CONTROL         "User Keys: <a href=""https://github.com/mormegil6/reaper-dm2000-csurf/blob/main/doc/dm2000_keys_guide.md"">dm2000_keys_guide.md</a>  (edit dm2000_keys.ini to configure Locate and UDK buttons)",IDC_STATIC,"SysLink",0x50000001,8,127,284,10
 #else
-    CONTROL         "Yamaha DM2000 csurf v0.6  -  bmroz.eu/projects/dm2000-csurf",IDC_DM2000_LINK,"Static",SS_NOTIFY | WS_VISIBLE,8,115,284,10
+    CONTROL         "Yamaha DM2000 csurf v0.7  -  bmroz.eu/projects/dm2000-csurf",IDC_DM2000_LINK,"Static",SS_NOTIFY | WS_VISIBLE,8,115,284,10
     CONTROL         "User Keys: dm2000_keys_guide.md - edit dm2000_keys.ini to configure buttons",IDC_DM2000_INIEXAMPLE,"Static",SS_NOTIFY | WS_VISIBLE,8,127,284,10
 #endif
 END
