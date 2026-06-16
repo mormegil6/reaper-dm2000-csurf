@@ -180,7 +180,7 @@ Full button/zone/MIDI reference: [DESIGN.md - Button / function / MIDI reference
   surround plugin on the selected track, configured via `[surround]` (ships
   targeting ReaSurroundPan; no compiled-in default). Hardware-verified.
 - **FX parameter editor** - the EFFECTS/PLUG-INS section plus the parameter knobs
-  and page arrows edit any FX on the selected track. Hardware test pending.
+  and page arrows edit any FX on the selected track. Hardware-verified.
 
 Still to come: EQ parameter control, sends/aux routing, talkback. See
 [DESIGN.md](DESIGN.md).

@@ -128,7 +128,7 @@
       port-8 native-SysEx method `F0 43 10 3E 7F 01 22 03 ... NN F7` is abandoned - its NN=00
       "off" did not clear on the Remote layer; port 4 works cleanly with no port 8 needed.)
 
-- [ ] **Generic FX parameter editor** - implemented + hw-tested 2026-06-16, always-on (no edit
+- [x] **Generic FX parameter editor** - implemented + hw-tested 2026-06-16, always-on (no edit
       mode). Zone 0x1C F-buttons: F4=sw0 (home slot0/page0), F1=sw1 (next FX slot), F2=sw7 (prev
       FX slot), F3=sw6 (bypass), sw2-sw5=knob 1-4 press (reset that param to 0). Param knobs 1-4
       (`B0 48..4B`, port 1, step 0.001) nudge the current 4-param page; up/down page arrows
