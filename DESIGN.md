@@ -708,8 +708,11 @@ runs on the GENERAL port, not port 8.)
   console (send, default off). Runs on a dedicated GENERAL port chosen in the config dialog. Full
   SysEx scene *dump/restore* (an entire scene's contents) is out of scope - PC recall covers the
   live workflow.
-- **EQ / send / talkback control not implemented**: queued for Layer 4. (Surround joystick,
-  display parameter knobs, and dynamics knobs are implemented in v0.6.)
+- **EQ from the console's EQ knobs is not possible**: confirmed 2026-06-16 - the SELECTED CHANNEL
+  EQ section is wired to the DM2000's internal EQ, not the DAW remote layer (the EQ knobs do nothing
+  for the DAW in Pro Tools either). Use the FX parameter editor (assign ReaEQ) instead. Send routing
+  via the channel encoders and talkback remain candidate Layer-4 features. (Surround joystick, display
+  parameter knobs, and dynamics knobs are implemented in v0.6.)
 
 ---
 

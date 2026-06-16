@@ -143,17 +143,15 @@
       (`B0 4C`, up=next/down=prev, wrapping) scroll pages with a 250ms debounce (arrows fire twice
       per press). Slot/page console-logged.
 
-- [ ] **EQ / parameter control via CC** - manual appendix shows EQ ATT, EQ ON/OFF, faders and pans
-      are addressable as MIDI CC on the GENERAL port (channels 1-16, CC table pp. 353-368). OPEN
-      QUESTION (capture first): does turning the SELECTED CHANNEL EQ knobs actually *transmit* CC on
-      the GENERAL port (or port 5/8)? In Pro Tools/HUI mode the dedicated EQ knobs likely drive the
-      console's internal EQ, not the DAW remote layer, so this may emit nothing. If it emits nothing,
-      the path is dead. If it does emit, a dedicated EQ->ReaEQ mapping (real EQ knobs + the console's
-      EQ display) would beat the generic param knobs ergonomically - but it's a sizable Layer-4 feature
-      (16-ch CC decode + a selected-channel-EQ concept + feedback to the console display). The
-      below-display FX parameter editor ALREADY covers EQ editing functionally (assign ReaEQ, use the
-      4 knobs/pages), so this is nice-to-have, not essential. Verdict: capture the GENERAL port while
-      turning EQ knobs; only build if it transmits and the dedicated-knob feel is wanted.
+- **EQ via the console's EQ knobs - NOT DOABLE (confirmed 2026-06-16).** The SELECTED CHANNEL EQ
+      section is wired to the DM2000's own internal EQ, NOT to the DAW remote layer. Confirmed by
+      testing Pro Tools itself: the EQ knobs do nothing for the DAW there either - they only touch the
+      console's onboard EQ (which needs audio passing through the desk, and the remote layer uses just
+      the 4 HUI ports). So the physical EQ controls transmit nothing usable on ports 1-4 or GENERAL,
+      and there is no path to drive a REAPER EQ from them. Use the below-display **FX parameter editor**
+      instead (assign ReaEQ, edit via the 4 knobs + page arrows). The GENERAL-port CC table still lists
+      EQ ATT / faders / pans, but those are for remoting the console's *own* parameters, not a feed
+      from the EQ knobs.
 
 - [x] **macOS port** - cross-platform SWELL build; every release is hardware-verified on
       macOS (universal arm64+x86_64) as well as Windows.
