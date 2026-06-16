@@ -229,7 +229,7 @@ param_lr    = 7
 param_lfe   = 10
 param_vol   = 6
 stride  = 9   ; params per object (see below)
-objects = 0   ; max object count, 0 = no limit
+objects = 0   ; 0 = auto-detect input count from the plugin
 ```
 
 ### Switching the controlled object (ROUTING buttons + Direct)
@@ -241,7 +241,9 @@ The **Direct** button shifts the bank of 8: **single press = up** (objects 9-16,
 
 - `stride` = the panner's parameters-per-object. ReaSurroundPan is **9** (gain, X, Y,
   Z, LFE, divergence, delay, mute, solo). `0` disables object switching.
-- `objects` = how many objects to stop at when banking up (`0` = no top limit).
+- `objects` = top clamp on the object count. **`0` = auto-detect** from the plugin's
+  `in N` inputs (recommended - adapts as you add objects); a non-zero value forces a fixed
+  count (for panners whose inputs aren't named `in N`).
 
 The selected object is printed to the REAPER console as you switch. (Lighting the
 routing buttons to show the selection is a planned addition.)

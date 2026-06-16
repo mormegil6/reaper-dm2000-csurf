@@ -273,8 +273,10 @@ is never auto-inserted).
   within the current bank. Each object adds `(object-1) * stride` to every `param_*`.
 - **Direct** (`N = 8`) shifts the bank of 8: a single press = up (objects 9-16, 17-24...),
   a double press (within 400ms) = down. No wrap (sized for Atmos-scale object counts).
-The plugin name, the 5 param indices, `stride` (params per object), and `objects` (top
-clamp) are all ini-configurable; UDK 16 with no `[udk]` mapping dumps the selected FX's
+The plugin name, the 5 param indices, and `stride` (params per object) are ini-configurable;
+the object-count top clamp auto-detects at runtime from the plugin's `in N` inputs (so it
+adapts as you add objects), with `objects` as an optional manual override. UDK 16 with no
+`[udk]` mapping dumps the selected FX's
 full parameter list to the REAPER console.
 - **Routing LEDs** (host → DM2000, port 4): the selected object's button lights via
   `BE 00 N` (on) / `BE 01 N` (off), N in the same 2-column wire order. Updated on every
@@ -532,9 +534,10 @@ Tasks:
       none (like `[locate]`/`[udk]`): the working ReaSurroundPan map (input 1: X=7/Y=8/Z=9/LFE=10/
       gain=6) ships in dm2000_keys.ini.example. The ROUTING buttons 1-8 select which object/input
       the knobs+joystick drive (each adds `(object-1)*stride`), and Direct shifts the bank of 8
-      (single press up, double down, no wrap). Plugin name, 5 param indices, `stride`, and `objects`
-      (top clamp) are ini-configurable; UDK 16 (unmapped) dumps the selected FX's param list to the
-      console. The selected object's ROUTING button LED lights via port 4 (`BE 00 N` on / `BE 01 N`
+      (single press up, double down, no wrap). The object-count top clamp auto-detects from the
+      plugin's `in N` inputs (adapts as objects are added; `objects` is an optional override);
+      plugin name, 5 param indices, and `stride` are ini-configurable. UDK 16 (unmapped) dumps the
+      selected FX's param list to the console. The selected object's ROUTING button LED lights via port 4 (`BE 00 N` on / `BE 01 N`
       off) - no port 8 needed (the port-8 native-SysEx method could not clear on the Remote layer).
 - [x] Generic FX parameter editor (EFFECTS/PLUG-INS zone 0x1C + parameter knobs CC 0x48-0x4B
       + page arrows CC 0x4C, port 1): always-on - the 4 knobs (step 0.001) nudge the selected

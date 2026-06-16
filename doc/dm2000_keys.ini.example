@@ -227,7 +227,8 @@ param_vol   = 6
 ; the current bank; each one adds (object-1) * stride to every param_* index.
 ; The Direct button shifts the bank of 8: single press = up (objects 9-16, 17-24...),
 ; double press = down. stride = the panner's params-per-object (9 for ReaSurroundPan:
-; gain/X/Y/Z/LFE/divergence/delay/mute/solo). objects = max object count for the top
-; clamp (0 = no limit; set it to your session's object count to stop at the last one).
+; gain/X/Y/Z/LFE/divergence/delay/mute/solo). objects = top clamp on the object count:
+; 0 = auto-detect from the plugin's "in N" inputs (recommended - adapts as you add objects);
+; a non-zero value forces a fixed count (for panners that don't name inputs "in N").
 stride      = 9
 objects     = 0

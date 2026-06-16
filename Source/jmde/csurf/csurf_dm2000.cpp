@@ -1214,11 +1214,37 @@ private:
         for (int p = 0; p < 8; ++p) SendRoutingLED(p, p == sel);
     }
 
+    // Effective object count for the top clamp: the [surround] `objects` override if set,
+    // otherwise auto-detected at runtime from the plugin's `in N` input params on the
+    // selected track (0 = couldn't detect -> no top clamp).
+    int SurroundObjectCount()
+    {
+        if (m_surround_objects > 0) return m_surround_objects;     // explicit ini override
+        MediaTrack *tr = GetSelectedTrack ? GetSelectedTrack(NULL, 0) : NULL;
+        if (!tr || !m_surround_plugin[0] || !TrackFX_GetByName ||
+            !TrackFX_GetNumParams || !TrackFX_GetParamName) return 0;
+        int fx = TrackFX_GetByName(tr, m_surround_plugin, false);
+        if (fx < 0) return 0;
+        int np = TrackFX_GetNumParams(tr, fx), maxin = 0;
+        for (int p = 0; p < np; ++p)
+        {
+            char nm[64] = "";
+            if (TrackFX_GetParamName(tr, fx, p, nm, sizeof(nm)) &&
+                (nm[0] == 'i' || nm[0] == 'I') && (nm[1] == 'n' || nm[1] == 'N') && nm[2] == ' ')
+            {
+                int n = atoi(nm + 3);                             // "in 12 X" -> 12
+                if (n > maxin) maxin = n;
+            }
+        }
+        return maxin; // 0 if no "in N" params (non-standard panner) -> caller leaves unclamped
+    }
+
     // Clamp + apply a new object selection (0-based); update routing LEDs and report.
     void SetSurroundObject(int obj)
     {
         if (obj < 0) obj = 0;
-        if (m_surround_objects > 0 && obj > m_surround_objects - 1) obj = m_surround_objects - 1;
+        int maxobj = SurroundObjectCount();
+        if (maxobj > 0 && obj > maxobj - 1) obj = maxobj - 1;
         if (obj == m_surround_obj) return;
         m_surround_obj = obj;
         RefreshRoutingLEDs(); // light the selected button, clear the rest of the bank
