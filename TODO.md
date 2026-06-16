@@ -113,6 +113,15 @@
       own timer; `[counter] refresh_ms` in dm2000_keys.ini (default 33 ms ≈ 30 Hz, clamped
       20-1000) for smooth SMPTE frames. Delta-encoding means only changed digits transmit.
 
+- [ ] **Surround pan control (port 4 MCS PANNER)** - implemented 2026-06-16. DYNAMICS knobs
+      (`BE 10..14`, relative) + joystick (`BE 02/03`, absolute) drive the `[surround]` plugin
+      (default ReaSurroundPan) on the selected track; ROUTING [6] (`BE 01 06`) toggles position/
+      divergence (divergence stub). Plugin name + 5 param indices ini-configurable; UDK 16
+      (unmapped) dumps the selected FX param list to console. NEEDS HW TEST: verify joystick is
+      absolute (not relative); confirm param indices via the console dump and set them in
+      [surround]; confirm ROUTING [6] is one event per press. ReaSurround/ReaSurroundPan
+      param 0-4 were scale X/Y/Z + trim + gain in testing, so defaults likely need adjusting.
+
 - [ ] **EQ / parameter control via CC** - manual appendix confirms EQ ATT (input
       attenuation), EQ ON/OFF, and all faders/pans are accessible as MIDI CC on
       the GENERAL port (channels 1-16, CC table on pp. 353-368). Layer 4 feature;

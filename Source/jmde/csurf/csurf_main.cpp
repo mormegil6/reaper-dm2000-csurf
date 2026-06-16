@@ -112,6 +112,11 @@ bool (*TrackFX_GetParamName)(MediaTrack *tr, int fx, int param, char *buf, int b
 bool (*TrackFX_FormatParamValue)(MediaTrack *tr, int fx, int param, double val, char *buf, int buflen);
 GUID *(*GetTrackGUID)(MediaTrack *tr);
 
+// DM2000 Layer-4 extras (resolved non-fatally below; NULL-checked at every use)
+MediaTrack *(*GetSelectedTrack)(void *proj, int seltrackidx);
+int (*TrackFX_GetByName)(MediaTrack *tr, const char *fxname, bool instantiate);
+void (*ShowConsoleMsg)(const char *msg);
+
 
 int *g_config_csurf_rate,*g_config_zoommode;
 
@@ -238,6 +243,9 @@ REAPER_PLUGIN_DLL_EXPORT int REAPER_PLUGIN_ENTRYPOINT(REAPER_PLUGIN_HINSTANCE hI
   *(void **)&GetResourcePath    = (void *)rec->GetFunc("GetResourcePath");
   *(void **)&Main_OnCommand     = (void *)rec->GetFunc("Main_OnCommand");
   *(void **)&SetMixerScroll     = (void *)rec->GetFunc("SetMixerScroll");
+  *(void **)&GetSelectedTrack   = (void *)rec->GetFunc("GetSelectedTrack");
+  *(void **)&TrackFX_GetByName  = (void *)rec->GetFunc("TrackFX_GetByName");
+  *(void **)&ShowConsoleMsg     = (void *)rec->GetFunc("ShowConsoleMsg");
 
 
   rec->Register("csurf",&csurf_bcf_reg);

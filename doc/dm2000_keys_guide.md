@@ -196,6 +196,36 @@ to cut MIDI traffic if you only show minutes:seconds.
 refresh_ms = 33
 ```
 
+## [surround] section - MCS PANNER surround pan
+
+In Pro Tools mode the DM2000 **DYNAMICS** knobs and the **surround joystick**
+(USB port 4) drive a surround plugin on the *selected* track - they never insert
+one. Configure which plugin and which of its parameters each control moves:
+
+| Key | Control | Default |
+|-----|---------|---------|
+| `plugin` | FX name to match (`TrackFX_GetByName`) | `ReaSurroundPan` |
+| `param_front` | THRESHOLD knob + joystick Y | 0 |
+| `param_rear` | ATTACK knob | 1 |
+| `param_lr` | DECAY knob + joystick X | 2 |
+| `param_lfe` | RANGE knob | 3 |
+| `param_vol` | HOLD knob | 4 |
+
+The `param_*` values are the plugin's parameter indices. To discover them, select
+a track that has the plugin and press **UDK 16** with no `key16` mapping - the
+plugin prints every parameter index and name to the REAPER console
+(`View > Console`). Copy the indices you want into this section.
+
+```ini
+[surround]
+plugin = ReaSurroundPan
+param_front = 0
+param_rear  = 1
+param_lr    = 2
+param_lfe   = 3
+param_vol   = 4
+```
+
 ## SWS extension actions
 
 If you have the [SWS extension](https://www.sws-extension.org/) installed, its

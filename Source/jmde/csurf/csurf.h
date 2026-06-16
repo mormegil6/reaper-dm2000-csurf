@@ -116,6 +116,12 @@ extern bool (*TrackFX_SetParam)(MediaTrack *tr, int fx, int param, double val);
 extern bool (*TrackFX_GetParamName)(MediaTrack *tr, int fx, int param, char *buf, int buflen);
 extern bool (*TrackFX_FormatParamValue)(MediaTrack *tr, int fx, int param, double val, char *buf, int buflen);
 extern bool (*TrackFX_GetFXName)(MediaTrack *tr, int fx, char *buf, int buflen);
+// DM2000 Layer-4 extras (surround pan + FX parameter editor). Resolved non-fatally
+// in csurf_main and NULL-checked at every call site, so a REAPER lacking one
+// degrades gracefully instead of refusing to load the plugin.
+extern MediaTrack *(*GetSelectedTrack)(void *proj, int seltrackidx);
+extern int (*TrackFX_GetByName)(MediaTrack *tr, const char *fxname, bool instantiate);
+extern void (*ShowConsoleMsg)(const char *msg);
 extern GUID *(*GetTrackGUID)(MediaTrack *tr);
 
 extern int *g_config_csurf_rate,*g_config_zoommode;

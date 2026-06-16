@@ -219,6 +219,9 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 | Scribble strip (ch N) | host→DM2000 | `F0 00 00 66 05 00 10 N <4 chars> F7` (port P) | `SetTrackTitle()` 4-char | Verified |
 | LED counter display | host→DM2000 | see **HUI counter display protocol** section below | position from `format_timestr_pos()` following REAPER transport format | Verified 2026-06-15 |
 | USER DEFINED KEYS (UDK 1-16) | DM2000→host | all 16 zones hw-verified 2026-06-16 (full in-order capture) - see zone table | custom action via `[udk]` in dm2000_keys.ini (`Main_OnCommand`) | Verified |
+| Dynamics knobs (THRESHOLD/ATTACK/DECAY/RANGE/HOLD) | DM2000→host (port 4) | `BE 10..14 vv` (relative signed) | `[surround]` plugin param on selected track (relative nudge) | Inferred |
+| Surround joystick X / Y | DM2000→host (port 4) | `BE 02 / BE 03 vv` (absolute 0-127) | `[surround]` param_lr / param_front (absolute) | Inferred |
+| ROUTING [6] | DM2000→host (port 4) | `BE 01 06` | toggle surround position/divergence mode (divergence stub) | Inferred |
 
 **Pan ring LED values:** 1=hard left, 6=centre, 11=hard right. `B0+(P) 10+(N%8) 0` = ring off.
 
@@ -251,6 +254,18 @@ Plain `CSurf_ScrubAmt()` as the only handler did nothing in normal operation
 in sync with the DM2000 bank). REW/FF (zone 0x0E sw1/sw2) support auto-repeat:
 first repeat after 400 ms, then every 80 ms. Locate row 1 (zone 0x10) and row 2
 (zone 0x0F) buttons are fully configurable via dm2000_keys.ini; see doc/dm2000_keys_guide.md.
+
+**MCS PANNER surround control (DM2000 → host, port 4, status `0xBE` = ch 15):**
+In Pro Tools mode the DYNAMICS section and the surround joystick send MCS PANNER CC
+on port 4. They drive the `[surround]` plugin (default ReaSurroundPan) on the selected
+track; nothing happens if that plugin is not present (it is never auto-inserted).
+- **Dynamics knobs** `BE 10..14 vv` - **7-bit signed relative** (`0x01..0x3F = +n`,
+  `0x40..0x7F = -(0x80-n)`, so `0x7F = -1`). THRESHOLD/ATTACK/DECAY/RANGE/HOLD →
+  `param_front`/`param_rear`/`param_lr`/`param_lfe`/`param_vol` (one step = 0.01 of range).
+- **Joystick** `BE 02 vv` (X) and `BE 03 vv` (Y) - **absolute** 0-127 → param_lr / param_front.
+- **ROUTING [6]** `BE 01 06` toggles position/divergence mode (divergence is a stub).
+The 5 param indices and the plugin name are ini-configurable; UDK 16 with no `[udk]`
+mapping dumps the selected FX's full parameter list to the REAPER console.
 
 **Switch/LED feedback (host → DM2000):**
 LEDs use a different CC pair to avoid confusion with the incoming zone-select:
@@ -480,8 +495,13 @@ Tasks:
       in-order capture) fire `[udk]` action IDs via `Main_OnCommand`. Zone 0x0A buttons
       (UDK 2/3/10/11 = BANK ◄/► and CH ◄/►) keep bank/channel navigation unless overridden
       by an ini entry.
-- [ ] Surround pan control: USB port 4 MCS PANNER (dynamics knobs + joystick, manual p.223);
-      V2 only; drive ReaSurroundPan on the selected track.
+- [~] Surround pan control: USB port 4 MCS PANNER (manual ch.19 p.232). The DYNAMICS knobs
+      (`BE 10..14`, relative) and the surround joystick (`BE 02/03`, absolute) drive the
+      `[surround]` plugin (default ReaSurroundPan) on the selected track via `TrackFX_SetParam`;
+      no-op when the plugin is absent (never auto-inserts). Plugin name and the 5 param indices
+      are ini-configurable; UDK 16 (unmapped) dumps the selected FX's param list to the console.
+      ROUTING [6] toggles position/divergence (divergence is a stub). Hardware test pending;
+      param mapping confirmed against the console dump.
 - [ ] Generic FX parameter control via the display parameter knobs (CC 0x48-0x4B).
 - [ ] EQ parameter control via selected-channel knobs; sends/aux routing; talkback.
 

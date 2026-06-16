@@ -108,6 +108,10 @@ class CSurf_DM2000 : public IReaperControlSurface
     int m_udk[16];                                   // UDK 1-16 action IDs from [udk]; 0 = no action
     int m_tc_interval;                               // LED counter refresh period (ms); [counter] refresh_ms
     DWORD m_tc_lastrun;                              // last counter refresh (decoupled from the meter poll)
+    char m_surround_plugin[64];                      // [surround] target FX name (default ReaSurroundPan)
+    int m_surround_param[5];                         // [surround] param indices: front, rear, lr, lfe, vol
+    int m_surround_mode;                             // MCS PANNER: 0=position, 1=divergence (stub)
+    int m_fx_loglast;                                // last console-logged fx*1000+param (de-spam)
 
 public:
   CSurf_DM2000(int indev1, int outdev1, int indev2, int outdev2, int indev3, int outdev3, int indev4, int outdev4, const char *iniPath, int *errStats)
@@ -162,6 +166,14 @@ public:
         m_udk[i] = 0;
     m_tc_interval = 33;   // ~30 Hz default; smooth SMPTE frame display
     m_tc_lastrun  = 0;
+    strcpy_s(m_surround_plugin, sizeof(m_surround_plugin), "ReaSurroundPan");
+    m_surround_param[0] = 0; // front
+    m_surround_param[1] = 1; // rear
+    m_surround_param[2] = 2; // lr
+    m_surround_param[3] = 3; // lfe
+    m_surround_param[4] = 4; // vol
+    m_surround_mode = 0;
+    m_fx_loglast = -1;
 
     // load [locate] overrides from ini
     char _la_ini[MAX_PATH];
@@ -195,6 +207,16 @@ public:
         m_tc_interval = GetPrivateProfileInt("counter", "refresh_ms", m_tc_interval, _la_ini);
         if (m_tc_interval < 20) m_tc_interval = 20;
         else if (m_tc_interval > 1000) m_tc_interval = 1000;
+
+        // [surround] target plugin + ReaSurroundPan param indices for the MCS PANNER knobs
+        char pbuf[64];
+        GetPrivateProfileString("surround", "plugin", m_surround_plugin, pbuf, sizeof(pbuf), _la_ini);
+        strcpy_s(m_surround_plugin, sizeof(m_surround_plugin), pbuf);
+        m_surround_param[0] = GetPrivateProfileInt("surround", "param_front", m_surround_param[0], _la_ini);
+        m_surround_param[1] = GetPrivateProfileInt("surround", "param_rear",  m_surround_param[1], _la_ini);
+        m_surround_param[2] = GetPrivateProfileInt("surround", "param_lr",    m_surround_param[2], _la_ini);
+        m_surround_param[3] = GetPrivateProfileInt("surround", "param_lfe",   m_surround_param[3], _la_ini);
+        m_surround_param[4] = GetPrivateProfileInt("surround", "param_vol",   m_surround_param[4], _la_ini);
     }
 
     for (int i = 0; i < 4; ++i)
@@ -694,6 +716,11 @@ private:
 
         if (status != 0xB0) return;
 
+        // Port 4 (index 3) = MCS PANNER: dynamics knobs + joystick drive the surround
+        // plugin on the selected track; ROUTING [6] toggles mode. Intercept before the
+        // generic fader handlers so this traffic never moves phantom faders.
+        if (port == 3 && OnPannerCC(data1, data2)) return;
+
         if (data1 == 0x0F)                       // switch matrix: zone select
         {
             m_zone[port] = data2;
@@ -786,7 +813,7 @@ private:
                 case 0: DispatchUDK(11); break;  // UDK 12
                 case 4: DispatchUDK(12); break;  // UDK 13
                 case 3: DispatchUDK(14); break;  // UDK 15
-                case 7: DispatchUDK(15); break;  // UDK 16
+                case 7: if (!DispatchUDK(15)) DumpFXParams(); break; // UDK 16; unmapped -> dump FX params
             }
         }
         else if (zone == 0x09 && press && port == 0) // UDK 1 (sw2), UDK 9 (sw0; sw1 fires alongside - ignore)
@@ -980,6 +1007,123 @@ private:
     {
         if (idx < 0 || idx >= 16 || !m_udk[idx] || !Main_OnCommand) return false;
         Main_OnCommand(m_udk[idx], 0);
+        return true;
+    }
+
+    // Decode a relative 7-bit signed encoder byte: 0x01..0x3F = +n (CW),
+    // 0x40..0x7F = -(0x80-n) (CCW, so 0x7F = -1). 0 = no movement.
+    static int relStep(unsigned char v) { return (v < 0x40) ? (int)v : ((int)v - 0x80); }
+
+    // Nudge an FX parameter by `steps` * 0.01 of its normalized range, then clamp.
+    void NudgeFXParam(MediaTrack *tr, int fx, int param, int steps)
+    {
+        if (!TrackFX_GetParam || !TrackFX_SetParam) return;
+        double mn = 0.0, mx = 1.0;
+        double cur = TrackFX_GetParam(tr, fx, param, &mn, &mx);
+        double range = mx - mn;
+        if (range == 0.0) return;            // zero-range param: nothing to nudge
+        double norm = (cur - mn) / range + steps * 0.01;
+        if (norm < 0.0) norm = 0.0; else if (norm > 1.0) norm = 1.0;
+        TrackFX_SetParam(tr, fx, param, mn + norm * range);
+    }
+
+    // Set an FX parameter to an absolute normalized 0..1 position (joystick).
+    void SetFXParamNorm(MediaTrack *tr, int fx, int param, double norm)
+    {
+        if (!TrackFX_GetParam || !TrackFX_SetParam) return;
+        if (norm < 0.0) norm = 0.0; else if (norm > 1.0) norm = 1.0;
+        double mn = 0.0, mx = 1.0;
+        TrackFX_GetParam(tr, fx, param, &mn, &mx);
+        TrackFX_SetParam(tr, fx, param, mn + norm * (mx - mn));
+    }
+
+    // Log current FX/param state to the REAPER console (temporary mapping aid).
+    // Only emits when the (fx, param) target changes, so a knob sweep doesn't flood.
+    void LogFXParam(const char *tag, MediaTrack *tr, int fx, int param)
+    {
+        if (!ShowConsoleMsg || !tr) return;
+        int key = fx * 1000 + param;
+        if (key == m_fx_loglast) return;
+        m_fx_loglast = key;
+        char fxname[128] = "", pname[128] = "";
+        if (TrackFX_GetFXName)    TrackFX_GetFXName(tr, fx, fxname, sizeof(fxname));
+        if (TrackFX_GetParamName) TrackFX_GetParamName(tr, fx, param, pname, sizeof(pname));
+        int np = TrackFX_GetNumParams ? TrackFX_GetNumParams(tr, fx) : -1;
+        char msg[360];
+        sprintf_s(msg, sizeof(msg), "[DM2000 %s] '%s' (%d params): param %d = '%s'\n",
+                  tag, fxname, np, param, pname);
+        ShowConsoleMsg(msg);
+    }
+
+    // Dump every param name of the selected track's first FX to the console - a
+    // configuration aid for finding the right [surround] indices for any panner.
+    void DumpFXParams()
+    {
+        if (!ShowConsoleMsg) return;
+        MediaTrack *tr = GetSelectedTrack ? GetSelectedTrack(NULL, 0) : NULL;
+        if (!tr || !TrackFX_GetCount || TrackFX_GetCount(tr) < 1)
+        {
+            ShowConsoleMsg("[DM2000 dump] selected track has no FX\n");
+            return;
+        }
+        char fxname[128] = "";
+        if (TrackFX_GetFXName) TrackFX_GetFXName(tr, 0, fxname, sizeof(fxname));
+        int np = TrackFX_GetNumParams ? TrackFX_GetNumParams(tr, 0) : 0;
+        char hdr[200];
+        sprintf_s(hdr, sizeof(hdr), "[DM2000 dump] FX 0 '%s' - %d params:\n", fxname, np);
+        ShowConsoleMsg(hdr);
+        for (int p = 0; p < np; ++p)
+        {
+            char pname[128] = "";
+            if (TrackFX_GetParamName) TrackFX_GetParamName(tr, 0, p, pname, sizeof(pname));
+            char line[180];
+            sprintf_s(line, sizeof(line), "  %d = %s\n", p, pname);
+            ShowConsoleMsg(line);
+        }
+    }
+
+    // MCS PANNER (port 4) surround control: dynamics knobs (relative) + joystick
+    // (absolute) drive the configured [surround] plugin on the selected track.
+    // Returns true if the message was consumed.
+    bool OnPannerCC(unsigned char data1, unsigned char data2)
+    {
+        if (data1 == 0x01)                // ROUTING buttons; [6] toggles position/divergence
+        {
+            if (data2 == 0x06) m_surround_mode ^= 1; // divergence mode is a stub for now
+            return true;
+        }
+
+        // map this control to a configured surround param + how to apply it
+        int param = -1;
+        bool absolute = false;            // joystick = absolute position; knobs = relative
+        switch (data1)
+        {
+            case 0x10: param = m_surround_param[0]; break;                 // THRESHOLD -> front
+            case 0x11: param = m_surround_param[1]; break;                 // ATTACK    -> rear
+            case 0x12: param = m_surround_param[2]; break;                 // DECAY     -> lr
+            case 0x13: param = m_surround_param[3]; break;                 // RANGE     -> lfe
+            case 0x14: param = m_surround_param[4]; break;                 // HOLD      -> vol
+            case 0x02: param = m_surround_param[2]; absolute = true; break; // joystick X -> lr
+            case 0x03: param = m_surround_param[0]; absolute = true; break; // joystick Y -> front
+            default: return false;                                          // not a surround control
+        }
+
+        MediaTrack *tr = GetSelectedTrack ? GetSelectedTrack(NULL, 0) : NULL;
+        if (!tr || !TrackFX_GetByName) return true;
+        int fx = TrackFX_GetByName(tr, m_surround_plugin, false);
+        if (fx < 0) return true;          // not on the track -> do nothing (never auto-insert)
+
+        int np = TrackFX_GetNumParams ? TrackFX_GetNumParams(tr, fx) : 0;
+        if (param < 0 || param >= np) return true;
+
+        if (absolute)
+            SetFXParamNorm(tr, fx, param, data2 / 127.0); // joystick 0..127 -> 0..1
+        else
+        {
+            int delta = relStep(data2);
+            if (delta) NudgeFXParam(tr, fx, param, delta);
+        }
+        LogFXParam("surround", tr, fx, param);
         return true;
     }
 };
