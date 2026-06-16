@@ -297,6 +297,7 @@ public:
       SendTransportLED(4, false);
       SendTransportLED(5, false);
       SendCounter(true); // blank the LED counter display
+      for (int w = 0; w < 8; ++w) SendRoutingLED(w, false); // clear MCS PANNER routing LEDs (port 4)
 
       // REAPER's MIDI outputs queue internally (CreateThreadedMIDIOutput is a
       // passthrough on Windows); deleting them immediately drops whatever the
@@ -1173,6 +1174,7 @@ private:
     // N in a 2-column order, so off[] maps the wire value back to object-within-bank.
     void OnRoutingButton(unsigned char n)
     {
+        if (!m_surround_plugin[0]) return;          // object select only when [surround] configured
         if (n == 8) { OnSurroundDirect(); return; } // Direct
         if (n > 7) return;
         static const int off[8] = { 0, 2, 4, 6, 1, 3, 5, 7 }; // wire N -> object-within-bank
@@ -1193,13 +1195,27 @@ private:
         else { m_direct_pending = true; m_direct_time = now; }
     }
 
-    // Clamp + apply a new object selection (0-based) and report it to the console.
+    // Light/clear a routing-button LED on port 4. pos = object-within-bank (0-7);
+    // the console sends/expects N in a 2-column order, so wire[] maps pos -> N.
+    // `BE 01 N` lights, `BE 00 N` clears (hw-captured 2026-06-16).
+    void SendRoutingLED(int pos, bool on)
+    {
+        if (pos < 0 || pos > 7 || !m_midiouts[3]) return;
+        static const int wire[8] = { 0, 4, 1, 5, 2, 6, 3, 7 };
+        m_midiouts[3]->Send(0xBE, on ? 0x01 : 0x00, (unsigned char)wire[pos], -1);
+    }
+
+    // Clamp + apply a new object selection (0-based); update routing LEDs and report.
     void SetSurroundObject(int obj)
     {
         if (obj < 0) obj = 0;
         if (m_surround_objects > 0 && obj > m_surround_objects - 1) obj = m_surround_objects - 1;
         if (obj == m_surround_obj) return;
+        int oldpos = m_surround_obj % 8;
         m_surround_obj = obj;
+        int newpos = m_surround_obj % 8;
+        if (oldpos != newpos) SendRoutingLED(oldpos, false); // unlight the old button
+        SendRoutingLED(newpos, true);                        // light the selected button
         if (ShowConsoleMsg)
         {
             char msg[120];

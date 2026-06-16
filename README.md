@@ -188,8 +188,9 @@ Still to come: EQ parameter control, sends/aux routing, talkback. See
 ## Known limitations
 
 - **Port 4 (MCS PANNER) partial** - the surround joystick and dynamics knobs drive a
-  surround plugin (Layer 4, via `[surround]`), and the ROUTING buttons 1-8 / Direct
-  select which object; lighting the routing-button LEDs (port 8) is not yet wired.
+  surround plugin (Layer 4, via `[surround]`), the ROUTING buttons 1-8 / Direct select
+  which object, and the selected button's LED lights to show it. The MCS PANNER
+  surround-divergence and routing/assign modes are not implemented.
 - **macOS hardware-verified** - universal (arm64 + x86_64) build verified with a
   connected DM2000 on 2026-06-15 (v0.3). See [MACOS_BUILD.md](MACOS_BUILD.md)
   for build instructions.

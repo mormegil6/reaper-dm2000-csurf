@@ -275,8 +275,10 @@ is never auto-inserted).
   a double press (within 400ms) = down. No wrap (sized for Atmos-scale object counts).
 The plugin name, the 5 param indices, `stride` (params per object), and `objects` (top
 clamp) are all ini-configurable; UDK 16 with no `[udk]` mapping dumps the selected FX's
-full parameter list to the REAPER console. (LED feedback on the routing buttons is a
-planned follow-up - needs the button-lighting message captured first.)
+full parameter list to the REAPER console.
+- **Routing LEDs** (host → DM2000, port 4): the selected object's button lights via
+  `BE 01 N` (on) / `BE 00 N` (off), N in the same 2-column wire order. Updated on every
+  object/bank change and cleared on close. No port 8 needed.
 
 **Generic FX parameter editor (DM2000 → host, port 1):**
 The EFFECTS/PLUG-INS section (zone 0x1C) plus the four parameter knobs and the up/down
@@ -532,9 +534,8 @@ Tasks:
       the knobs+joystick drive (each adds `(object-1)*stride`), and Direct shifts the bank of 8
       (single press up, double down, no wrap). Plugin name, 5 param indices, `stride`, and `objects`
       (top clamp) are ini-configurable; UDK 16 (unmapped) dumps the selected FX's param list to the
-      console. TODO: LED feedback on the routing buttons - captured 2026-06-16 as a port-8 native
-      SysEx (`F0 43 10 3E 7F 01 22 03 00 00 00 00 NN F7`); blocked on wiring port 8 and finding the
-      remote-layer clear (the `NN=00` off does not unlight on the Remote layer).
+      console. The selected object's ROUTING button LED lights via port 4 (`BE 01 N` on / `BE 00 N`
+      off) - no port 8 needed (the port-8 native-SysEx method could not clear on the Remote layer).
 - [x] Generic FX parameter editor (EFFECTS/PLUG-INS zone 0x1C + parameter knobs CC 0x48-0x4B
       + page arrows CC 0x4C, port 1): always-on - the 4 knobs (step 0.001) nudge the selected
       track's current FX-slot page and the up/down arrows scroll pages (up=next, wrapping), no edit
@@ -659,7 +660,7 @@ Note: earlier versions stored a 9th value (sysex_out); it is now ignored on load
 
 ## Known limitations
 
-- **Port 4 (MCS PANNER) partial**: surround pan (joystick `BE 02/03`, dynamics knobs `BE 10..14`) drives the `[surround]` plugin on the selected track; ROUTING buttons 1-8 (`BE 00/01 N`) select the object and Direct shifts the bank (Layer 4). Routing-button LED feedback (port 8) is not yet wired.
+- **Port 4 (MCS PANNER) partial**: surround pan (joystick `BE 02/03`, dynamics knobs `BE 10..14`) drives the `[surround]` plugin on the selected track; ROUTING buttons 1-8 (`BE 00/01 N`) select the object (with LED feedback on the selected button), Direct shifts the bank (Layer 4). The remaining MCS PANNER routing/assign modes are not implemented.
 - **macOS port complete**: hw-verified with DM2000 connected 2026-06-15 (v0.3+). Universal
   arm64+x86_64 dylib via SWELL Makefile (`Builds/Make/Makefile`). See `MACOS_BUILD.md`.
 - **8-char scribble strip names not achievable**: hardware test confirms the display is 4-char wide in DAW mode. Native SysEx pos=4..7 updates console memory but is not visible.
