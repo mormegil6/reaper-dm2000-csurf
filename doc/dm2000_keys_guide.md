@@ -245,8 +245,9 @@ The **Direct** button shifts the bank of 8: **single press = up** (objects 9-16,
   `in N` inputs (recommended - adapts as you add objects); a non-zero value forces a fixed
   count (for panners whose inputs aren't named `in N`).
 
-The selected object is printed to the REAPER console as you switch. (Lighting the
-routing buttons to show the selection is a planned addition.)
+The selected object's ROUTING button lights to show the selection (and clears when the
+selected track has no panner). For console logging of the param/object changes while
+mapping, set `console = 1` under `[debug]`; otherwise it stays quiet.
 
 ## SWS extension actions
 

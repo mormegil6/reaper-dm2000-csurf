@@ -116,6 +116,8 @@ class CSurf_DM2000 : public IReaperControlSurface
     DWORD m_direct_time;                             // Direct button press time (double-click detect)
     bool m_direct_pending;                           // Direct single-click awaiting confirm
     int m_fx_loglast;                                // last console-logged fx*1000+param (de-spam)
+    bool m_console_log;                              // [debug] console = 1: log param/object changes
+    int m_routing_led_state;                         // cached routing-LED display (0=none, 1-8=lit button)
     int m_fx_slot;                                   // current FX slot on the selected track (FX editor)
     int m_fx_page;                                   // current parameter page (4 knobs per page)
     DWORD m_fx_page_last;                            // last page-arrow event (debounce; arrows fire 0x4C twice)
@@ -184,6 +186,8 @@ public:
     m_direct_time = 0;
     m_direct_pending = false;
     m_fx_loglast = -1;
+    m_console_log = false;
+    m_routing_led_state = -1;
     m_fx_slot = 0;
     m_fx_page = 0;
     m_fx_page_last = 0;
@@ -232,6 +236,7 @@ public:
         m_surround_param[4] = GetPrivateProfileInt("surround", "param_vol",   m_surround_param[4], _la_ini);
         m_surround_stride   = GetPrivateProfileInt("surround", "stride",  m_surround_stride,  _la_ini);
         m_surround_objects  = GetPrivateProfileInt("surround", "objects", m_surround_objects, _la_ini);
+        m_console_log = GetPrivateProfileInt("debug", "console", 0, _la_ini) != 0;
     }
 
     for (int i = 0; i < 4; ++i)
@@ -251,7 +256,6 @@ public:
 
     m_midiout8 = NULL;
     SendCounter(true); // blank counter display and sync m_tc_lastbuf to known state
-    if (m_surround_plugin[0]) RefreshRoutingLEDs(); // show the default object's routing LED
   }
 
   ~CSurf_DM2000()
@@ -289,7 +293,8 @@ public:
               m_midiouts[i / 8]->Send(0xB0, 0x10 + (i & 7), 0, -1); // pan ring off
           }
           SendChannelLED(i, 1, false);
-          SendChannelLED(i, 2, false);
+          SendChannelLED(i, 2, true);  // [ON] LED is inverted on the DM2000 (lit = channel on),
+                                       // so send "muted" to darken it for a clean shutdown
           SendChannelLED(i, 3, false);
           SendChannelLED(i, 7, false);
           SendTrackTitle(i, "");
@@ -298,7 +303,7 @@ public:
       SendTransportLED(4, false);
       SendTransportLED(5, false);
       SendCounter(true); // blank the LED counter display
-      for (int w = 0; w < 8; ++w) SendRoutingLED(w, true); // restore MCS PANNER routing LEDs to default-on (port 4)
+      for (int w = 0; w < 8; ++w) SendRoutingLED(w, false); // clear MCS PANNER routing LEDs (port 4)
 
       // REAPER's MIDI outputs queue internally (CreateThreadedMIDIOutput is a
       // passthrough on Windows); deleting them immediately drops whatever the
@@ -387,6 +392,7 @@ public:
       if (now - m_meter_lastrun >= 100) // unsigned diff also handles timer wrap
       {
           m_meter_lastrun = now;
+          PollRoutingLEDs(); // refresh surround routing LEDs on selection/object/plugin change
           m_meter_histpos = (m_meter_histpos + 1) % 3;
           for (int i = 0; i < 32; ++i)
           {
@@ -1080,7 +1086,7 @@ private:
     // Only emits when the (fx, param) target changes, so a knob sweep doesn't flood.
     void LogFXParam(const char *tag, MediaTrack *tr, int fx, int param)
     {
-        if (!ShowConsoleMsg || !tr) return;
+        if (!m_console_log || !ShowConsoleMsg || !tr) return;
         int key = fx * 1000 + param;
         if (key == m_fx_loglast) return;
         m_fx_loglast = key;
@@ -1208,10 +1214,25 @@ private:
 
     // Light the selected object's routing button and clear the other 7 in the bank
     // (the console powers the routing LEDs on by default, so the rest must be cleared).
-    void RefreshRoutingLEDs()
+    // `active` = the selected track has the surround plugin; when false, all 8 clear so a
+    // stale highlight doesn't linger on a track with no panner. Driven by the Run() poll
+    // below (selection-change events from the console aren't reliable).
+    void RefreshRoutingLEDs(bool active)
     {
         int sel = m_surround_obj % 8;
-        for (int p = 0; p < 8; ++p) SendRoutingLED(p, p == sel);
+        for (int p = 0; p < 8; ++p) SendRoutingLED(p, active && p == sel);
+    }
+
+    // Poll the selection + object and refresh the routing LEDs only when the displayed
+    // state changes. Authoritative - covers track switches, plugin add/remove, and the
+    // initial/default object that SetSurroundObject's early-return would otherwise miss.
+    void PollRoutingLEDs()
+    {
+        if (!m_surround_plugin[0]) return; // surround not configured -> never touch routing LEDs
+        MediaTrack *sel = GetSelectedTrack ? GetSelectedTrack(NULL, 0) : NULL;
+        bool active = sel && TrackFX_GetByName && TrackFX_GetByName(sel, m_surround_plugin, false) >= 0;
+        int state = active ? (1 + (m_surround_obj % 8)) : 0; // 0 = none lit, 1-8 = which button
+        if (state != m_routing_led_state) { m_routing_led_state = state; RefreshRoutingLEDs(active); }
     }
 
     // Effective object count for the top clamp: the [surround] `objects` override if set,
@@ -1239,7 +1260,7 @@ private:
         return maxin; // 0 if no "in N" params (non-standard panner) -> caller leaves unclamped
     }
 
-    // Clamp + apply a new object selection (0-based); update routing LEDs and report.
+    // Clamp + apply a new object selection (0-based); the Run() poll updates the LEDs.
     void SetSurroundObject(int obj)
     {
         if (obj < 0) obj = 0;
@@ -1247,8 +1268,7 @@ private:
         if (maxobj > 0 && obj > maxobj - 1) obj = maxobj - 1;
         if (obj == m_surround_obj) return;
         m_surround_obj = obj;
-        RefreshRoutingLEDs(); // light the selected button, clear the rest of the bank
-        if (ShowConsoleMsg)
+        if (m_console_log && ShowConsoleMsg)
         {
             char msg[120];
             sprintf_s(msg, sizeof(msg), "[DM2000 surround] object %d (param base +%d)\n",
@@ -1301,7 +1321,7 @@ private:
     // Report the current FX slot / page to the console (temporary debugging aid).
     void FXReport(MediaTrack *tr)
     {
-        if (!ShowConsoleMsg) return;
+        if (!m_console_log || !ShowConsoleMsg) return;
         if (!tr) { ShowConsoleMsg("[DM2000 fx] no selected track\n"); return; }
         if (!TrackFX_GetCount) return;
         int n = TrackFX_GetCount(tr);

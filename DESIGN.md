@@ -279,8 +279,9 @@ adapts as you add objects), with `objects` as an optional manual override. UDK 1
 `[udk]` mapping dumps the selected FX's
 full parameter list to the REAPER console.
 - **Routing LEDs** (host → DM2000, port 4): the selected object's button lights via
-  `BE 00 N` (on) / `BE 01 N` (off), N in the same 2-column wire order. Updated on every
-  object/bank change and cleared on close. No port 8 needed.
+  `BE 00 N` (on) / `BE 01 N` (off), N in the same 2-column wire order. Driven by a 100 ms
+  poll in `Run()` (selection/object/plugin state), so they follow track selection and clear
+  when the selected track has no panner; all clear on close. No port 8 needed.
 
 **Generic FX parameter editor (DM2000 → host, port 1):**
 The EFFECTS/PLUG-INS section (zone 0x1C) plus the four parameter knobs and the up/down
@@ -296,8 +297,9 @@ The knobs and arrows are **always live** (no edit mode to enter) - they act on t
 track's current FX slot. The F1-F4 buttons (zone 0x1C) just steer which FX: **F4** (sw0) homes
 to slot 0 / page 0 and reports; **F1** (sw1) next FX slot; **F2** (sw7) previous FX slot;
 **F3** (sw6) toggles
-`TrackFX_SetEnabled`; the knob presses (sw2-sw5) reset their param to 0. Current slot/page
-are logged to the console while mapping.
+`TrackFX_SetEnabled`; the knob presses (sw2-sw5) reset their param to 0. Param/slot/page
+changes log to the console only when `[debug] console = 1` (off by default); the UDK-16
+FX-param dump always prints.
 
 **Switch/LED feedback (host → DM2000):**
 LEDs use a different CC pair to avoid confusion with the incoming zone-select:
@@ -543,7 +545,7 @@ Tasks:
       + page arrows CC 0x4C, port 1): always-on - the 4 knobs (step 0.001) nudge the selected
       track's current FX-slot page and the up/down arrows scroll pages (up=next, wrapping), no edit
       mode. F1 next FX slot, F2 prev, F3 bypass, F4 home to slot 0, knob press resets its param to
-      0. Slot/page logged to console. Hardware-tested 2026-06-16.
+      0. Slot/page logged to console only with `[debug] console = 1`. Hardware-tested 2026-06-16.
 - [ ] EQ parameter control via selected-channel knobs; sends/aux routing; talkback.
 
 ### macOS port (complete, hardware-verified each release)

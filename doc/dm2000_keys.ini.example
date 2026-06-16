@@ -232,3 +232,16 @@ param_vol   = 6
 ; a non-zero value forces a fixed count (for panners that don't name inputs "in N").
 stride      = 9
 objects     = 0
+
+
+; ===========================================================================
+; [debug] - diagnostics
+;
+; console = 1 logs surround/FX parameter and object changes to the REAPER
+; console (View > Console) - useful for mapping a panner's params. Off by
+; default; the UDK-16 FX param dump always prints regardless.
+; ===========================================================================
+
+[debug]
+
+console = 0
