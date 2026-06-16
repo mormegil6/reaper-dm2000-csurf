@@ -123,7 +123,8 @@ WDL clone, `make`, binary verification, install).
 ### Layer 2 - Channel strip feedback: complete (hardware-tested)
 
 - [x] Pan: knob input (relative v-pot deltas), ring-LED feedback, knob press centers pan
-- [x] Selected channel highlight
+- [x] Selected channel highlight; SEL is exclusive by default (single press selects only that
+      track, hold to multi-select - Pro Tools-style), set `[select] exclusive = 0` for additive
 - [x] Jog wheel moves the edit cursor (speed-scaled, 1-6)
 - [x] 4-char track names on scribble strips (HUI SysEx)
 - [x] VU meters on channel strips (100ms peak polling, 3-cycle peak hold,

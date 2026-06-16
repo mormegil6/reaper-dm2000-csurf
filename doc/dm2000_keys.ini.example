@@ -248,6 +248,19 @@ console = 0
 
 
 ; ===========================================================================
+; [select] - channel SELECT button behaviour
+;
+; exclusive = 1 (default): a single SEL selects ONLY that track (Pro Tools-style);
+;             hold one SEL and press others to select several at once.
+; exclusive = 0: REAPER's additive toggle - each SEL press adds/removes that track.
+; ===========================================================================
+
+[select]
+
+exclusive = 1
+
+
+; ===========================================================================
 ; [scene] - DM2000 scene recall via the GENERAL port (OPTIONAL, off by default)
 ;
 ; This links REAPER project markers to DM2000 scene memories, both ways. It is

@@ -80,6 +80,8 @@ class CSurf_DM2000 : public IReaperControlSurface
     int m_zone[4];                   // last switch-matrix zone select (B0 0F zz) per port
     unsigned char m_fader_msb[4][8]; // pending fader value MSB per port/channel
     char m_fader_touch[32];
+    bool m_sel_exclusive;            // [select] exclusive: single SEL selects only that track (Pro Tools-style)
+    unsigned char m_sel_held[32];    // SELECT buttons currently held (for hold-to-multi-select)
     int m_vol_lastpos[32];
     int m_pan_lastpos[32];
     unsigned int m_pan_lasttouch[32];
@@ -163,6 +165,8 @@ public:
     m_zone[0] = m_zone[1] = m_zone[2] = m_zone[3] = -1;
     memset(m_fader_msb, 0, sizeof(m_fader_msb));
     memset(m_fader_touch, 0, sizeof(m_fader_touch));
+    m_sel_exclusive = true;                 // Pro Tools-style by default; [select] exclusive = 0 to disable
+    memset(m_sel_held, 0, sizeof(m_sel_held));
     memset(m_vol_lastpos, 0xff, sizeof(m_vol_lastpos));
     memset(m_pan_lastpos, 0xff, sizeof(m_pan_lastpos));
     memset(m_pan_lasttouch, 0, sizeof(m_pan_lasttouch));
@@ -261,6 +265,9 @@ public:
         m_surround_param[4] = GetPrivateProfileInt("surround", "param_vol",   m_surround_param[4], _la_ini);
         m_surround_stride   = GetPrivateProfileInt("surround", "stride",  m_surround_stride,  _la_ini);
         m_surround_objects  = GetPrivateProfileInt("surround", "objects", m_surround_objects, _la_ini);
+
+        // [select] exclusive = 1 (default): SEL selects only that track, hold to multi-select
+        m_sel_exclusive = GetPrivateProfileInt("select", "exclusive", 1, _la_ini) != 0;
         m_console_log = GetPrivateProfileInt("debug", "console", 0, _la_ini) != 0;
 
         // [scene] scene recall via the GENERAL port (only active if a GENERAL port is set).
@@ -1031,6 +1038,39 @@ private:
         }
     }
 
+    // SELECT button (channel sw1). Default ([select] exclusive = 1) is Pro Tools-style:
+    // a single press selects ONLY that track; to select several, hold one SEL and press
+    // the others (m_sel_held tracks what's physically down). [select] exclusive = 0 keeps
+    // REAPER's additive toggle (each press adds/removes that track).
+    void OnSelectButton(int gch, bool press)
+    {
+        m_sel_held[gch] = press ? 1 : 0;
+        if (!press) return;
+        MediaTrack *tr = TrackFromCh(gch);
+        if (!tr) return;
+
+        bool chord = false;                       // another SEL already held -> add to selection
+        for (int i = 0; i < 32; ++i) if (i != gch && m_sel_held[i]) { chord = true; break; }
+
+        if (m_sel_exclusive && !chord)
+        {
+            // exclusive: clear every other track's selection, then select this one
+            int n = CSurf_NumTracks(false);
+            for (int i = 0; i <= n; ++i)          // i=0 is the master track
+            {
+                MediaTrack *t = CSurf_TrackFromID(i, false);
+                if (t && t != tr) CSurf_OnSelectedChange(t, 0);
+            }
+            CSurf_OnSelectedChange(tr, 1);
+            // drive the surface SEL LEDs directly: only tr's channel is now selected
+            for (int i = 0; i < 24; ++i) { MediaTrack *t = TrackFromCh(i); SendChannelLED(i, 1, t == tr); }
+        }
+        else
+        {
+            CSurf_SetSurfaceSelected(tr, CSurf_OnSelectedChange(tr, -1), NULL); // additive toggle
+        }
+    }
+
     // val: 0x40|sw = press, 0x00|sw = release
     void OnSwitch(int port, int zone, unsigned char val)
     {
@@ -1045,13 +1085,16 @@ private:
             {
                 m_fader_touch[gch] = press ? 1 : 0;
             }
+            else if (sw == 1)                    // SELECT: tracked on press AND release (hold-to-multi-select)
+            {
+                OnSelectButton(gch, press);
+            }
             else if (press)
             {
                 MediaTrack *tr = TrackFromCh(gch);
                 if (!tr) return;
                 switch (sw)
                 {
-                    case 1: CSurf_SetSurfaceSelected(tr, CSurf_OnSelectedChange(tr, -1), NULL); break; // SELECT
                     case 2: CSurf_SetSurfaceMute(tr, CSurf_OnMuteChange(tr, -1), NULL); break; // MUTE
                     case 3: CSurf_SetSurfaceSolo(tr, CSurf_OnSoloChange(tr, -1), NULL); break; // SOLO
                     case 4: // AUTO button -> reset fader to 0 dB (unity gain = 1.0)

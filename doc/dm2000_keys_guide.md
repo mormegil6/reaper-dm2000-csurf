@@ -249,6 +249,18 @@ The selected object's ROUTING button lights to show the selection (and clears wh
 selected track has no panner). For console logging of the param/object changes while
 mapping, set `console = 1` under `[debug]`; otherwise it stays quiet.
 
+## [select] section - channel SELECT behaviour
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `exclusive` | `1` (on) | A single **SEL** selects only that track (Pro Tools-style); hold one SEL and press others to select several at once. |
+| `exclusive` | `0` | REAPER's additive toggle - each SEL press adds/removes that track from the selection. |
+
+```ini
+[select]
+exclusive = 1
+```
+
 ## [scene] section - scene recall (GENERAL port)
 
 Links REAPER project markers to DM2000 scene memories, both directions. **Optional and
