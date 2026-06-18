@@ -49,7 +49,7 @@ end = 0
 ; ONLINE - no standard REAPER equivalent; repurpose freely.
 ; Pro Tools: toggles online/offline mode (not meaningful in REAPER).
 ; Suggestions:
-;   40022  File: Save project
+;   40026  File: Save project
 ;   40043  Transport: Go to end of project
 ;   0      disabled (default)
 online = 0
@@ -84,7 +84,7 @@ audition = 0
 ; PRE - no HUI standard action; repurpose freely.
 ; Pro Tools: sets/adjusts pre-roll.
 ; Suggestions:
-;   40022  File: Save project
+;   40026  File: Save project
 ;   40157  Insert marker at edit cursor
 ;   0      disabled (default)
 pre = 0

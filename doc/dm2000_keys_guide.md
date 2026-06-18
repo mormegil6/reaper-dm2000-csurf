@@ -112,7 +112,8 @@ versions but worth confirming.
 |----|------|
 | 40029 | Edit: Undo |
 | 40030 | Edit: Redo |
-| 40022 | File: Save project |
+| 40026 | File: Save project |
+| 40022 | File: Save project as |
 
 ### Track
 
