@@ -133,7 +133,7 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 |------|---------|---------------|
 | 0x0F | Locate row 2 (hw-verified 2026-06-15) | 0=RTZ, 1=END, 2=ONLINE (no action), 3=LOOP (toggle repeat), 4=QUICK PUNCH (insert marker); SET/REHEARSAL/MTR/MASTER do not transmit HUI - DM2000 internal only |
 | 0x13 | LOCATE MEMORY | sw1=LM1, sw3=LM2, sw6=LM3, sw2=LM4, sw4=LM5, sw7=LM6; sw5=companion event (always fires alongside, ignore) |
-| 0x14 | ENTER | 0=press -> cycle cursor arrows: scroll -> zoom -> bank-scroll |
+| 0x14 | ENTER | 0=press -> toggle cursor arrows: scroll <-> zoom |
 | 0x15 | LOCATE MEMORY 7-8 | sw0=LM7, sw1=LM8 (hw-captured 2026-06-15; fires alongside zone 0x13 sw5) |
 
 **AUTOMIX & overwrite**
@@ -202,7 +202,7 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 | Cursor UP/DOWN/LEFT/RIGHT | DM2000→host | zone 0x0D, sw 4/0/1/3 | `CSurf_OnArrow()` scroll | Verified |
 | INC | DM2000→host | zone 0x0D, sw 2 | next marker | Verified |
 | DEC | DM2000→host | zone 0x1B, sw 7 | previous marker | Verified |
-| ENTER | DM2000→host | zone 0x14, sw 0 | cycle cursor arrows: scroll -> zoom -> bank-scroll (m_arrow_mode) | Verified |
+| ENTER | DM2000→host | zone 0x14, sw 0 | toggle cursor arrows: scroll <-> zoom (m_arrow_mode) | Verified |
 | Display Hist BACK | DM2000→host | zone 0x08, sw 2 | undo (action 40029) | Verified |
 | Display Hist FORWARD | DM2000→host | zone 0x08, sw 6 | redo (action 40030) | Verified |
 | LOCATE MEMORY 1 | DM2000→host | zone 0x13, sw 1 (+sw5 companion) | jump to REAPER marker 1 | Verified |
@@ -211,13 +211,13 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 | LOCATE MEMORY 4 | DM2000→host | zone 0x13, sw 2 (+sw5 companion) | jump to REAPER marker 4 | Verified |
 | LOCATE MEMORY 5 | DM2000→host | zone 0x13, sw 4 (+sw5 companion) | jump to REAPER marker 5 | Verified |
 | LOCATE MEMORY 6 | DM2000→host | zone 0x13, sw 7 (+sw5 companion) | jump to REAPER marker 6 | Verified |
-| AUTOMIX ENABLE | DM2000→host | zone 0x19, sw 2 (all 3 ports) | toggle bypass/read | Verified |
-| AUTOMIX RETURN | DM2000→host | zone 0x18, sw 1 (all 3 ports) | global automation = Read | Verified |
-| AUTOMIX TOUCH SENSE | DM2000→host | zone 0x18, sw 0 (all 3 ports) | global automation = Touch | Verified |
-| AUTOMIX REC (WRITE) | DM2000→host | zone 0x0C, sw 2 (port 1 only) | global automation = Write | Verified |
-| AUTOMIX AUTO-REC | DM2000→host | zone 0x18, sw 5 (all 3 ports) | global automation = Latch | Verified |
-| AUTOMIX RELATIVE | DM2000→host | zone 0x18, sw 2 (all 3 ports) | global automation = Latch Preview | Verified |
-| AUTOMIX ABORT/UNDO | DM2000→host | zone 0x18, sw 4 (all 3 ports) | undo (`IDC_EDIT_UNDO`) | Verified |
+| AUTOMIX ENABLE | DM2000→host | zone 0x0C, sw 2 (port 1) | configurable `[automix] suspend` action (default none) | Verified |
+| AUTOMIX RELATIVE | DM2000→host | zone 0x18, sw 0 (port 1) | selected tracks' automation = Trim | Verified |
+| AUTOMIX AUTO-REC | DM2000→host | zone 0x18, sw 1 (port 1) | selected tracks' automation = Latch | Verified |
+| AUTOMIX RETURN | DM2000→host | zone 0x18, sw 2 (port 1) | selected tracks' automation = Read | Verified |
+| AUTOMIX TOUCH SENSE | DM2000→host | zone 0x18, sw 3 (port 1) | selected tracks' automation = Trim (REAPER has no per-track Off) | Verified |
+| AUTOMIX REC | DM2000→host | zone 0x18, sw 4 (port 1) | selected tracks' automation = Write | Verified |
+| AUTOMIX ABORT/UNDO | DM2000→host | zone 0x18, sw 5 (port 1) | selected tracks' automation = Touch | Verified |
 | Scribble strip (ch N) | host→DM2000 | `F0 00 00 66 05 00 10 N <4 chars> F7` (port P) | `SetTrackTitle()` 4-char | Verified |
 | LED counter display | host→DM2000 | see **HUI counter display protocol** section below | position from `format_timestr_pos()` following REAPER transport format | Verified 2026-06-15 |
 | USER DEFINED KEYS (UDK 1-16) | DM2000→host | all 16 zones hw-verified 2026-06-16 (full in-order capture) - see zone table | custom action via `[udk]` in dm2000_keys.ini (`Main_OnCommand`) | Verified |
@@ -254,9 +254,8 @@ Three modes, selected by the SCRUB/SHUTTLE keys (zone 0x0D sw 5/6, LEDs driven,
 mutually exclusive): default jog = `MoveEditCursor(speed * ±0.1s)`; SHUTTLE =
 coarse `MoveEditCursor(speed * ±1s)`; SCRUB = `CSurf_ScrubAmt(speed * ±0.5)`.
 Plain `CSurf_ScrubAmt()` as the only handler did nothing in normal operation
-(hardware-verified), hence the edit-cursor default. ENTER (zone 0x14 sw 0) cycles the cursor arrow keys: scroll -> zoom -> bank-scroll
-(mode 2 calls `AdjustBankOffset` + `SetMixerScroll` to keep the REAPER mixer view
-in sync with the DM2000 bank). REW/FF (zone 0x0E sw1/sw2) support auto-repeat:
+(hardware-verified), hence the edit-cursor default. ENTER (zone 0x14 sw 0) toggles the cursor arrow
+keys between scroll (NAVIGATION) and zoom (ZOOM). REW/FF (zone 0x0E sw1/sw2) support auto-repeat:
 first repeat after 400 ms, then every 80 ms. Locate row 1 (zone 0x10) and row 2
 (zone 0x0F) buttons are fully configurable via dm2000_keys.ini; see doc/dm2000_keys_guide.md.
 
@@ -559,9 +558,10 @@ scenes; scene 0 is the read-only init scene. (A boundary status message `F0 43 1
 - **Receive** (default on): an incoming Program Change recalls scene N=PC+1 and moves the REAPER
   edit cursor to the project marker *numbered* N (matched by number, since names may repeat - the
   same jump the Locate Memory buttons make). The scroll SysEx is ignored so it can't double-fire.
-- **Send** (default off): project markers drive the console. `#SCENE n` scrolls the display to
-  scene n (scroll SysEx only); `!SCENE n` scrolls **and** recalls (scroll SysEx + Program Change).
-  The number is the first token after the prefix; trailing text is a free label (`!SCENE 4 Chorus`).
+- **Send** (default off): `#SCENE n` markers drive the console - recall vs. scroll is by transport
+  state, not by a second tag. While **playing**, crossing the marker recalls scene n (scroll SysEx +
+  Program Change); while **stopped**, it scrolls the display only (scroll SysEx). The number is the
+  first token after the prefix; trailing text is a free label (`#SCENE 4 Chorus`).
   During playback every marker the play cursor crosses fires in order; on play-start or a backward
   jump (loop/seek) the console resyncs to the scene owning the new position. While stopped,
   `follow_cursor` optionally makes the console track the edit cursor once it settles.
@@ -608,7 +608,7 @@ Send meter data via parameter-change messages to address block for meters.
 The scene scroll/recall protocol was captured on the GENERAL port - scroll
 `F0 43 10 3E 06 04 0A 00 00 00 00 00 <scene+1> F7`, recall `C0 <scene-1>` - and is wired
 bidirectionally (see **GENERAL MIDI port** above). REAPER marker positions trigger DM2000 scene
-changes via `!SCENE`/`#SCENE` markers; DM2000 recalls jump REAPER to the matching marker.
+changes via `#SCENE` markers (recall while playing, scroll while stopped); DM2000 recalls jump REAPER to the matching marker.
 
 ---
 
@@ -688,7 +688,7 @@ Tasks:
 - [x] Transport extensions: RTZ (zone 0x0F sw0), END (zone 0x0F sw1), LOOP (zone 0x0F sw3);
       all hw-verified 2026-06-15. `SetRepeatState` wired to LOOP LED (target 0x0F sw3).
 - [x] Bank switching: left/right arrows to shift which 24 tracks are visible
-- [x] Automation modes: AUTOMIX section (zone 0x18, 7 buttons) mapped to REAPER global automation override; LED feedback on all 3 HUI ports
+- [x] Automation modes: AUTOMIX section (6 mode buttons on zone 0x18 + ENABLE on 0x0C) sets the selected tracks' automation mode (Trim/Read/Touch/Latch/Write); LED feedback
 
 **Test criteria for Layer 1:**
 - Move fader on DM2000 → REAPER track volume changes
@@ -706,7 +706,7 @@ Tasks:
 - [x] Selected channel highlight
 - [x] Track name truncated to 4 chars on scribble strip via HUI (`F0 00 00 66 05 00 10 <ch> <4 chars> F7`, per port)
 - [x] Jog/scrub wheel: CC 0x0D, bits 0–5 = speed, bit 6 set = forward; jog/SHUTTLE/SCRUB modes (see protocol section)
-- [x] Cursor arrows (3-mode ENTER: scroll/zoom/bank-scroll+mixer-scroll), DEC/INC = prev/next marker, IN = set loop in-point, OUT = set loop out-point
+- [x] Cursor arrows (2-mode ENTER: scroll/zoom), DEC/INC = prev/next marker, IN = set loop in-point, OUT = set loop out-point
 - [x] LOCATE MEMORY [1-8]: zones 0x13 (LM1-6) and 0x15 (LM7-8); hw-verified 2026-06-15.
       Default action (from dm2000_keys.ini): jump to REAPER markers 1-8. Fully configurable.
 - [x] HUI counter (LED timecode) display: delta BCD protocol decoded 2026-06-15 from Pro Tools
@@ -730,8 +730,8 @@ Tasks:
       (wire format captured on the GENERAL port; see "GENERAL MIDI port" in the protocol section):
   - [x] PC receive: a console scene recall (`C0 scene-1`) jumps REAPER to the marker *numbered*
         = scene. Default on; ignores the scroll/display SysEx so it can't double-fire.
-  - [x] PC send: `!SCENE n` markers recall scene n on the console (scroll SysEx + `C0 n-1`),
-        `#SCENE n` scrolls the display only. Default off (drives the desk); forward crossings
+  - [x] PC send: `#SCENE n` markers drive the console - recall while playing (scroll SysEx +
+        `C0 n-1`), scroll-only while stopped. Default off (drives the desk); forward crossings
         during playback, owning-scene resync on play-start/loop/seek, optional `follow_cursor`
         while stopped. Selected via the config-dialog GENERAL-port dropdown.
   - Full SysEx scene dump/restore (read/write an entire scene's *contents*) is **out of scope** -
@@ -902,8 +902,9 @@ runs on the GENERAL port, not port 8.)
   See `MACOS_BUILD.md`.
 - **8-char scribble strip names not achievable**: hardware test confirms the display is 4-char wide in DAW mode. Native SysEx pos=4..7 updates console memory but is not visible.
 - **Scene recall - bidirectional, hardware-verified 2026-06-16**: a console recall jumps REAPER to
-  the matching marker (receive, default on); `!SCENE`/`#SCENE` markers recall/scroll scenes on the
-  console (send, default off). Runs on a dedicated GENERAL port chosen in the config dialog. Full
+  the matching marker (receive, default on); `#SCENE` markers drive scenes on the console - recall
+  while playing, scroll while stopped (send, default off). Runs on a dedicated GENERAL port chosen
+  in the config dialog. Full
   SysEx scene *dump/restore* (an entire scene's contents) is out of scope - PC recall covers the
   live workflow.
 - **EQ from the console's EQ knobs is not possible**: confirmed 2026-06-16, re-verified 2026-06-18 by

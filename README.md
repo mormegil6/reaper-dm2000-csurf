@@ -120,7 +120,7 @@ WDL clone, `make`, binary verification, install).
 - Transport (play/stop/record/rewind/forward, RETURN TO ZERO, END, LOOP) with LEDs; all switch positions
   hardware-verified 2026-06-15 (RETURN TO ZERO/END are zone 0x0F sw0/1; LOOP is zone 0x0F sw3 - Locate row, not transport zone 0x0E)
 - Bank switching (channel +-1, bank +-24)
-- Automation modes: AUTOMIX section buttons control REAPER's global automation override (read/touch/write/latch/latch preview/bypass), with LED feedback; all sw assignments hardware-verified 2026-06-15
+- Automation modes: the AUTOMIX section sets the **selected tracks'** automation mode (Trim / Read / Touch / Latch / Write) with LED feedback; all sw assignments hardware-verified 2026-06-15
 
 ### Layer 2 - Channel strip feedback: complete (hardware-tested)
 
@@ -140,16 +140,17 @@ WDL clone, `make`, binary verification, install).
       - LOCATE MEMORY 1-8 (zone 0x13 sw1/sw3/sw6/sw2/sw4/sw7 for LM1-6; zone 0x15
         sw0/sw1 for LM7-8): jump to REAPER markers 1-8. Configurable via dm2000_keys.ini.
 - [x] BACK button (zone 0x08 sw2) -> undo; FORWARD (zone 0x08 sw6) -> redo.
-- [x] ENTER button (zone 0x14 sw0) cycles cursor arrows through three modes: scroll,
-      zoom, and bank-scroll (left/right shift the fader bank offset by one channel).
+- [x] ENTER button (zone 0x14 sw0) toggles cursor arrows between two modes: scroll
+      (NAVIGATION) and zoom (ZOOM).
 - [x] REW/FF (zone 0x0E sw1/sw2) support auto-repeat when held (400 ms delay, 80 ms interval), same as cursor arrows.
-- [x] AUTO button (per-channel, zone 0-7 sw4) resets that channel's fader to 0 dB.
+- [x] AUTO button (per-channel, zone 0-7 sw4) cycles that track's automation mode by default (`[channel] auto_button`; `unity` instead resets the fader to 0 dB).
 - [x] Scrub wheel speed increased (10x); jog wheel unchanged.
 - [x] Scene recall (bidirectional, hardware-verified 2026-06-16): a DM2000 scene recall
-      jumps REAPER to the matching marker, and `!SCENE`/`#SCENE` markers recall/scroll console
-      scenes - over a dedicated GENERAL port chosen in the config dialog. Optional; see
+      jumps REAPER to the matching marker, and `#SCENE` markers drive the console as playback
+      crosses them (recall while playing, scroll-only while stopped) - over a dedicated GENERAL
+      port chosen in the config dialog. Optional; see
       [Scene recall](#scene-recall-general-port) below
-- [x] LED counter display: position sent every 100ms as HUI SysEx. Protocol decoded
+- [x] LED counter display: position sent at a configurable rate (default 33 ms ≈ 30 Hz) as HUI SysEx. Protocol decoded
       2026-06-15 from Pro Tools loopMIDI capture - delta BCD update, bytes right-to-left,
       each byte `(sep_flag<<4)|digit`. Follows REAPER's transport display format setting
       (right-click transport). Hardware-verified 2026-06-15.
@@ -174,10 +175,11 @@ Full button/zone/MIDI reference: [DESIGN.md - Button / function / MIDI reference
       [Scene recall](#scene-recall-general-port) below. Full SysEx scene *dump/restore* (an
       entire scene's contents) is out of scope - PC recall covers the live workflow.
 - [x] Meter bridge - driven by existing HUI meter messages (Layer 2); no native SysEx needed
-- [ ] (in progress) Channel names via native SysEx (port 8) - format captured 2026-06-12, code
-      written; not active until port 8 is wired (`m_midiout8` is NULL). Hardware test confirmed the
-      scribble strip is 4-char wide in DAW mode regardless (HUI controls the visible strip; native
-      SysEx updates internal memory only).
+- **Channel names via native SysEx (port 8) - investigated, not pursued.** Format captured and
+  code written, but a hardware test settled it: in DAW mode the visible scribble strip is
+  HUI-controlled and 4 chars wide regardless; native SysEx updates only the console's internal
+  name memory, not the DAW-layer display. Left inactive (`m_midiout8` stays NULL) - wiring port 8
+  wouldn't change what's shown.
 
 ### Layer 4 - partial (new in v0.6)
 
@@ -197,8 +199,8 @@ Full button/zone/MIDI reference: [DESIGN.md - Button / function / MIDI reference
   name on the strips; ENC PAN returns to pan. Mirrors the desk's native AUX A-E
   encoder send-level behaviour. Toggle with `[encoder] sends`.
 - **Status icons** - the per-channel **INS** icon lights when a track has any FX, and
-  the **AUTO** indicator lights when a track is in Touch/Write/Latch. Toggle with
-  `[display] insert_icon` / `auto_indicator`.
+  the **AUTO** indicator lights for any active automation mode - green=Read, orange=Touch/Latch,
+  red=Write (dark in Trim/off). Toggle with `[display] insert_icon` / `auto_indicator`.
 - **Scribble peeks** - hold ENC ASSIGN 1 to momentarily overlay each track's **number**,
   or ENC ASSIGN 2 for each fader's level in **dB** (live); release to restore names.
   Toggle with `[display] peek_number` / `peek_db`.
@@ -239,8 +241,9 @@ config dialog's **GENERAL port** dropdown, then enable it in `[scene]` of `dm200
 - **Receive** (default on) - recalling a scene on the desk jumps REAPER to the marker
   *numbered* the same (scene 4 → marker 4; matched by number, since marker names can repeat).
 - **Send** (default off) - markers drive the desk as playback crosses them:
-  - `!SCENE 4 Chorus` → recalls scene 4 (any text after the number is a free label)
-  - `#SCENE 4` → only scrolls the desk's scene display, no recall
+  - `#SCENE 4 Chorus` → scene 4 (any text after the number is a free label)
+  - recall vs. scroll is by transport state: crossing the marker **while playing** recalls the
+    scene; **while stopped** it only scrolls the desk's scene display
   - `follow_cursor` optionally makes the desk track the edit cursor while stopped
 
 Also enable **Program Change Tx + Rx** on the desk (DISPLAY ACCESS [MIDI] → MIDI Setup) - Rx is
