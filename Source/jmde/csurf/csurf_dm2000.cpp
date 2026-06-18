@@ -92,6 +92,7 @@ class CSurf_DM2000 : public IReaperControlSurface
     int m_acc_param[16];             // target param index per slot
     double m_acc_val[16];            // accumulated normalized value per slot - written absolutely, never read back
     int m_acc_next;                  // round-robin eviction pointer
+    DWORD m_fxdisp_throttle;         // last live FX-display refresh from a surround knob (~30 Hz throttle)
     char m_splash_done;              // startup "REAPER online" splash shown once (clears desk Off-Line text)
     DWORD m_splash_start;            // first-Run timestamp, splash timing base
     unsigned char m_splash_render;   // last splash on/off state sent (de-dupe)
@@ -216,7 +217,7 @@ public:
     memset(m_auto_label_time, 0, sizeof(m_auto_label_time));
     m_winflash_time = 0;
     memset(m_acc_tr, 0, sizeof(m_acc_tr)); memset(m_acc_fx, 0, sizeof(m_acc_fx)); memset(m_acc_param, 0, sizeof(m_acc_param));
-    memset(m_acc_val, 0, sizeof(m_acc_val)); m_acc_next = 0;
+    memset(m_acc_val, 0, sizeof(m_acc_val)); m_acc_next = 0; m_fxdisp_throttle = 0;
     m_splash_done = 0; m_splash_start = 0; m_splash_render = 0;
     m_show_ins = m_show_auto = true;        // [display] indicators on by default
     memset(m_ins_state, 0xff, sizeof(m_ins_state));   // 0xff = unknown -> first poll sends
@@ -1905,6 +1906,14 @@ private:
         m_acc_val[s] = (range != 0.0) ? (cur - mn) / range : 0.0; // seed once from the plugin
         return s;
     }
+    // Read-only: the cached normalized value if we own this param, else -1 (no allocation). The FX
+    // display uses it so it shows the value we wrote, not the plugin's mirrored/laggy read-back.
+    double AccPeekCached(MediaTrack *tr, int fx, int param)
+    {
+        for (int i = 0; i < 16; i++)
+            if (m_acc_tr[i] == tr && m_acc_fx[i] == fx && m_acc_param[i] == param) return m_acc_val[i];
+        return -1.0;
+    }
     // Relative nudge: cap the desk's speed acceleration, accumulate, write absolutely.
     void AccelNudge(MediaTrack *tr, int fx, int param, int delta, double scale)
     {
@@ -2041,6 +2050,14 @@ private:
             !(TrackFX_GetFloatingWindow && TrackFX_GetFloatingWindow(tr, fx)))
             TrackFX_Show(tr, fx, 3);
         LogFXParam("surround", tr, fx, param);
+        // If the FX editor is showing this same plugin, live-update its readout - throttled ~30 Hz since
+        // the dynamics knobs/joystick flood messages. RefreshFXDisplay reads our accumulator, so it shows
+        // the value we just wrote, not the plugin's mirrored read-back.
+        if (m_fx_slot == fx)
+        {
+            DWORD now = timeGetTime();
+            if (now - m_fxdisp_throttle >= 33) { m_fxdisp_throttle = now; RefreshFXDisplay(); }
+        }
         return true;
     }
 
@@ -2189,9 +2206,13 @@ private:
             {
                 if (TrackFX_GetParamName) TrackFX_GetParamName(tr, m_fx_slot, param, name, sizeof(name));
                 double pmin = 0, pmax = 1;
-                double v = TrackFX_GetParam ? TrackFX_GetParam(tr, m_fx_slot, param, &pmin, &pmax) : 0.0;
+                double vread = TrackFX_GetParam ? TrackFX_GetParam(tr, m_fx_slot, param, &pmin, &pmax) : 0.0;
+                // Prefer our own accumulated value when we drive this param (the plugin's read-back can be
+                // mirrored/laggy, e.g. ReaSurroundPan X); fall back to the plugin's value otherwise.
+                double cached = AccPeekCached(tr, m_fx_slot, param);
+                double norm = (cached >= 0.0) ? cached : ((pmax > pmin) ? (vread - pmin) / (pmax - pmin) : 0.0);
+                double v = (cached >= 0.0) ? (pmin + norm * (pmax - pmin)) : vread;
                 if (TrackFX_FormatParamValue) TrackFX_FormatParamValue(tr, m_fx_slot, param, v, val, sizeof(val));
-                double norm = (pmax > pmin) ? (v - pmin) / (pmax - pmin) : 0.0;
                 if (norm < 0) norm = 0; else if (norm > 1) norm = 1;
                 // TODO(smart-ring): per-param mode - boostcut (0x10) for bipolar params (normalized
                 // neutral ~0.5 via TrackFX_GetParamEx), else fill. For now fill suits most params.
