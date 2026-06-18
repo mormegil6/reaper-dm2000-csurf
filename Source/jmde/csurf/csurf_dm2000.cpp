@@ -87,6 +87,11 @@ class CSurf_DM2000 : public IReaperControlSurface
     char m_snap_pending[32];         // double-tap armed on the 2nd press; the 0 dB snap fires on release
     DWORD m_auto_label_time[24];     // when the AUTO key was pressed per channel (momentary mode label on strip)
     DWORD m_winflash_time;           // when EFFECTS DISPLAY toggled FX-window auto-float (brief LCD flash)
+    MediaTrack *m_acc_tr[16];        // shared knob accumulator (surround + SEL): target track per slot
+    int m_acc_fx[16];                // target fx index per slot
+    int m_acc_param[16];             // target param index per slot
+    double m_acc_val[16];            // accumulated normalized value per slot - written absolutely, never read back
+    int m_acc_next;                  // round-robin eviction pointer
     char m_splash_done;              // startup "REAPER online" splash shown once (clears desk Off-Line text)
     DWORD m_splash_start;            // first-Run timestamp, splash timing base
     unsigned char m_splash_render;   // last splash on/off state sent (de-dupe)
@@ -210,6 +215,8 @@ public:
     memset(m_snap_pending, 0, sizeof(m_snap_pending));
     memset(m_auto_label_time, 0, sizeof(m_auto_label_time));
     m_winflash_time = 0;
+    memset(m_acc_tr, 0, sizeof(m_acc_tr)); memset(m_acc_fx, 0, sizeof(m_acc_fx)); memset(m_acc_param, 0, sizeof(m_acc_param));
+    memset(m_acc_val, 0, sizeof(m_acc_val)); m_acc_next = 0;
     m_splash_done = 0; m_splash_start = 0; m_splash_render = 0;
     m_show_ins = m_show_auto = true;        // [display] indicators on by default
     memset(m_ins_state, 0xff, sizeof(m_ins_state));   // 0xff = unknown -> first poll sends
@@ -1881,19 +1888,58 @@ private:
         TrackFX_SetParam(tr, fx, param, mn + norm * (mx - mn));
     }
 
+    // Shared accumulator cache for relative FX-param knobs (surround dynamics + FX-editor SEL),
+    // keyed by the *target* (track, fx, param). Any control writing a given param shares one running
+    // value - so THRESHOLD and SEL4 both driving the surround X stay in lockstep. We write absolutely
+    // and never read the value back mid-turn: a smoothed param hands back a laggy/mirrored value that
+    // read-modify-write would fight. Round-robin eviction; a re-seed is one settled (accurate) read.
+    int AccSlot(MediaTrack *tr, int fx, int param)
+    {
+        for (int i = 0; i < 16; i++)
+            if (m_acc_tr[i] == tr && m_acc_fx[i] == fx && m_acc_param[i] == param) return i;
+        int s = m_acc_next; m_acc_next = (m_acc_next + 1) & 15;   // evict oldest
+        m_acc_tr[s] = tr; m_acc_fx[s] = fx; m_acc_param[s] = param;
+        double mn = 0.0, mx = 1.0;
+        double cur = TrackFX_GetParam ? TrackFX_GetParam(tr, fx, param, &mn, &mx) : 0.0;
+        double range = mx - mn;
+        m_acc_val[s] = (range != 0.0) ? (cur - mn) / range : 0.0; // seed once from the plugin
+        return s;
+    }
+    // Relative nudge: cap the desk's speed acceleration, accumulate, write absolutely.
+    void AccelNudge(MediaTrack *tr, int fx, int param, int delta, double scale)
+    {
+        if (delta > 1) delta = 1; else if (delta < -1) delta = -1;
+        if (!delta) return;
+        int s = AccSlot(tr, fx, param);
+        m_acc_val[s] += delta * scale;
+        if (m_acc_val[s] < 0.0) m_acc_val[s] = 0.0; else if (m_acc_val[s] > 1.0) m_acc_val[s] = 1.0;
+        SetFXParamNorm(tr, fx, param, m_acc_val[s]);
+    }
+    // Absolute write (joystick, or a programmatic reset) that must keep the shared value in sync.
+    void AccelSet(MediaTrack *tr, int fx, int param, double norm)
+    {
+        if (norm < 0.0) norm = 0.0; else if (norm > 1.0) norm = 1.0;
+        SetFXParamNorm(tr, fx, param, norm);
+        m_acc_val[AccSlot(tr, fx, param)] = norm;
+    }
+
     // Reset an FX parameter to its neutral/default value. REAPER has no per-plugin
     // "default" accessor; TrackFX_GetParamEx's midval is the closest (the parameter's
     // neutral point - e.g. center for pan/gain). Falls back to the minimum if absent.
     void ResetFXParamDefault(MediaTrack *tr, int fx, int param)
     {
         if (!TrackFX_SetParam) return;
+        double norm = 0.0;
         if (TrackFX_GetParamEx)
         {
             double mn = 0.0, mx = 1.0, mid = 0.0;
             TrackFX_GetParamEx(tr, fx, param, &mn, &mx, &mid);
             TrackFX_SetParam(tr, fx, param, mid);
+            double range = mx - mn;
+            norm = (range != 0.0) ? (mid - mn) / range : 0.0;
         }
         else SetFXParamNorm(tr, fx, param, 0.0); // older REAPER: fall back to minimum
+        m_acc_val[AccSlot(tr, fx, param)] = norm; // keep the shared accumulator in sync with the reset
     }
 
     // Log current FX/param state to the REAPER console (temporary mapping aid).
@@ -1961,13 +2007,15 @@ private:
         bool invert = false;              // joystick Y reads inverted vs the plugin's axis
         switch (data1)
         {
-            case 0x10: param = m_surround_param[0]; break;                 // knob 1 -> X (precise)
-            case 0x11: param = m_surround_param[1]; break;                 // knob 2 -> Y (precise)
-            case 0x12: param = m_surround_param[2]; break;                 // knob 3 -> Z
-            case 0x13: param = m_surround_param[3]; break;                 // knob 4 -> spread
-            case 0x14: param = m_surround_param[4]; break;                 // knob 5 -> gain
-            case 0x02: param = m_surround_param[0]; absolute = true; break; // joystick X -> X (same param as knob 1)
-            case 0x03: param = m_surround_param[1]; absolute = true; invert = true; break; // joystick Y -> Y (same param as knob 2)
+            // DM2000 dynamics knobs send CCs OUT of physical order (captured on port 4):
+            // THRESHOLD=0x10, ATTACK=0x11, DECAY=0x12, RANGE=0x13, HOLD=0x14. Map each to its axis.
+            case 0x10: param = m_surround_param[0]; break;                 // THRESHOLD -> X
+            case 0x13: param = m_surround_param[1]; break;                 // RANGE     -> Y
+            case 0x11: param = m_surround_param[2]; break;                 // ATTACK    -> Z
+            case 0x12: param = m_surround_param[3]; break;                 // DECAY     -> spread
+            case 0x14: param = m_surround_param[4]; break;                 // HOLD      -> gain
+            case 0x02: param = m_surround_param[0]; absolute = true; break; // joystick X -> X
+            case 0x03: param = m_surround_param[1]; absolute = true; invert = true; break; // joystick Y -> Y
             default: return false;                                          // not a surround control
         }
 
@@ -1981,13 +2029,12 @@ private:
         int np = TrackFX_GetNumParams ? TrackFX_GetNumParams(tr, fx) : 0;
         if (param < 0 || param >= np) return true;
 
+        // Apply via the shared accumulator (keyed by track/fx/param): a SEL knob or the joystick
+        // touching this same param stays in sync, and a smoothed/mirrored read-back can't oscillate.
         if (absolute)
-            SetFXParamNorm(tr, fx, param, invert ? 1.0 - data2 / 127.0 : data2 / 127.0); // joystick 0..127
+            AccelSet(tr, fx, param, invert ? 1.0 - data2 / 127.0 : data2 / 127.0); // joystick 0..127
         else
-        {
-            int delta = relStep(data2);
-            if (delta) NudgeFXParam(tr, fx, param, delta);
-        }
+            AccelNudge(tr, fx, param, relStep(data2), 0.01);                         // dynamics knob (relative)
         // auto-float the surround plug-in on use (same [fx] window_on_knob behaviour as the FX-editor
         // knobs) - float the surround FX itself, not the FX-editor's current slot; only if not already up
         if (m_window_on_knob && TrackFX_Show &&
@@ -2175,7 +2222,10 @@ private:
         int np = TrackFX_GetNumParams ? TrackFX_GetNumParams(tr, m_fx_slot) : 0;
         if (param < 0 || param >= np) return;
 
-        NudgeFXParam(tr, m_fx_slot, param, delta, 0.001); // finer than the surround knobs (0.01)
+        // Shared accumulator keyed by (track, fx, param): a SEL knob editing the same param as a
+        // dynamics knob (e.g. the surround X) reuses one running value, so the two stay in sync -
+        // and press-to-reset (ResetFXParamDefault) updates that same slot.
+        AccelNudge(tr, m_fx_slot, param, delta, 0.001); // finer than the surround knobs (0.01)
         LogFXParam("param", tr, m_fx_slot, param);
         if (m_window_on_knob) ShowFXWindow(); // touching a param floats the plug-in window (if enabled)
         RefreshFXDisplay();

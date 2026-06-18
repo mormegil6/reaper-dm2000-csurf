@@ -202,14 +202,19 @@ In Pro Tools mode the DM2000 **DYNAMICS** knobs and the **surround joystick**
 (USB port 4) drive a surround plugin on the *selected* track - they never insert
 one. Configure which plugin and which of its parameters each control moves:
 
-| Key | Control | Default | ReaSurroundPan param |
-|-----|---------|---------|----------------------|
+| Key | Control (physical knob) | Default | ReaSurroundPan param |
+|-----|-------------------------|---------|----------------------|
 | `plugin` | FX name to match (`TrackFX_GetByName`) | `ReaSurroundPan` | - |
-| `param_front` | THRESHOLD knob + joystick Y | 8 | in 1 Y (front/back) |
-| `param_rear` | ATTACK knob | 9 | in 1 Z (height) |
-| `param_lr` | DECAY knob + joystick X | 7 | in 1 X (left/right) |
-| `param_lfe` | RANGE knob | 10 | in 1 LFE |
-| `param_vol` | HOLD knob | 6 | in 1 gain |
+| `param_x` | THRESHOLD knob + joystick horizontal | 7 | in 1 X (left/right) |
+| `param_y` | RANGE knob + joystick vertical | 8 | in 1 Y (front/back) |
+| `param_z` | ATTACK knob | 9 | in 1 Z (height) |
+| `param_spread` | DECAY knob | 11 | in 1 divergence (spread) |
+| `param_gain` | HOLD knob | 6 | in 1 gain |
+
+> **Knob → axis is fixed; you only pick the parameter.** The DM2000 sends the
+> DYNAMICS knobs' CCs *out of physical order*, so the plugin maps each physical knob
+> to the axis above in firmware (THRESHOLD→X, RANGE→Y, ATTACK→Z, DECAY→spread,
+> HOLD→gain). The keys here only choose *which plugin parameter index* each axis drives.
 
 The compiled-in default is **none** - without a `[surround]` section the MCS
 PANNER controls do nothing (same convention as `[locate]`/`[udk]`). The values
@@ -218,16 +223,17 @@ ReaSurroundPan. The `param_*` values are plain parameter indices - change them
 for a different plugin, a different input, or a different feel. To discover
 indices, select a track that has the plugin and press **UDK 16** with no `key16`
 mapping: the plugin prints every parameter index and name to the REAPER console
-(`View > Console`).
+(`View > Console`). **Verify by *moving* each control and watching the object** - a
+plugin's parameter *names* don't always match the axis that actually moves.
 
 ```ini
 [surround]
 plugin = ReaSurroundPan
-param_front = 8
-param_rear  = 9
-param_lr    = 7
-param_lfe   = 10
-param_vol   = 6
+param_x      = 7
+param_y      = 8
+param_z      = 9
+param_spread = 11
+param_gain   = 6
 stride  = 9   ; params per object (see below)
 objects = 0   ; 0 = auto-detect input count from the plugin
 ```

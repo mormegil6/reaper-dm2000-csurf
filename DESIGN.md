@@ -221,8 +221,8 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 | Scribble strip (ch N) | host→DM2000 | `F0 00 00 66 05 00 10 N <4 chars> F7` (port P) | `SetTrackTitle()` 4-char | Verified |
 | LED counter display | host→DM2000 | see **HUI counter display protocol** section below | position from `format_timestr_pos()` following REAPER transport format | Verified 2026-06-15 |
 | USER DEFINED KEYS (UDK 1-16) | DM2000→host | all 16 zones hw-verified 2026-06-16 (full in-order capture) - see zone table | custom action via `[udk]` in dm2000_keys.ini (`Main_OnCommand`) | Verified |
-| Dynamics knobs (THRESHOLD/ATTACK/DECAY/RANGE/HOLD) | DM2000→host (port 4) | `BE 10..14 vv` (relative signed) | `[surround]` plugin param on selected track (relative nudge) | Verified |
-| Surround joystick X / Y | DM2000→host (port 4) | `BE 02 / BE 03 vv` (absolute 0-127) | `[surround]` param_lr / param_front (absolute; Y inverted) | Verified |
+| Dynamics knobs (CCs **out of physical order**: THRESHOLD=0x10, ATTACK=0x11, DECAY=0x12, RANGE=0x13, HOLD=0x14) | DM2000→host (port 4) | `BE 10..14 vv` (relative signed, accelerating, continuous) | `[surround]` axes via shared accumulator - THRESHOLD→X, RANGE→Y, ATTACK→Z, DECAY→spread, HOLD→gain | Verified |
+| Surround joystick X / Y | DM2000→host (port 4) | `BE 02 / BE 03 vv` (absolute 0-127) | `[surround]` param_x / param_y (absolute; Y inverted; shares slots with THRESHOLD/RANGE) | Verified |
 | ROUTING buttons 1-8 / Direct | DM2000→host (port 4) | `BE 00 N` + `BE 01 N` (N in 2-column order; Direct = 8) | `[surround]` object select (1-8 within the current bank); Direct shifts the bank of 8 (single press up, double down) | Verified |
 | Parameter knobs 1-4 (below display) | DM2000→host | `B0 48..4B vv` (relative signed) | nudge current FX-slot param, always-on (`TrackFX_SetParam`, step 0.001); press = reset param to 0 | Verified |
 | Page arrows (below display) | DM2000→host | `B0 4C vv` (up=`0x0A` / down=`0x4A`) | FX param page: up=next, down=prev, wraps; fires twice/press (250ms debounce) | Verified |
@@ -266,9 +266,20 @@ on port 4. They drive the `[surround]` plugin on the selected track (compiled de
 the example ini targets ReaSurroundPan); nothing happens if that plugin is not present (it
 is never auto-inserted).
 - **Dynamics knobs** `BE 10..14 vv` - **7-bit signed relative** (`0x01..0x3F = +n`,
-  `0x40..0x7F = -(0x80-n)`, so `0x7F = -1`). THRESHOLD/ATTACK/DECAY/RANGE/HOLD →
-  `param_front`/`param_rear`/`param_lr`/`param_lfe`/`param_vol` (one step = 0.01 of range).
-- **Joystick** `BE 02 vv` (X) and `BE 03 vv` (Y) - **absolute** 0-127 → param_lr / param_front.
+  `0x40..0x7F = -(0x80-n)`, so `0x7F = -1`), *accelerating* with turn speed and **continuous
+  (no detents)**. The CCs arrive **out of physical order** (captured on port 4):
+  **THRESHOLD=0x10, ATTACK=0x11, DECAY=0x12, RANGE=0x13, HOLD=0x14** - so the code maps each CC to
+  its axis to read in physical order: THRESHOLD→`param_x`, RANGE→`param_y`, ATTACK→`param_z`,
+  DECAY→`param_spread`, HOLD→`param_gain` (one step = 0.01 of range, magnitude capped to 1).
+- **Joystick** `BE 02 vv` (X) and `BE 03 vv` (Y) - **absolute** 0-127 → `param_x` / `param_y`
+  (Y inverted; shares X/Y with the THRESHOLD/RANGE knobs).
+- **Anti-oscillation / shared value:** every relative knob (dynamics + the FX-editor SEL knobs)
+  writes through one **accumulator keyed by `(track, fx, param)`** - it owns the value and writes it
+  *absolutely*, never reading it back mid-turn. Required because ReaSurroundPan's position params
+  hand back a *smoothed, mirrored* value just after a write (reads `1 - x`), so read-modify-write
+  oscillated and a re-read after a pause snapped to the mirror. Controls that resolve to the same
+  `(track, fx, param)` stay in lockstep (joystick + dynamics always do - both find the fx by name);
+  the trade-off is external edits (mouse/automation) aren't re-read, so the knobs don't follow them.
 - **ROUTING buttons 1-8** `BE 00 N` + `BE 01 N` (N arrives in a 2-column order:
   buttons 1/3/5/7 -> N 0/1/2/3, buttons 2/4/6/8 -> N 4/5/6/7) select **object 1-8**
   within the current bank. Each object adds `(object-1) * stride` to every `param_*`.
@@ -635,8 +646,12 @@ populate when the *surface* is put in that encoder mode, which is why changing a
 software drove nothing to the desk.
 
 **Confirmed against our implementation:**
-- **Surround / DYNAMICS knobs** (p.232): THRESHOLD=front, RANGE/RATIO=rear, ATTACK=F/R, DECAY=LFE,
-  HOLD=volume; ROUTING [6] toggles position↔divergence. Matches `[surround]` exactly.
+- **Surround / DYNAMICS knobs** (p.232): the manual's labels (THRESHOLD=front, RANGE/RATIO=rear,
+  ATTACK=F/R, DECAY=LFE, HOLD=volume) are Yamaha's intended functions and do **not** match our
+  ReaSurroundPan mapping. What we hardware-verified: the knobs send CCs **out of physical order**
+  (THRESHOLD=0x10, ATTACK=0x11, DECAY=0x12, RANGE=0x13, HOLD=0x14) and we map them
+  THRESHOLD→X, RANGE→Y, ATTACK→Z, DECAY→spread, HOLD→gain (see the MCS PANNER section). ROUTING [6]
+  toggles position↔divergence.
 - **Exclusive SEL** (p.239): hold one [SEL], press others in the same 8-block to add/remove - matches
   our `[select] exclusive` behaviour verbatim.
 - **EFFECTS/PLUG-INS** (p.230): [5]=ASSIGN, [6]=COMPARE, [7]=BYPASS, [8]=INSERT/PARAM, Parameter
