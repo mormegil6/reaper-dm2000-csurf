@@ -23,11 +23,13 @@
 #include <cstring>
 #include <cstddef>
 #include <cstdlib>   // atoi (scene-marker / config parsing) - transitive on Win32, explicit here
+#include <strings.h> // strcasecmp - POSIX equivalent of MSVC _stricmp
 
 // MSVC secure-CRT helpers used by the DM2000 code. Every call site passes the
 // buffer size explicitly as the 2nd argument, so the snprintf/bounded-copy
 // mappings are exact. (lstrcpyn is NOT redefined - SWELL provides it.)
 #define sprintf_s(buf, sz, ...) snprintf((buf), (sz), __VA_ARGS__)
+#define _stricmp strcasecmp
 
 static inline void strcpy_s(char *dst, size_t sz, const char *src)
 {
