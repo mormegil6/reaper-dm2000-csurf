@@ -1988,6 +1988,11 @@ private:
             int delta = relStep(data2);
             if (delta) NudgeFXParam(tr, fx, param, delta);
         }
+        // auto-float the surround plug-in on use (same [fx] window_on_knob behaviour as the FX-editor
+        // knobs) - float the surround FX itself, not the FX-editor's current slot; only if not already up
+        if (m_window_on_knob && TrackFX_Show &&
+            !(TrackFX_GetFloatingWindow && TrackFX_GetFloatingWindow(tr, fx)))
+            TrackFX_Show(tr, fx, 3);
         LogFXParam("surround", tr, fx, param);
         return true;
     }
