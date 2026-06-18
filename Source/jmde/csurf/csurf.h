@@ -126,6 +126,16 @@ extern bool (*TrackFX_GetEnabled)(MediaTrack *tr, int fx);
 extern bool (*TrackFX_SetEnabled)(MediaTrack *tr, int fx, bool en);
 extern int (*EnumProjectMarkers)(int idx, bool *isrgnOut, double *posOut, double *rgnendOut, const char **nameOut, int *markrgnindexnumberOut);
 extern void (*SetEditCurPos)(double time, bool moveview, bool seekplay);
+// Track sends (encoder "send level" mode). Resolved non-fatally, NULL-checked at call sites.
+extern int (*GetTrackNumSends)(MediaTrack *tr, int category);
+extern double (*GetTrackSendInfo_Value)(MediaTrack *tr, int category, int sendidx, const char *parmname);
+extern bool (*SetTrackSendInfo_Value)(MediaTrack *tr, int category, int sendidx, const char *parmname, double newvalue);
+extern bool (*GetTrackSendName)(MediaTrack *tr, int send_index, char *buf, int buf_sz);
+extern double (*TrackFX_GetParamEx)(MediaTrack *tr, int fx, int param, double *minval, double *maxval, double *midval);
+extern int (*CSurf_OnInputMonitorChange)(MediaTrack *trackid, int monitor);
+extern double (*GetMediaTrackInfo_Value)(MediaTrack *tr, const char *parmname);
+extern void (*TrackFX_Show)(MediaTrack *tr, int fx, int showflag);
+extern HWND (*TrackFX_GetFloatingWindow)(MediaTrack *tr, int fx);
 extern GUID *(*GetTrackGUID)(MediaTrack *tr);
 
 extern int *g_config_csurf_rate,*g_config_zoommode;

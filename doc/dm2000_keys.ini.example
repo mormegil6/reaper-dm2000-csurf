@@ -158,18 +158,30 @@ lm8 = 40168   ; Go to marker 8
 
 [udk]
 
-; Suggestions (uncomment and adjust as needed):
+; All 16 keys are listed below with a proposed action, COMMENTED OUT (a leading
+; ';' = inactive). Uncomment a line and/or change the ID to assign that key; a
+; value of 0 (or a line left commented) leaves the key with no action. key2/3/10/11
+; default to BANK/CH navigation when left unset - only an uncommented non-zero value
+; overrides that. Action IDs below are stock REAPER and stable across versions.
 
-; key1  = 40029   ; UDK 1  -> Undo
-; key4  = 40030   ; UDK 4  -> Redo
-; key5  = 40022   ; UDK 5  -> Save project
-; key6  = 40157   ; UDK 6  -> Insert marker at edit cursor
-; key7  = 40173   ; UDK 7  -> Insert marker and prompt for name
-; key8  = 1013    ; UDK 8  -> Toggle metronome
-; key9  = 40029   ; UDK 9
-; key12 = 0       ; UDK 12
-; key2  = 0       ; UDK 2  (set non-zero to override BANK ◄ navigation)
-; key3  = 0       ; UDK 3  (set non-zero to override BANK ► navigation)
+; key1  = 40029   ; UDK 1  -> Edit: Undo
+; key2  = 0       ; UDK 2  -> BANK <  (set non-zero to override navigation)
+; key3  = 0       ; UDK 3  -> BANK >  (set non-zero to override navigation)
+; key4  = 40030   ; UDK 4  -> Edit: Redo
+; key5  = 40026   ; UDK 5  -> File: Save project
+; key6  = 40157   ; UDK 6  -> Markers: Insert marker at current position
+; key7  = 40173   ; UDK 7  -> Markers: Go to next marker/region
+; key8  = 40364   ; UDK 8  -> Options: Toggle metronome   (NOT 1013 - that is Record)
+; key9  = 40172   ; UDK 9  -> Markers: Go to previous marker/region
+; key10 = 0       ; UDK 10 -> CH <   (set non-zero to override navigation)
+; key11 = 0       ; UDK 11 -> CH >   (set non-zero to override navigation)
+; key12 = 40174   ; UDK 12 -> Markers: Insert region from time selection
+; key13 = 40340   ; UDK 13 -> Track: Unsolo all tracks
+; key14 = 40339   ; UDK 14 -> Track: Unmute all tracks
+; key15 = 40015   ; UDK 15 -> View: Zoom out project
+; key16 = 40016   ; UDK 16 -> View: Zoom in project
+;          (UDK 16 with NO mapping dumps the selected track's active-FX params to
+;           the REAPER console - handy for finding [surround] param indices)
 
 
 ; ===========================================================================
@@ -194,17 +206,20 @@ lm8 = 40168   ; Go to marker 8
 ; surround plugin on the SELECTED track (it never auto-inserts one).
 ;
 ; The compiled-in default is "none" - without this section the surround controls
-; do nothing. The settings below are the working example (input 1 of ReaSurroundPan):
+; do nothing. The settings below are the working example (input 1 of ReaSurroundPan).
+; The five DYNAMICS knobs are neighbours and control, in order: X, Y, Z, spread, gain.
+; The joystick does 2D X/Y panning (it shares the X and Y params with knobs 1 & 2);
+; it cannot reach Z - use knob 3 for that.
 ;
 ;   plugin       = FX name to look for (TrackFX_GetByName match)
-;   param_front  = THRESHOLD knob + joystick Y
-;   param_rear   = ATTACK knob
-;   param_lr     = DECAY knob + joystick X
-;   param_lfe    = RANGE knob
-;   param_vol    = HOLD knob
+;   param_x      = knob 1 + joystick horizontal  -> X (left/right)
+;   param_y      = knob 2 + joystick vertical    -> Y (front/back)
+;   param_z      = knob 3                         -> Z (height)
+;   param_spread = knob 4                         -> spread / divergence
+;   param_gain   = knob 5                         -> gain
 ;
 ; Param values are the plugin's parameter indices. The defaults below target
-; INPUT 1 of a stock ReaSurroundPan (33 params); change them to taste:
+; INPUT 1 of a stock ReaSurroundPan; change them to taste:
 ;   6=in 1 gain  7=in 1 X(L/R)  8=in 1 Y(F/B)  9=in 1 Z(height)  10=in 1 LFE
 ;   11=in 1 divergence   (15+ = input 2, etc.)
 ;
@@ -215,12 +230,12 @@ lm8 = 40168   ; Go to marker 8
 
 [surround]
 
-plugin      = ReaSurroundPan
-param_front = 8
-param_rear  = 9
-param_lr    = 7
-param_lfe   = 10
-param_vol   = 6
+plugin       = ReaSurroundPan
+param_x      = 7
+param_y      = 8
+param_z      = 9
+param_spread = 11
+param_gain   = 6
 
 ; --- object/input switching (ROUTING buttons + Direct) ---
 ; The param_* above are OBJECT 1. The ROUTING buttons 1-8 select object 1-8 within
@@ -261,6 +276,168 @@ exclusive = 1
 
 
 ; ===========================================================================
+; [display] - per-channel status icons and momentary scribble "peeks"
+;
+; insert_icon    = 1 (default): light the "INS" icon on a channel when its track
+;                  has at least one FX plugin.
+; auto_indicator = 1 (default): light the "AUTO" indicator (red) when a track is
+;                  armed for automation writing (Touch / Write / Latch mode).
+; Set either to 0 to leave that icon alone.
+;
+; SCRIBBLE PEEKS - hold a button to momentarily overlay extra info on every
+; channel's 4-character name strip; releasing it restores the track names. They
+; reuse the ENCODER MODE > ENC ASSIGN 1/2 buttons (unused for encoder modes):
+;
+; peek_number = 1 (default): hold ENC ASSIGN 1 to show each track's REAPER track
+;               NUMBER instead of its name.
+; peek_db     = 1 (default): hold ENC ASSIGN 2 to show each fader's level in dB
+;               (updates live while you move a fader).
+; Set either to 0 to free that button / leave the strips alone.
+;
+; peek_latch  = 0 (default): ENC ASSIGN 1/2 are momentary (overlay only while held).
+;               Set to 1 to make a PRESS toggle the overlay on, press again off -
+;               for a permanent number/dB readout.
+; touch_db    = 1 (default): while you touch/ride a fader, its strip shows that
+;               fader's dB (live), restoring the track name on release. Set to 0
+;               to leave the name up while you move faders.
+;
+; MASTER-SECTION READOUTS (recovered by sniffing Pro Tools, see DESIGN.md):
+; select_assign = 1 (default): drive the SELECT ASSIGN label from the encoder mode
+;                 (Pan / SndA-E). Rename the strings in the [labels] section below.
+;                 Set 0 to leave that display field blank.
+; cursor_mode   = 1 (default): drive the CURSOR MODE label (NAVIGATION / ZOOM) from
+;                 the ENTER arrow-mode. Set 0 to leave it on the desk's own default.
+; ===========================================================================
+
+[display]
+
+insert_icon    = 1
+auto_indicator = 1
+peek_number    = 1
+peek_db        = 1
+peek_latch     = 0
+touch_db       = 1
+select_assign  = 1
+cursor_mode    = 1
+
+
+; ===========================================================================
+; [fx] - generic FX parameter editor (EFFECTS/PLUG-INS section)
+;
+; window_on_knob = 1 (default): moving a parameter knob floats that plug-in's
+;                  window on screen (the PARAM button also toggles it open/closed).
+;                  Set 0 if you don't want windows popping up as you turn knobs -
+;                  the PARAM button still toggles the window on demand.
+; ===========================================================================
+
+[fx]
+
+window_on_knob = 1
+
+
+; ===========================================================================
+; [labels] - custom text for the SELECT ASSIGN readout (4 characters max each)
+;
+; The SELECT ASSIGN field always reflects the *current encoder mode* (it can't be
+; decoupled - a status field that lies is worse than none), but you can rename the
+; words it shows. Useful if your sends always carry the same effects, e.g. send A =
+; reverb -> show "Rvb" instead of "SndA". Longer text is truncated to 4 chars.
+;
+;   pan   -> shown in pan mode            (default "Pan")
+;   aux1  -> shown when encoders ride send 1 / AUX A   (default "SndA")
+;   aux2..aux5 -> sends 2-5 / AUX B-E                  (default "SndB".."SndE")
+; ===========================================================================
+
+[labels]
+
+; pan  = Pan
+; aux1 = SndA
+; aux2 = SndB
+; aux3 = SndC
+; aux4 = SndD
+; aux5 = SndE
+
+
+; ===========================================================================
+; [channel] - channel-strip button behaviour
+;
+; auto_button = what the per-channel AUTO key does (it has no native REAPER role):
+;   automation (default) - cycle that track's REAPER automation mode
+;                          (read -> touch -> latch -> write); the AUTO indicator
+;                          lights in touch/write/latch so you can see the mode.
+;   unity                - snap that channel's fader to 0 dB (handy "reset gain").
+;   monitor              - cycle that track's record monitor (off -> on -> auto).
+;
+; double_touch = 1 (default): double-tap a motorized fader to snap it to 0 dB
+;                (mirrors REAPER's double-click-fader-to-unity). Set 0 to disable.
+; ===========================================================================
+
+[channel]
+
+auto_button  = automation
+double_touch = 1
+
+
+; ===========================================================================
+; [encoder] - channel encoder (V-pot) modes via the ENCODER MODE / AUX SELECT row
+;
+; The channel encoders always do pan in ENC PAN mode. With sends enabled, the
+; AUX SELECT buttons 1-5 switch the encoders to ride REAPER track SEND levels
+; (send 1-5), exactly as the desk natively maps AUX A-E to encoder send level.
+; The encoder ring shows the send level; turning an encoder is +/-1 dB per detent.
+; Press ENC PAN to return the encoders (and rings) to pan.
+;
+; sends = 1 (default): AUX SELECT 1-5 -> encoder send-level mode.
+; sends = 0: AUX SELECT does nothing on the surface; encoders stay on pan.
+; ===========================================================================
+
+[encoder]
+
+sends = 1
+
+
+; ===========================================================================
+; [automix] - AUTOMIX section (button map hardware-verified 2026-06-17)
+;
+; The AUTOMIX section's two rows speak Pro Tools' automation model. Mapped to REAPER:
+;
+; TOP ROW = automation MODE. These are built in (no config): pressing one sets the
+;   SELECTED tracks' automation mode (select all tracks to apply to all). The
+;   per-channel AUTO indicator shows each track's mode by colour (green=Read,
+;   orange=Touch/Latch, red=Write).
+;     RELATIVE -> Trim    RETURN -> Read     ABORT/UNDO -> Touch
+;     REC -> Write        AUTO-REC -> Latch  TOUCH SENSE -> Trim (Pro Tools "Off")
+;
+; ENABLE (Pro Tools SUSPEND) and the OVERWRITE row (which Pro Tools parameter TYPE
+;   arms for recording) have no native REAPER equivalent, so they are free action
+;   slots - assign any REAPER action ID (0 = nothing). The Pro Tools meaning of
+;   each is noted; pick a REAPER action that fits your workflow.
+;     suspend  = ENABLE button   (Pro Tools: suspend all automation)
+;     ow_fader = OVERWRITE FADER (Pro Tools: arm Volume)
+;     ow_on    = OVERWRITE ON    (Pro Tools: arm Mute)
+;     ow_pan   = OVERWRITE PAN   (Pro Tools: arm Pan)
+;     ow_aux   = OVERWRITE AUX   (Pro Tools: arm Send level)
+;     ow_auxon = OVERWRITE AUX ON(Pro Tools: arm Send mute)
+;     ow_eq    = OVERWRITE EQ    (Pro Tools: arm Plug-in)
+;   (OVERWRITE SURROUND transmits no MIDI in the Pro Tools layer - it is inert.)
+;
+; Example: show the volume/pan envelopes for the OVERWRITE Fader/Pan buttons:
+;   ow_fader = 40406   ; Track: Toggle track volume envelope visible
+;   ow_pan   = 40407   ; Track: Toggle track pan envelope visible
+; ===========================================================================
+
+[automix]
+
+suspend  = 0
+ow_fader = 0
+ow_on    = 0
+ow_pan   = 0
+ow_aux   = 0
+ow_auxon = 0
+ow_eq    = 0
+
+
+; ===========================================================================
 ; [scene] - DM2000 scene recall via the GENERAL port (OPTIONAL, off by default)
 ;
 ; This links REAPER project markers to DM2000 scene memories, both ways. It is
@@ -276,6 +453,12 @@ exclusive = 1
 ;   in the "GENERAL port" dropdown of the control-surface settings dialog. Leave
 ;   the dropdown on "None" to disable scene recall completely.
 ;
+;   ALSO on DISPLAY ACCESS [MIDI] > MIDI Setup, set PROGRAM CHANGE Tx and Rx to ON.
+;   Rx is on by default (lets the console RECEIVE a recall); Tx ships OFF, so the
+;   console won't TRANSMIT a Program Change on recall until you turn it on - that
+;   is what "receive" below needs. Scene N <-> Program Change #N (the console's
+;   default Program Change Assign Table; if you remap that table, the mapping shifts).
+;
 ; receive  (default 1 = on)
 ;   A scene RECALL on the console moves the REAPER edit cursor to the project
 ;   marker whose NUMBER matches the scene: scene N -> marker numbered N (the
@@ -287,32 +470,24 @@ exclusive = 1
 ;   on by default; set receive = 0 to disable.
 ;
 ; send  (default 0 = off)
-;   As playback crosses a scene marker (named below), REAPER drives the console's
-;   scene section over the GENERAL port. Off by default because recall physically
-;   reloads the console (faders sweep); opt in with send = 1.
-;
-; follow_cursor  (default 0; only matters when send = 1)
-;   What send does while STOPPED (not just during playback):
-;     0 = nothing - scenes follow the timeline only when you play (safe default).
-;     1 = when the edit cursor settles (~0.3 s) on a new spot, apply the scene
-;         that owns it, honouring that marker's #/! intent (recall if it is a
-;         !SCENE marker). Good for "jump to the chorus and the desk follows."
-;     2 = same, but scroll the console's scene NUMBER only - never recall while
-;         stopped. The desk previews the upcoming scene; recall waits for play.
-;   Continuous scrubbing does not spam: it fires once after the cursor settles.
+;   REAPER drives the console's scene section from "#SCENE" markers over the GENERAL
+;   port. Two behaviours, by transport state:
+;     PLAYING  -> RECALL the scene as the play cursor crosses its marker (the desk
+;                 physically reloads, in time with the music).
+;     STOPPED  -> DISPLAY only: once the edit cursor settles (~0.3 s), the console's
+;                 scene NUMBER scrolls to the scene owning the cursor - it never
+;                 recalls while stopped, so editing never sweeps the faders.
+;   Off by default because recall reloads the console (faders sweep); opt in with
+;   send = 1. (Continuous scrubbing does not spam - it fires once after settling.)
 ;
 ; MARKER NAMING (send direction)
-;   Two marker-name prefixes, mirroring the console's own two-step scroll/recall:
-;     marker_prefix  (default "#SCENE")  - scrolls the console's scene display to
-;                                          the number, WITHOUT recalling.
-;     marker_recall  (default "!SCENE")  - scrolls AND recalls the scene.
-;   The scene number is the first word after the prefix; anything after it is a
-;   free label for your own reference. If no number is given, the marker's own
-;   number is used. Examples:
-;     "!SCENE 4 Chorus"  -> recall scene 4   (the "Chorus" label is ignored)
-;     "#SCENE 12"        -> display scene 12, no recall
-;     "!SCENE Intro"     -> recall the scene matching this marker's number
-;   Matching is case-insensitive. Markers without a scene prefix are untouched.
+;   marker_prefix  (default "#SCENE")  tags a marker as a scene marker. The scene
+;   number is the first word after the prefix; anything after it is a free label
+;   for your own reference. If no number is given, the marker's own number is used.
+;   Examples (case-insensitive; markers without the prefix are untouched):
+;     "#SCENE 4 Chorus"  -> scene 4   (the "Chorus" label is ignored)
+;     "#SCENE 12"        -> scene 12
+;     "#SCENE Intro"     -> the scene matching this marker's own number
 ;
 ; Scenes 1-99 are supported (scene 0 is the console's read-only init scene).
 ; ===========================================================================
@@ -321,6 +496,4 @@ exclusive = 1
 
 send          = 0
 receive       = 1
-follow_cursor = 0
 ; marker_prefix = #SCENE
-; marker_recall = !SCENE

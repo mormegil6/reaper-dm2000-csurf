@@ -120,6 +120,15 @@ bool (*TrackFX_GetEnabled)(MediaTrack *tr, int fx);
 bool (*TrackFX_SetEnabled)(MediaTrack *tr, int fx, bool en);
 int (*EnumProjectMarkers)(int idx, bool *isrgnOut, double *posOut, double *rgnendOut, const char **nameOut, int *markrgnindexnumberOut);
 void (*SetEditCurPos)(double time, bool moveview, bool seekplay);
+int (*GetTrackNumSends)(MediaTrack *tr, int category);
+double (*GetTrackSendInfo_Value)(MediaTrack *tr, int category, int sendidx, const char *parmname);
+bool (*SetTrackSendInfo_Value)(MediaTrack *tr, int category, int sendidx, const char *parmname, double newvalue);
+bool (*GetTrackSendName)(MediaTrack *tr, int send_index, char *buf, int buf_sz);
+double (*TrackFX_GetParamEx)(MediaTrack *tr, int fx, int param, double *minval, double *maxval, double *midval);
+int (*CSurf_OnInputMonitorChange)(MediaTrack *trackid, int monitor);
+double (*GetMediaTrackInfo_Value)(MediaTrack *tr, const char *parmname);
+void (*TrackFX_Show)(MediaTrack *tr, int fx, int showflag);
+HWND (*TrackFX_GetFloatingWindow)(MediaTrack *tr, int fx);
 
 
 int *g_config_csurf_rate,*g_config_zoommode;
@@ -254,6 +263,15 @@ REAPER_PLUGIN_DLL_EXPORT int REAPER_PLUGIN_ENTRYPOINT(REAPER_PLUGIN_HINSTANCE hI
   *(void **)&TrackFX_SetEnabled = (void *)rec->GetFunc("TrackFX_SetEnabled");
   *(void **)&EnumProjectMarkers = (void *)rec->GetFunc("EnumProjectMarkers");
   *(void **)&SetEditCurPos      = (void *)rec->GetFunc("SetEditCurPos");
+  *(void **)&GetTrackNumSends        = (void *)rec->GetFunc("GetTrackNumSends");
+  *(void **)&GetTrackSendInfo_Value  = (void *)rec->GetFunc("GetTrackSendInfo_Value");
+  *(void **)&SetTrackSendInfo_Value  = (void *)rec->GetFunc("SetTrackSendInfo_Value");
+  *(void **)&GetTrackSendName        = (void *)rec->GetFunc("GetTrackSendName");
+  *(void **)&TrackFX_GetParamEx      = (void *)rec->GetFunc("TrackFX_GetParamEx");
+  *(void **)&CSurf_OnInputMonitorChange = (void *)rec->GetFunc("CSurf_OnInputMonitorChange");
+  *(void **)&GetMediaTrackInfo_Value = (void *)rec->GetFunc("GetMediaTrackInfo_Value");
+  *(void **)&TrackFX_Show            = (void *)rec->GetFunc("TrackFX_Show");
+  *(void **)&TrackFX_GetFloatingWindow = (void *)rec->GetFunc("TrackFX_GetFloatingWindow");
 
 
   rec->Register("csurf",&csurf_bcf_reg);

@@ -1,4 +1,4 @@
-[![C++](https://img.shields.io/badge/C++-14-blue.svg)]() [![Windows](https://img.shields.io/badge/Windows-x64-0078D4.svg?logo=windows&logoColor=white)]() [![macOS](https://img.shields.io/badge/macOS-arm64%2Fx86__64-000000.svg?logo=apple&logoColor=white)]() [![REAPER](https://img.shields.io/badge/REAPER-6+-darkgreen.svg)]() [![v0.7](https://img.shields.io/badge/version-v0.7-lightgrey.svg)](https://bmroz.eu/projects/dm2000-csurf) [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
+[![C++](https://img.shields.io/badge/C++-14-blue.svg)]() [![Windows](https://img.shields.io/badge/Windows-x64-0078D4.svg?logo=windows&logoColor=white)]() [![macOS](https://img.shields.io/badge/macOS-arm64%2Fx86__64-000000.svg?logo=apple&logoColor=white)]() [![REAPER](https://img.shields.io/badge/REAPER-6+-darkgreen.svg)]() [![v0.8](https://img.shields.io/badge/version-v0.8-lightgrey.svg)](https://bmroz.eu/projects/dm2000-csurf) [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
 
 # reaper_csurf_dm2000 - Yamaha DM2000 control surface for REAPER
 
@@ -32,6 +32,8 @@ reference, layer plan, and task tracking.
   with the surface configured (the plugin answers the console's keepalive ping)
 
 **DM2000 Owner's Manual (V2):** [jp.yamaha.com - DM2000V2 EN OM](https://jp.yamaha.com/files/download/other_assets/7/334227/dm2000v2_en_om_g0.pdf) - MIDI/HUI chapter 18, SysEx appendix C.
+
+**Logic Pro Control Surfaces Support Guide - Yamaha DM2000:** [support.apple.com - logicpro-css](https://support.apple.com/guide/logicpro-css/yamaha-dm2000-ctls74ca162f/mac) - the most complete map of how the DM2000's controls behave as a DAW surface (Apple's HUI-derived implementation); used here as a cross-reference for control assignments.
 
 ## Installation (pre-built)
 
@@ -185,10 +187,46 @@ Full button/zone/MIDI reference: [DESIGN.md - Button / function / MIDI reference
   surround plugin on the selected track, configured via `[surround]` (ships
   targeting ReaSurroundPan; no compiled-in default). Hardware-verified.
 - **FX parameter editor** - the EFFECTS/PLUG-INS section plus the parameter knobs
-  and page arrows edit any FX on the selected track. Hardware-verified.
+  and page arrows edit any FX on the selected track; param names and values are
+  shown on the REMOTE INSERT ASSIGN/EDIT screen above the four knobs. Hardware-verified.
 
-Still to come: EQ parameter control, sends/aux routing, talkback. See
-[DESIGN.md](DESIGN.md).
+### Layer 4 - new in v0.8
+
+- **Encoder sends** - the AUX SELECT 1-5 buttons switch the channel encoders to ride
+  REAPER track send levels (send 1-5), with V-pot ring feedback and the destination
+  name on the strips; ENC PAN returns to pan. Mirrors the desk's native AUX A-E
+  encoder send-level behaviour. Toggle with `[encoder] sends`.
+- **Status icons** - the per-channel **INS** icon lights when a track has any FX, and
+  the **AUTO** indicator lights when a track is in Touch/Write/Latch. Toggle with
+  `[display] insert_icon` / `auto_indicator`.
+- **Scribble peeks** - hold ENC ASSIGN 1 to momentarily overlay each track's **number**,
+  or ENC ASSIGN 2 for each fader's level in **dB** (live); release to restore names.
+  Toggle with `[display] peek_number` / `peek_db`.
+- **SELECT ASSIGN readout** - the master-section SELECT ASSIGN field now tracks the encoder
+  mode: **Pan** in pan mode, **SndA**-**SndE** when the encoders ride sends. (Recovered by
+  sniffing Pro Tools; it's scribble cell 8 on port 1 - see DESIGN.md.)
+- **CURSOR MODE readout** - shows **NAVIGATION** / **ZOOM** following the ENTER arrow-mode
+  (scroll → NAVIGATION, zoom → ZOOM). Pro Tools' third mode, SELECT, is omitted - it's a
+  transient console state with no matching arrow behaviour in REAPER.
+- **EFFECTS/PLUG-INS rings & window** - the four parameter-knob rings show the visible
+  parameters' values, and moving a knob floats that plug-in's window (`[fx] window_on_knob`);
+  the EFFECTS **DISPLAY** button toggles that auto-float on the fly.
+- **V-pot ring blink** - in AUX/send mode, the rings of channels that carry the ridden send
+  blink, setting them apart from pan.
+- **counter-mode LEDs** - the **TIME CODE / FEET / BEATS** indicators follow REAPER's timecode format.
+- **AUTO key & double-tap** - the per-channel **AUTO** key cycles automation mode (`[channel]
+  auto_button`; Off→Read→Touch→Latch→Write) with a colour indicator that **blinks in Latch**;
+  double-tapping a fader snaps it to 0 dB (`[channel] double_touch`).
+- **Startup splash** - on load the REMOTE display briefly shows `DM2000 csurf online vX.Y` and the
+  project website, then hands off to the FX view - clearing the console's "Off-Line" message.
+
+Everything above is configurable in `dm2000_keys.ini`; defaults are documented in
+[doc/dm2000_keys.ini.example](doc/dm2000_keys.ini.example) and
+[doc/dm2000_keys_guide.md](doc/dm2000_keys_guide.md).
+
+Still to come: FLIP (faders ↔ encoders), talkback. (The DM2000's EQ / SELECTED CHANNEL knobs
+send no MIDI on the HUI layer, so EQ isn't controllable from the surface - see Known limitations.)
+See [DESIGN.md](DESIGN.md).
 
 ## Scene recall (GENERAL port)
 
@@ -204,6 +242,10 @@ config dialog's **GENERAL port** dropdown, then enable it in `[scene]` of `dm200
   - `!SCENE 4 Chorus` → recalls scene 4 (any text after the number is a free label)
   - `#SCENE 4` → only scrolls the desk's scene display, no recall
   - `follow_cursor` optionally makes the desk track the edit cursor while stopped
+
+Also enable **Program Change Tx + Rx** on the desk (DISPLAY ACCESS [MIDI] → MIDI Setup) - Rx is
+on by default but **Tx ships off**, so *receive* won't work until you turn it on. Scene N ↔
+Program Change #N (the console's default Program Change Assign Table).
 
 Scenes 1-99. Full reference: [doc/dm2000_keys_guide.md](doc/dm2000_keys_guide.md).
 

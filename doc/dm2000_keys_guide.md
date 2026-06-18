@@ -261,6 +261,153 @@ mapping, set `console = 1` under `[debug]`; otherwise it stays quiet.
 exclusive = 1
 ```
 
+## [display] section - channel icons and scribble peeks
+
+The small per-channel display above each fader shows the track name, two status
+icons, and - while you hold a modifier - a momentary overlay ("peek").
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `insert_icon` | `1` (on) | Light the **INS** icon on a channel when its track has at least one FX plugin. |
+| `auto_indicator` | `1` (on) | Light the **AUTO** indicator (red) when a track is armed for automation writing (Touch / Write / Latch). |
+| `peek_number` | `1` (on) | Hold **ENC ASSIGN 1** to overlay each track's REAPER track **number** in place of its name; release to restore. |
+| `peek_db` | `1` (on) | Hold **ENC ASSIGN 2** to overlay each fader's level in **dB** (updates live as you move a fader); release to restore. |
+| `peek_latch` | `0` (off) | When `1`, ENC ASSIGN 1/2 **toggle** the overlay (press to lock on, press again off) instead of being momentary - for a permanent number/dB readout. |
+| `touch_db` | `1` (on) | While you touch/ride a fader, its strip shows that fader's **dB** (live), restoring the name on release. |
+
+The peeks reuse the ENCODER MODE row's ENC ASSIGN 1/2 buttons (not used for
+encoder modes). Set a key to `0` to disable that overlay and free the button.
+
+```ini
+[display]
+insert_icon    = 1
+auto_indicator = 1
+peek_number    = 1
+peek_db        = 1
+peek_latch     = 0
+touch_db       = 1
+select_assign  = 1
+cursor_mode    = 1
+```
+
+`select_assign` drives the master SELECT ASSIGN readout from the encoder mode (Pan / SndA-E);
+`cursor_mode` drives the CURSOR MODE readout (NAVIGATION / ZOOM) from the ENTER arrow-mode. Set
+either to `0` to leave that display field alone.
+
+## [fx] section - FX parameter editor
+
+The EFFECTS/PLUG-INS section edits any FX on the selected track (four knobs + page arrows + F1-F4),
+and the four knob rings show the visible parameters' values.
+
+`window_on_knob = 1` (default) floats a plug-in's window when you move one of its parameter knobs;
+the PARAM button and the EFFECTS **DISPLAY** button also toggle it. Set `0` to stop windows
+popping up - the PARAM button still opens them on demand.
+
+```
+[fx]
+window_on_knob = 1
+```
+
+## [labels] section - SELECT ASSIGN text
+
+The SELECT ASSIGN readout always reflects the current encoder mode (Pan / sends), but you can
+rename what it shows - handy if a send always carries the same effect (send A = reverb -> show
+"Rvb" not "SndA"). Four characters max each; commented lines keep the defaults.
+
+```
+[labels]
+; pan  = Pan
+; aux1 = SndA
+; aux2 = SndB
+; aux3 = SndC
+; aux4 = SndD
+; aux5 = SndE
+```
+
+## [channel] section - channel-strip button behaviour
+
+The per-channel **AUTO** key has no native REAPER role, so it is configurable.
+
+| `auto_button` value | Meaning |
+|---------------|---------|
+| `automation` (default) | Cycle that track's REAPER automation mode (read → touch → latch → write); the AUTO indicator lights in touch/write/latch so you can see the mode. |
+| `unity` | Snap that channel's fader to **0 dB** (quick "reset gain"). |
+| `monitor` | Cycle that track's **record monitor** (off → on → auto). |
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `double_touch` | `1` (on) | Double-tap a motorized fader to snap it to **0 dB** (mirrors REAPER's double-click-to-unity). |
+
+```ini
+[channel]
+auto_button  = automation
+double_touch = 1
+```
+
+## [encoder] section - channel encoder (V-pot) modes
+
+The channel encoders ride **pan** in ENC PAN mode. With sends enabled, the
+**AUX SELECT 1-5** buttons switch the encoders to ride REAPER track **send levels**
+(send 1-5) - mirroring the desk's native AUX A-E → encoder send-level behaviour.
+The encoder ring shows the send level, turning is ±1 dB per detent, and the name
+strips briefly show the send destination. Press **ENC PAN** to return to pan.
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `sends` | `1` (on) | AUX SELECT 1-5 switch the encoders to send-level mode (sends 1-5). |
+| `sends` | `0` | AUX SELECT does nothing on the surface; encoders stay on pan. |
+
+```ini
+[encoder]
+sends = 1
+```
+
+## [automix] section - AUTOMIX / OVERWRITE rows
+
+The AUTOMIX section speaks Pro Tools' automation model (button map hardware-verified
+2026-06-17). It maps to REAPER in two parts:
+
+**Top row = automation mode (built in, no config).** Pressing one sets the **selected**
+tracks' automation mode (select all tracks to apply to all). The per-channel AUTO
+indicator shows each track's mode by colour (green = Read, orange = Touch/Latch,
+red = Write).
+
+| Button (Pro Tools label) | REAPER automation mode |
+|--------------------------|------------------------|
+| RELATIVE (Trim) | Trim |
+| RETURN (Read) | Read |
+| ABORT/UNDO (Touch) | Touch |
+| REC (Write) | Write |
+| AUTO-REC (Latch) | Latch |
+| TOUCH SENSE (Off) | Trim (REAPER has no per-track "off") |
+
+**ENABLE + OVERWRITE row = free action slots.** These select a Pro Tools *parameter
+type to arm* / *suspend automation* - concepts REAPER has no direct equivalent for -
+so they are configurable: assign any REAPER action ID (`0` = nothing).
+
+| Key | Button | Pro Tools meaning |
+|-----|--------|-------------------|
+| `suspend` | ENABLE | Suspend all automation |
+| `ow_fader` | OVERWRITE FADER | Arm Volume |
+| `ow_on` | OVERWRITE ON | Arm Mute |
+| `ow_pan` | OVERWRITE PAN | Arm Pan |
+| `ow_aux` | OVERWRITE AUX | Arm Send level |
+| `ow_auxon` | OVERWRITE AUX ON | Arm Send mute |
+| `ow_eq` | OVERWRITE EQ | Arm Plug-in |
+
+(OVERWRITE SURROUND transmits no MIDI in the Pro Tools layer - it is inert.)
+
+```ini
+[automix]
+suspend  = 0
+ow_fader = 0
+ow_on    = 0
+ow_pan   = 0
+ow_aux   = 0
+ow_auxon = 0
+ow_eq    = 0
+```
+
 ## [scene] section - scene recall (GENERAL port)
 
 Links REAPER project markers to DM2000 scene memories, both directions. **Optional and
@@ -273,27 +420,42 @@ Scene recall travels over the console's **GENERAL Rx/Tx** port instead, which mu
 same number. Set it on the console (`SETUP → MIDI/HOST SETUP → GENERAL`), then choose that
 same MIDI port in the config dialog's **GENERAL port** dropdown ("None" = scene recall off).
 
+**Console MIDI setup (required).** Scene recall rides Program Change on the GENERAL port, which
+the console gates on the **DISPLAY ACCESS [MIDI] → MIDI Setup** page (manual ch.18, p.217):
+- **PROGRAM CHANGE Rx = ON** (the factory default) - needed for `send` (REAPER recalls a scene).
+- **PROGRAM CHANGE Tx = ON** (the factory default is **OFF** - turn it on) - needed for `receive`
+  (the desk transmits a PC when you recall a scene). If receive does nothing, this is why.
+
+![MIDI Setup page - PROGRAM CHANGE Tx/Rx](scene-midi-setup.png)
+
+Scene N maps to **Program Change #N** via the console's **Program Change Assign Table** (DISPLAY
+ACCESS [MIDI]), whose factory default is 1:1 (Scene 1 = PC #1 … Scene 99 = PC #99; Scene 0 = PC
+#100). The plugin assumes that default; if you remap the table on the console, the scene↔marker
+correspondence shifts with it.
+
+![Program Change Assign Table - default Scene N = PC #N](scene-progchange-table.png)
+
 | Key | Default | Meaning |
 |-----|---------|---------|
 | `receive` | `1` (on) | A scene RECALL on the desk jumps REAPER to the marker *numbered* = scene (scene 4 → marker 4). Matched by number, not name (names can repeat). Harmless - it only moves the cursor - and inert without a GENERAL port, so it ships on. |
-| `send` | `0` (off) | As playback crosses a scene marker, REAPER drives the desk's scene section. Off by default because recall physically reloads the console (faders sweep). |
-| `follow_cursor` | `0` | What `send` does while **stopped**: `0` = nothing (timeline only); `1` = when the edit cursor settles (~0.3 s), apply the scene owning that spot, honouring its `#`/`!` intent; `2` = same but scroll the number only, never recall. |
-| `marker_prefix` | `#SCENE` | Marker-name prefix that **scrolls** the desk's scene number (no recall). |
-| `marker_recall` | `!SCENE` | Marker-name prefix that scrolls **and recalls**. |
+| `send` | `0` (off) | REAPER drives the desk's scene section from `#SCENE` markers. **Playing** → recall the scene as the play cursor crosses its marker. **Stopped** → display only: scroll the desk's scene number to the scene owning the cursor (no recall). Off by default because recall physically reloads the console (faders sweep). |
+| `marker_prefix` | `#SCENE` | Marker-name prefix that tags a scene marker. |
 
 **Marker naming (send).** The scene number is the first word after the prefix; anything after
 it is a free label for your own use. If no number is given, the marker's own number is used.
-Matching is case-insensitive.
+Matching is case-insensitive; markers without the prefix are untouched.
 
 ```
-!SCENE 4 Chorus    -> recall scene 4   (the "Chorus" label is ignored)
-#SCENE 12          -> scroll the display to scene 12, no recall
-!SCENE Intro       -> recall the scene matching this marker's number
+#SCENE 4 Chorus    -> scene 4   (the "Chorus" label is ignored)
+#SCENE 12          -> scene 12
+#SCENE Intro       -> the scene matching this marker's own number
 ```
 
-During playback every scene marker the play cursor crosses fires in order; on play-start or a
-backward jump (loop wrap / seek) the desk resyncs to the scene owning the new position. Scenes
-1-99 are supported (scene 0 is the console's read-only init scene).
+**Why one prefix and not recall-while-stopped?** A single `#SCENE` tag, recall-on-play /
+display-when-stopped, keeps editing from sweeping the faders and avoids a recall→PC-echo→jump
+feedback loop. During playback every scene marker the play cursor crosses recalls in order; on
+play-start or a backward jump (loop wrap / seek) the desk resyncs to the scene owning the new
+position. Scenes 1-99 are supported (scene 0 is the console's read-only init scene).
 
 ```ini
 [scene]

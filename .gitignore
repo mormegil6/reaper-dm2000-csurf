@@ -1,5 +1,14 @@
 .aider*
 
+# local-only QA / test docs (kept out of the public repo)
+doc/RETEST.md
+doc/TEST_PROTOCOL.md
+doc/TODO.md
+
+# python tool caches
+__pycache__/
+*.pyc
+
 # build artifacts
 x64/
 .vs/

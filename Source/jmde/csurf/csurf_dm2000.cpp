@@ -9,6 +9,9 @@
 #endif
 #include "dm2000_compat.h"
 
+// Plugin version - shown on the startup splash. Keep in sync with res.rc and the README badge.
+#define DM2000_CSURF_VERSION "v0.8"
+
 // DM2000 fader taper calibrated via DM2000 Editor after running the console's built-in
 // fader calibration utility (MIDI-OX capture 2026-06-15; doc/fader-calibration-2026-06-15.txt).
 // 14-bit wire value = (MSB<<7)|LSB. Physical maximum = 16383 at the printed +10 mark.
@@ -80,10 +83,27 @@ class CSurf_DM2000 : public IReaperControlSurface
     int m_zone[4];                   // last switch-matrix zone select (B0 0F zz) per port
     unsigned char m_fader_msb[4][8]; // pending fader value MSB per port/channel
     char m_fader_touch[32];
+    DWORD m_fader_touchtime[32];     // last fader-touch press time per channel (double-tap detect)
+    char m_snap_pending[32];         // double-tap armed on the 2nd press; the 0 dB snap fires on release
+    DWORD m_auto_label_time[24];     // when the AUTO key was pressed per channel (momentary mode label on strip)
+    DWORD m_winflash_time;           // when EFFECTS DISPLAY toggled FX-window auto-float (brief LCD flash)
+    char m_splash_done;              // startup "REAPER online" splash shown once (clears desk Off-Line text)
+    DWORD m_splash_start;            // first-Run timestamp, splash timing base
+    unsigned char m_splash_render;   // last splash on/off state sent (de-dupe)
     bool m_sel_exclusive;            // [select] exclusive: single SEL selects only that track (Pro Tools-style)
     unsigned char m_sel_held[32];    // SELECT buttons currently held (for hold-to-multi-select)
+    int m_auto_button;               // [channel] auto_button: 0=unity (reset fader to 0 dB), 1=automation (cycle track mode), 2=monitor (cycle rec-monitor)
+    bool m_double_touch;             // [channel] double_touch: double-tap a fader to snap it to 0 dB
+    bool m_show_ins;                 // [display] insert_icon: light INS (sw6) when a track has FX
+    bool m_show_auto;                // [display] auto_indicator: light AUTO (sw4) when a track is in touch/write/latch
+    char m_ins_state[32];            // cached INS icon state per channel (-1 = unknown)
+    char m_auto_state[32];           // cached AUTO indicator state per channel (-1 = unknown)
+    bool m_blink_phase;              // shared blink phase for blinking indicators (e.g. AUTO=Write)
+    DWORD m_blink_last;              // last blink-phase flip
     int m_vol_lastpos[32];
     int m_pan_lastpos[32];
+    unsigned char m_enc_ring_last[24]; // last send-level ring sent per channel (live-poll change detect)
+    unsigned char m_enc_blink_last[24]; // last V-pot ring-blink (sw5) state per channel (send-mode flag)
     unsigned int m_pan_lasttouch[32];
     unsigned char m_meter_lastlvl[32];
     unsigned char m_meter_hist[32][2][3]; // per-channel/side level history: peak hold over 3 polls
@@ -91,7 +111,7 @@ class CSurf_DM2000 : public IReaperControlSurface
     DWORD m_meter_lastrun;
     int m_bank_offset;
     int m_wheel_mode;                // 0=jog (edit cursor), 1=scrub, 2=shuttle (coarse)
-    int m_arrow_mode;                // ENTER cycles cursor arrows: 0=scroll, 1=zoom, 2=bank-scroll
+    int m_arrow_mode;                // ENTER cycles cursor arrows: 0=scroll, 1=zoom, 2=horizontal arrange zoom (decoupled from faders)
     int m_auto_mode;                 // 0=trim/bypass, 1=read, 2=touch, 3=write, 4=latch, 5=latch preview
     char m_ini_path[MAX_PATH];       // user-configured path to dm2000_keys.ini (empty = default)
     int m_held_arrow;                // -1=none, 0-3=CSurf_OnArrow direction being held
@@ -104,14 +124,17 @@ class CSurf_DM2000 : public IReaperControlSurface
     // Locate section: configurable action IDs loaded from [locate] in dm2000_keys.ini.
     // RTZ/END: 0 = use CSurf_GoStart()/CSurf_GoEnd() API; non-zero = dispatch that action ID.
     // All others: 0 = no action; non-zero = dispatch that action ID.
-    int m_la_rtz, m_la_end, m_la_loop, m_la_qpunch; // zone 0x0F hw-verified buttons
-    int m_la_in, m_la_out, m_la_post;                // zone 0x10 hw-verified buttons
+    int m_la_rtz, m_la_end, m_la_online, m_la_loop, m_la_qpunch; // zone 0x0F (sw0/1/2/3/4)
+    int m_la_audition, m_la_pre, m_la_in, m_la_out, m_la_post;    // zone 0x10 (sw0/1/2/3/4)
+    int m_automix_suspend;                           // [automix] suspend: action for the ENABLE button (PT SUSPEND)
+    int m_ow_fader, m_ow_on, m_ow_pan, m_ow_aux, m_ow_auxon, m_ow_eq; // [automix] OVERWRITE param-arm buttons -> actions
     int m_la_lm[8];                                  // LM1-LM8 locate memory buttons
     int m_udk[16];                                   // UDK 1-16 action IDs from [udk]; 0 = no action
     int m_tc_interval;                               // LED counter refresh period (ms); [counter] refresh_ms
     DWORD m_tc_lastrun;                              // last counter refresh (decoupled from the meter poll)
+    int m_tc_lastmode;                              // last time-display mode driven to the zone 0x16 LEDs (-1 = unknown)
     char m_surround_plugin[64];                      // [surround] target FX name
-    int m_surround_param[5];                         // [surround] base param indices (object 1): front, rear, lr, lfe, vol
+    int m_surround_param[5];                         // [surround] base param indices (object 1): X, Y, Z, spread, gain
     int m_surround_stride;                           // [surround] params per object (0 = no object switching)
     int m_surround_objects;                          // [surround] max object count (0 = unlimited)
     int m_surround_obj;                              // currently selected object (0-based)
@@ -123,18 +146,32 @@ class CSurf_DM2000 : public IReaperControlSurface
     int m_fx_slot;                                   // current FX slot on the selected track (FX editor)
     int m_fx_page;                                   // current parameter page (4 knobs per page)
     DWORD m_fx_page_last;                            // last page-arrow event (debounce; arrows fire 0x4C twice)
+    int m_enc_send;                                  // channel-encoder mode: -1 = pan, 0-4 = send slot (AUX A-E)
+    bool m_enc_sends;                                // [encoder] sends: AUX SELECT switches encoders to send-level mode
+    char m_scribble_name[24][8];                     // cached track name per surface channel (for override restore)
+    int m_scribble_peek;                             // held scribble override: 0 = none, 1 = track number, 2 = fader dB
+    bool m_peek_number;                              // [display] peek_number: hold ENC ASSIGN1 to show track numbers
+    bool m_peek_db;                                  // [display] peek_db: hold ENC ASSIGN2 to show fader dB
+    bool m_peek_latch;                               // [display] peek_latch: ENC ASSIGN1/2 toggle (press locks on/off) instead of momentary
+    bool m_touch_db;                                 // [display] touch_db: a touched fader's strip shows its dB until release
+    bool m_drive_select_assign;                      // [display] select_assign: drive the SELECT ASSIGN readout (Pan/SndA-E)
+    bool m_drive_cursor_mode;                        // [display] cursor_mode: drive the CURSOR MODE readout (NAV/ZOOM)
+    bool m_window_on_knob;                           // [fx] window_on_knob: float the FX window when a param knob moves
+    char m_sa_pan[8];                                // [labels] pan: SELECT ASSIGN text in pan mode
+    char m_sa_send[5][8];                            // [labels] aux1-5: SELECT ASSIGN text per send slot A-E
     int m_general_in, m_general_out;                 // GENERAL port device indices (-1 = none/disabled)
     midi_Input *m_general_midiin;                    // GENERAL port input (scene-recall PC receive)
     midi_Output *m_general_midiout;                  // GENERAL port output (scene-recall PC send)
-    bool m_scene_send;                               // [scene] send: #SCENE/!SCENE marker -> drive console
+    bool m_scene_send;                               // [scene] send: #SCENE marker -> drive console (recall while playing, display while stopped)
     bool m_scene_receive;                            // [scene] receive: DM2000 scene PC -> marker jump
-    char m_scene_prefix[32];                         // [scene] marker_prefix: set scene number only (default "#SCENE")
-    char m_scene_recall_prefix[32];                  // [scene] marker_recall: set number AND recall (default "!SCENE")
-    int m_scene_follow;                              // [scene] follow_cursor: stopped send 0=off 1=recall-on-settle 2=scroll-only
+    char m_scene_prefix[32];                         // [scene] marker_prefix: scene-marker tag (default "#SCENE")
     double m_scene_lastpos;                          // last play position, for marker-cross detection (playback)
     double m_scene_cursorpos;                        // last edit-cursor position seen while stopped (settle detect)
     DWORD m_scene_cursortime;                        // when the stopped cursor last moved (settle timer)
     int m_scene_applied;                             // last scene number driven to the console (de-dupe re-fires)
+    int m_scene_echo[8];                             // ring of scenes we just recalled (suppress the console's PC echoes; -1 = empty)
+    DWORD m_scene_echo_t[8];                          // matching send timestamps (echo-suppression window)
+    int m_scene_echo_pos;                            // next write slot in the echo ring
 
 public:
   CSurf_DM2000(int indev1, int outdev1, int indev2, int outdev2, int indev3, int outdev3, int indev4, int outdev4, int genIn, int genOut, const char *iniPath, int *errStats)
@@ -146,12 +183,12 @@ public:
     m_scene_send = false;
     m_scene_receive = true;  // documented default ON; matches the ini default even when no ini path resolves (macOS)
     strcpy_s(m_scene_prefix, sizeof(m_scene_prefix), "#SCENE");
-    strcpy_s(m_scene_recall_prefix, sizeof(m_scene_recall_prefix), "!SCENE");
-    m_scene_follow = 0;
     m_scene_lastpos = -1.0;
     m_scene_cursorpos = -1.0;
     m_scene_cursortime = 0;
     m_scene_applied = -1;
+    for (int e = 0; e < 8; ++e) { m_scene_echo[e] = -1; m_scene_echo_t[e] = 0; }
+    m_scene_echo_pos = 0;
     m_midi_in_devs[0] = indev1;
     m_midi_out_devs[0] = outdev1;
     m_midi_in_devs[1] = indev2;
@@ -167,8 +204,22 @@ public:
     memset(m_fader_touch, 0, sizeof(m_fader_touch));
     m_sel_exclusive = true;                 // Pro Tools-style by default; [select] exclusive = 0 to disable
     memset(m_sel_held, 0, sizeof(m_sel_held));
+    m_auto_button = 1;                      // [channel] auto_button = automation by default
+    m_double_touch = true;                  // [channel] double_touch: snap fader to 0 dB on double-tap (on by default)
+    memset(m_fader_touchtime, 0, sizeof(m_fader_touchtime));
+    memset(m_snap_pending, 0, sizeof(m_snap_pending));
+    memset(m_auto_label_time, 0, sizeof(m_auto_label_time));
+    m_winflash_time = 0;
+    m_splash_done = 0; m_splash_start = 0; m_splash_render = 0;
+    m_show_ins = m_show_auto = true;        // [display] indicators on by default
+    memset(m_ins_state, 0xff, sizeof(m_ins_state));   // 0xff = unknown -> first poll sends
+    memset(m_auto_state, 0xff, sizeof(m_auto_state));
+    m_blink_phase = true;
+    m_blink_last = 0;
     memset(m_vol_lastpos, 0xff, sizeof(m_vol_lastpos));
     memset(m_pan_lastpos, 0xff, sizeof(m_pan_lastpos));
+    memset(m_enc_ring_last, 0xff, sizeof(m_enc_ring_last));
+    memset(m_enc_blink_last, 0xff, sizeof(m_enc_blink_last));
     memset(m_pan_lasttouch, 0, sizeof(m_pan_lasttouch));
     memset(m_meter_lastlvl, 0xff, sizeof(m_meter_lastlvl));
     memset(m_meter_hist, 0, sizeof(m_meter_hist));
@@ -191,11 +242,16 @@ public:
     // All other buttons: 0 = no action until ini is configured.
     m_la_rtz     = 0;
     m_la_end     = 0;
+    m_la_online  = 0;
     m_la_loop    = 0;
     m_la_qpunch  = 0;
+    m_la_audition = 0;
+    m_la_pre     = 0;
     m_la_in      = 0;
     m_la_out     = 0;
     m_la_post    = 0;
+    m_automix_suspend = 0;
+    m_ow_fader = m_ow_on = m_ow_pan = m_ow_aux = m_ow_auxon = m_ow_eq = 0;
     for (int i = 0; i < 8; i++)
         m_la_lm[i] = 0;
 
@@ -204,6 +260,7 @@ public:
         m_udk[i] = 0;
     m_tc_interval = 33;   // ~30 Hz default; smooth SMPTE frame display
     m_tc_lastrun  = 0;
+    m_tc_lastmode = -1;
     // surround: compiled default is "none" (disabled), like [locate]/[udk]. The working
     // ReaSurroundPan map ships in dm2000_keys.ini.example; with no [surround] section
     // configured, the MCS PANNER knobs/joystick do nothing.
@@ -220,6 +277,19 @@ public:
     m_fx_slot = 0;
     m_fx_page = 0;
     m_fx_page_last = 0;
+    m_enc_send = -1;                         // start in pan mode
+    m_enc_sends = true;                      // [encoder] sends on by default
+    memset(m_scribble_name, 0, sizeof(m_scribble_name));
+    m_scribble_peek = 0;
+    m_peek_number = m_peek_db = true;        // [display] peek modifiers on by default
+    m_peek_latch = false;                    // [display] peek_latch: momentary by default
+    m_touch_db = true;                       // [display] touch_db: show dB while riding a fader (on by default)
+    m_drive_select_assign = true;            // [display] select_assign: drive SELECT ASSIGN by default
+    m_drive_cursor_mode = true;              // [display] cursor_mode: drive CURSOR MODE by default
+    m_window_on_knob = true;                 // [fx] window_on_knob: float FX window on knob move by default
+    strcpy_s(m_sa_pan, sizeof(m_sa_pan), "Pan ");
+    for (int i = 0; i < 5; ++i)
+    { m_sa_send[i][0]='S'; m_sa_send[i][1]='n'; m_sa_send[i][2]='d'; m_sa_send[i][3]=(char)('A'+i); m_sa_send[i][4]=0; }
 
     // load [locate] overrides from ini
     char _la_ini[MAX_PATH];
@@ -229,13 +299,24 @@ public:
         GetIniPath(_la_ini, sizeof(_la_ini));
     if (_la_ini[0])
     {
-        m_la_rtz    = GetPrivateProfileInt("locate", "rtz",    m_la_rtz,    _la_ini);
-        m_la_end    = GetPrivateProfileInt("locate", "end",    m_la_end,    _la_ini);
-        m_la_loop   = GetPrivateProfileInt("locate", "loop",   m_la_loop,   _la_ini);
-        m_la_qpunch = GetPrivateProfileInt("locate", "qpunch", m_la_qpunch, _la_ini);
-        m_la_in     = GetPrivateProfileInt("locate", "in",     m_la_in,     _la_ini);
-        m_la_out    = GetPrivateProfileInt("locate", "out",    m_la_out,    _la_ini);
-        m_la_post   = GetPrivateProfileInt("locate", "post",   m_la_post,   _la_ini);
+        m_la_rtz      = GetPrivateProfileInt("locate", "rtz",      m_la_rtz,      _la_ini);
+        m_la_end      = GetPrivateProfileInt("locate", "end",      m_la_end,      _la_ini);
+        m_la_online   = GetPrivateProfileInt("locate", "online",   m_la_online,   _la_ini);
+        m_la_loop     = GetPrivateProfileInt("locate", "loop",     m_la_loop,     _la_ini);
+        m_la_qpunch   = GetPrivateProfileInt("locate", "qpunch",   m_la_qpunch,   _la_ini);
+        m_la_audition = GetPrivateProfileInt("locate", "audition", m_la_audition, _la_ini);
+        m_la_pre      = GetPrivateProfileInt("locate", "pre",      m_la_pre,      _la_ini);
+        m_la_in       = GetPrivateProfileInt("locate", "in",       m_la_in,       _la_ini);
+        m_la_out      = GetPrivateProfileInt("locate", "out",      m_la_out,      _la_ini);
+        m_la_post     = GetPrivateProfileInt("locate", "post",     m_la_post,     _la_ini);
+        // [automix] OVERWRITE param-arm buttons + ENABLE (SUSPEND): no native REAPER role -> action IDs (0 = none)
+        m_automix_suspend = GetPrivateProfileInt("automix", "suspend",  m_automix_suspend, _la_ini);
+        m_ow_fader        = GetPrivateProfileInt("automix", "ow_fader", m_ow_fader,        _la_ini);
+        m_ow_on           = GetPrivateProfileInt("automix", "ow_on",    m_ow_on,           _la_ini);
+        m_ow_pan          = GetPrivateProfileInt("automix", "ow_pan",   m_ow_pan,          _la_ini);
+        m_ow_aux          = GetPrivateProfileInt("automix", "ow_aux",   m_ow_aux,          _la_ini);
+        m_ow_auxon        = GetPrivateProfileInt("automix", "ow_auxon", m_ow_auxon,        _la_ini);
+        m_ow_eq           = GetPrivateProfileInt("automix", "ow_eq",    m_ow_eq,           _la_ini);
         for (int i = 0; i < 8; i++)
         {
             char key[8];
@@ -258,16 +339,46 @@ public:
         char pbuf[64];
         GetPrivateProfileString("surround", "plugin", m_surround_plugin, pbuf, sizeof(pbuf), _la_ini);
         strcpy_s(m_surround_plugin, sizeof(m_surround_plugin), pbuf);
-        m_surround_param[0] = GetPrivateProfileInt("surround", "param_front", m_surround_param[0], _la_ini);
-        m_surround_param[1] = GetPrivateProfileInt("surround", "param_rear",  m_surround_param[1], _la_ini);
-        m_surround_param[2] = GetPrivateProfileInt("surround", "param_lr",    m_surround_param[2], _la_ini);
-        m_surround_param[3] = GetPrivateProfileInt("surround", "param_lfe",   m_surround_param[3], _la_ini);
-        m_surround_param[4] = GetPrivateProfileInt("surround", "param_vol",   m_surround_param[4], _la_ini);
+        // knobs map to neighbouring controls X, Y, Z, spread, gain (in that order)
+        m_surround_param[0] = GetPrivateProfileInt("surround", "param_x",      m_surround_param[0], _la_ini);
+        m_surround_param[1] = GetPrivateProfileInt("surround", "param_y",      m_surround_param[1], _la_ini);
+        m_surround_param[2] = GetPrivateProfileInt("surround", "param_z",      m_surround_param[2], _la_ini);
+        m_surround_param[3] = GetPrivateProfileInt("surround", "param_spread", m_surround_param[3], _la_ini);
+        m_surround_param[4] = GetPrivateProfileInt("surround", "param_gain",   m_surround_param[4], _la_ini);
         m_surround_stride   = GetPrivateProfileInt("surround", "stride",  m_surround_stride,  _la_ini);
         m_surround_objects  = GetPrivateProfileInt("surround", "objects", m_surround_objects, _la_ini);
 
         // [select] exclusive = 1 (default): SEL selects only that track, hold to multi-select
         m_sel_exclusive = GetPrivateProfileInt("select", "exclusive", 1, _la_ini) != 0;
+
+        // [channel] auto_button: what the per-channel AUTO key does (default = automation)
+        char abuf[32] = "";
+        GetPrivateProfileString("channel", "auto_button", "automation", abuf, sizeof(abuf), _la_ini);
+        if (!_stricmp(abuf, "unity"))        m_auto_button = 0;
+        else if (!_stricmp(abuf, "monitor")) m_auto_button = 2;
+        else                                 m_auto_button = 1; // "automation" (default)
+        m_double_touch = GetPrivateProfileInt("channel", "double_touch", 1, _la_ini) != 0;
+
+        // [display] per-channel indicators (default on)
+        m_show_ins  = GetPrivateProfileInt("display", "insert_icon",    1, _la_ini) != 0;
+        m_show_auto = GetPrivateProfileInt("display", "auto_indicator", 1, _la_ini) != 0;
+        // [display] momentary scribble peeks: hold ENC ASSIGN 1/2 to overlay track number / fader dB (default on)
+        m_peek_number = GetPrivateProfileInt("display", "peek_number", 1, _la_ini) != 0;
+        m_peek_db     = GetPrivateProfileInt("display", "peek_db",     1, _la_ini) != 0;
+        m_peek_latch  = GetPrivateProfileInt("display", "peek_latch",  0, _la_ini) != 0;
+        m_touch_db    = GetPrivateProfileInt("display", "touch_db",    1, _la_ini) != 0;
+        m_drive_select_assign = GetPrivateProfileInt("display", "select_assign", 1, _la_ini) != 0;
+        m_drive_cursor_mode   = GetPrivateProfileInt("display", "cursor_mode",   1, _la_ini) != 0;
+        m_window_on_knob      = GetPrivateProfileInt("fx",      "window_on_knob", 1, _la_ini) != 0;
+        // [labels] override the 4-char SELECT ASSIGN strings (pan, aux1-5); default = built-in
+        { char def[8]; strcpy_s(def, sizeof(def), m_sa_pan);
+          GetPrivateProfileString("labels", "pan", def, m_sa_pan, sizeof(m_sa_pan), _la_ini); }
+        { static const char *auxkey[5] = { "aux1","aux2","aux3","aux4","aux5" };
+          for (int i = 0; i < 5; ++i)
+          { char def[8]; strcpy_s(def, sizeof(def), m_sa_send[i]);
+            GetPrivateProfileString("labels", auxkey[i], def, m_sa_send[i], sizeof(m_sa_send[i]), _la_ini); } }
+        // [encoder] sends = 1 (default): AUX SELECT switches channel encoders to send-level mode
+        m_enc_sends = GetPrivateProfileInt("encoder", "sends", 1, _la_ini) != 0;
         m_console_log = GetPrivateProfileInt("debug", "console", 0, _la_ini) != 0;
 
         // [scene] scene recall via the GENERAL port (only active if a GENERAL port is set).
@@ -275,12 +386,9 @@ public:
         // GENERAL port); send defaults OFF (it actively drives the console's scenes).
         m_scene_send    = GetPrivateProfileInt("scene", "send",    0, _la_ini) != 0;
         m_scene_receive = GetPrivateProfileInt("scene", "receive", 1, _la_ini) != 0;
-        m_scene_follow  = GetPrivateProfileInt("scene", "follow_cursor", 0, _la_ini);
         char sbuf[32];
         GetPrivateProfileString("scene", "marker_prefix", m_scene_prefix, sbuf, sizeof(sbuf), _la_ini);
         if (sbuf[0]) strcpy_s(m_scene_prefix, sizeof(m_scene_prefix), sbuf);
-        GetPrivateProfileString("scene", "marker_recall", m_scene_recall_prefix, sbuf, sizeof(sbuf), _la_ini);
-        if (sbuf[0]) strcpy_s(m_scene_recall_prefix, sizeof(m_scene_recall_prefix), sbuf);
     }
 
     for (int i = 0; i < 4; ++i)
@@ -313,7 +421,12 @@ public:
     if (m_general_out >= 0)
         m_general_midiout = CreateThreadedMIDIOutput(CreateMIDIOutput(m_general_out, false, NULL));
 
-    SendCounter(true); // blank counter display and sync m_tc_lastbuf to known state
+    SendCounter(true);  // blank counter display and sync m_tc_lastbuf to known state
+    SetEncModeLEDs();    // light ENC PAN at startup so the encoder mode is visible (default = pan)
+    RefreshSelectAssign(); // show "Pan" in the SELECT ASSIGN readout at startup
+    SendCursorMode(0);     // show NAVIGATION in the CURSOR MODE readout at startup
+    SendGlobalLED(0x0D, 5, false); // clear stale SCRUB / SHUTTLE wheel-mode LEDs (wheel starts in jog)
+    SendGlobalLED(0x0D, 6, false);
   }
 
   ~CSurf_DM2000()
@@ -350,10 +463,14 @@ public:
               m_midiouts[i / 8]->Send(0xA0, i & 7, 0x10, -1);       // meter R off
               m_midiouts[i / 8]->Send(0xB0, 0x10 + (i & 7), 0, -1); // pan ring off
           }
+          SendChannelLED(i, 0, false); // fader-touch indicator
           SendChannelLED(i, 1, false);
           SendChannelLED(i, 2, true);  // [ON] LED is inverted on the DM2000 (lit = channel on),
                                        // so send "muted" to darken it for a clean shutdown
           SendChannelLED(i, 3, false);
+          SendChannelLED(i, 4, false); // AUTO indicator
+          SendChannelLED(i, 5, false); // V-pot LED / pan-ring blink state
+          SendChannelLED(i, 6, false); // INS icon
           SendChannelLED(i, 7, false);
           SendTrackTitle(i, "");
       }
@@ -361,7 +478,14 @@ public:
       SendTransportLED(4, false);
       SendTransportLED(5, false);
       SendCounter(true); // blank the LED counter display
+      SendCounterMode(-1); // clear the TIME CODE / FEET / BEATS mode LEDs
       for (int w = 0; w < 8; ++w) SendRoutingLED(w, false); // clear MCS PANNER routing LEDs (port 4)
+      for (int c = 0; c < 8; ++c) SendDisplayCell(c, "");   // blank the REMOTE INSERT EDIT text display
+      SendSelectAssign("");                                 // blank the master SELECT ASSIGN ("Pan"/"SndA-E")
+      if (m_midiouts[0]) for (int k = 0; k < 4; ++k) m_midiouts[0]->Send(0xB0, 0x18 + k, 0, -1); // EFFECTS SEL rings off
+      for (int sw = 2; sw <= 7; ++sw) SendGlobalLED(0x0B, sw, false); // clear AUX/ENCODER-MODE button LEDs
+      for (int sw = 0; sw <= 7; ++sw) SendGlobalLED(0x1C, sw, false); // clear EFFECTS/PLUG-INS indicator boxes
+      SendAutomixLEDs(-1);                                  // clear AUTOMIX mode-button LEDs
 
       // REAPER's MIDI outputs queue internally (CreateThreadedMIDIOutput is a
       // passthrough on Windows); deleting them immediately drops whatever the
@@ -408,12 +532,34 @@ public:
           MIDI_event_t *gevt;
           while ((gevt = glist->EnumItems(&gl)))
               if (m_scene_receive && (gevt->midi_message[0] & 0xF0) == 0xC0)
-                  GotoSceneMarker(gevt->midi_message[1] + 1); // PC n -> scene n+1
+              {
+                  int scene = gevt->midi_message[1] + 1; // PC n -> scene n+1
+                  // ignore the console's PC echo of a recall WE just drove (else the
+                  // jump-to-marker would chase our own send and the cursor ping-pongs).
+                  // Consume the matching ring entry so a genuine user re-recall of the
+                  // same scene a moment later is NOT swallowed.
+                  bool echo = false;
+                  DWORD gnow = timeGetTime();
+                  for (int e = 0; e < 8; ++e)
+                      if (m_scene_echo[e] == scene && gnow - m_scene_echo_t[e] < 800)
+                      { m_scene_echo[e] = -1; echo = true; break; }
+                  if (echo) continue;
+                  GotoSceneMarker(scene);
+              }
       }
 
-      PollSceneMarkers(); // GENERAL port send: drive the console as playback crosses #SCENE/!SCENE markers
+      PollSceneMarkers(); // GENERAL port send: drive the console as playback crosses #SCENE markers
 
       DWORD now = timeGetTime();
+
+      // revert AUTO-mode strip labels once their ~1.2s flash expires
+      for (int a = 0; a < 24; ++a)
+          if (m_auto_label_time[a] && now - m_auto_label_time[a] >= 1200)
+          { m_auto_label_time[a] = 0; RefreshScribble(a); }
+
+      // revert the EFFECTS-DISPLAY "AutoWin" flash to the FX param display after ~1s
+      if (m_winflash_time && now - m_winflash_time >= 1000)
+      { m_winflash_time = 0; RefreshFXDisplay(); }
 
       // Direct (surround bank): a single press confirms as bank-up once the 400ms
       // double-click window passes with no second press.
@@ -428,21 +574,7 @@ public:
       {
           if (now - m_arrow_last_repeat > 80)
           {
-              if (m_arrow_mode == 2 && (m_held_arrow == 2 || m_held_arrow == 3))
-              {
-                  int dir = m_held_arrow;
-                  AdjustBankOffset(dir == 2 ? -1 : 1);
-                  m_held_arrow = dir;
-                  if (SetMixerScroll)
-                  {
-                      MediaTrack *t = CSurf_TrackFromID(m_bank_offset + 1, false);
-                      if (t) SetMixerScroll(t);
-                  }
-              }
-              else
-              {
-                  CSurf_OnArrow(m_held_arrow, m_arrow_mode == 1);
-              }
+              CSurf_OnArrow(m_held_arrow, m_arrow_mode == 1); // NAVIGATION (scroll) or ZOOM
               m_arrow_last_repeat = now;
           }
       }
@@ -470,7 +602,27 @@ public:
       if (now - m_meter_lastrun >= 100) // unsigned diff also handles timer wrap
       {
           m_meter_lastrun = now;
+          if (now - m_blink_last >= 400) { m_blink_last = now; m_blink_phase = !m_blink_phase; } // ~1.25 Hz blink
+
+          // Startup splash: ~1s after load (desk now online), blink "REAPER online" ~3x on the REMOTE
+          // display, then hand off to the FX view - clears the console's "Off-Line / waiting for MIDI" text.
+          if (!m_splash_done)
+          {
+              if (!m_splash_start) m_splash_start = now;
+              DWORD age = now - m_splash_start;
+              if (age >= 1000 && !m_splash_render)             // ~1s after load (desk online): paint the card once
+              {
+                  m_splash_render = 1;
+                  for (int c = 0; c < 8; ++c) SendDisplayCell(c, "");
+                  SendDisplayCell(0, "DM2000");  SendDisplayCell(1, "csurf");      // top: DM2000 csurf online vX.Y
+                  SendDisplayCell(2, "online");  SendDisplayCell(3, DM2000_CSURF_VERSION);
+                  SendDisplayCell(4, "bmroz.eu/p"); SendDisplayCell(5, "rojects/dm"); // bottom: project website,
+                  SendDisplayCell(6, "2000-csurf");                                   //   sliced across abutting cells
+              }
+              else if (age >= 1000 + 2500) { m_splash_done = 1; RefreshFXDisplay(); } // ~2.5s, then hand off to FX view
+          }
           PollRoutingLEDs(); // refresh surround routing LEDs on selection/object/plugin change
+          PollSendRings();   // live-refresh encoder send-level rings while in send mode
           m_meter_histpos = (m_meter_histpos + 1) % 3;
           for (int i = 0; i < 32; ++i)
           {
@@ -502,15 +654,44 @@ public:
                   m_midiouts[i / 8]->Send(0xA0, i & 7, lvlL, -1);        // left
                   m_midiouts[i / 8]->Send(0xA0, i & 7, 0x10 | lvlR, -1); // right
               }
+
+              // per-channel status icons (HUI channel zone, real channels 0-23 only):
+              // INS (sw6) = track has FX; AUTO (sw4) = track armed for writing (touch/write/latch)
+              if (i < 24)
+              {
+                  char ins = (m_show_ins && tr && TrackFX_GetCount && TrackFX_GetCount(tr) > 0) ? 1 : 0;
+                  if (m_ins_state[i] != ins) { m_ins_state[i] = ins; SendChannelLED(i, 6, ins != 0); }
+                  // AUTO indicator is multi-colour (sw4): green=Read, orange=Touch/Latch, red=Write.
+                  // Write (red) and Latch (orange) blink on the dark phase to flag active-write /
+                  // latch-armed; Touch (also orange) stays solid, so the blink tells Touch from Latch.
+                  unsigned char acol = AutoColorByte(tr);
+                  int amode = GetTrackAutomationMode ? GetTrackAutomationMode(tr) : -1;
+                  if (!m_blink_phase && (acol == 0x44 || amode == AUTO_MODE_LATCH)) acol = 0x04;
+                  if ((unsigned char)m_auto_state[i] != acol) { m_auto_state[i] = (char)acol; SendChannelLEDVal(i, acol); }
+              }
           }
       }
   }
 
   void SetTrackListChange()
   {
-      // blank scribble strips on surface channels that no longer map to a track
+      // surface channels past the last track must not keep a previous track's
+      // scribble or LEDs: banking can otherwise strand e.g. a lit SOLO/SELECT on
+      // an empty channel (the host only repaints channels that map to a track).
       for (int i = 0; i < 32; ++i)
-          if (!TrackFromCh(i)) SendTrackTitle(i, "");
+          if (!TrackFromCh(i))
+          {
+              SendTrackTitle(i, "");
+              SendChannelLED(i, 1, false); // SELECT
+              SendChannelLED(i, 2, true);  // [ON] inverted -> send "muted" to darken
+              SendChannelLED(i, 3, false); // SOLO
+              SendChannelLED(i, 5, false); // V-pot / pan-ring
+              SendChannelLED(i, 7, false); // REC
+              SendChannelLED(i, 4, false); m_auto_state[i] = 0; // AUTO indicator
+              SendChannelLED(i, 6, false); m_ins_state[i] = 0;  // INS icon
+              if (m_midiouts[i / 8]) m_midiouts[i / 8]->Send(0xB0, 0x10 + (i & 7), 0, -1); // pan ring position off
+              m_pan_lastpos[i] = -1; // invalidate cache so a reappearing track repaints its ring even at the same pan
+          }
   }
   void SetSurfaceVolume(MediaTrack *trackid, double volume)
   {
@@ -524,6 +705,8 @@ public:
           int ch = id & 7;
           m_midiouts[id / 8]->Send(0xB0, ch, (volint >> 7) & 0x7F, -1);
           m_midiouts[id / 8]->Send(0xB0, 0x20 + ch, volint & 0x7F, -1);
+          // live-update the strip when it is showing dB (held peek, or this fader is touched)
+          if (id < 24 && (m_scribble_peek == 2 || (m_touch_db && m_fader_touch[id]))) RefreshScribble(id);
       }
   }
   void SetSurfacePan(MediaTrack *trackid, double pan)
@@ -535,7 +718,8 @@ public:
       if (m_pan_lastpos[id] != panch)
       {
           m_pan_lastpos[id] = panch;
-          m_midiouts[id / 8]->Send(0xB0, 0x10 + (id & 7), 1 + ((panch * 11) >> 7), -1); // ring LED 1-11
+          if (m_enc_send < 0)  // pan mode owns the ring; in send mode the ring shows send level
+              m_midiouts[id / 8]->Send(0xB0, 0x10 + (id & 7), 1 + ((panch * 11) >> 7), -1); // ring LED 1-11
       }
   }
   void SetSurfaceMute(MediaTrack *trackid, bool mute)
@@ -547,6 +731,11 @@ public:
   {
       int id = CSurf_TrackToID(trackid, false) - 1 - m_bank_offset;
       if (id >= 0 && id < 32) SendChannelLED(id, 1, selected);
+      if (selected)            // a newly selected track drives the FX editor: show it from the top
+      {
+          m_fx_slot = 0; m_fx_page = 0;
+          RefreshFXDisplay();
+      }
   }
   void SetSurfaceSolo(MediaTrack *trackid, bool solo)
   {
@@ -568,7 +757,14 @@ public:
 
   void SetTrackTitle(MediaTrack *trackid, const char *title)
   {
-      SendTrackTitle(CSurf_TrackToID(trackid, false) - 1 - m_bank_offset, title);
+      int id = CSurf_TrackToID(trackid, false) - 1 - m_bank_offset;
+      if (id >= 0 && id < 24)                  // cache the name so overrides can restore it
+      {
+          int j; for (j = 0; j < 7 && title && title[j]; ++j) m_scribble_name[id][j] = title[j];
+          m_scribble_name[id][j] = 0;
+      }
+      if (m_scribble_peek == 0 && m_enc_send < 0) // no scribble override active: show the name now
+          SendTrackTitle(id, title);
   }
   bool GetTouchState(MediaTrack *trackid, int isPan)
   {
@@ -651,6 +847,28 @@ private:
     // display; low nibble = BCD digit 0-9. Only positions that changed since the
     // previous message are sent, spanning from the rightmost to leftmost change.
     // Special clear: 8 x 0x20 blanks all positions (used at init and on close).
+    // Counter-mode indicator LEDs (zone 0x16, hw-captured from Pro Tools 2026-06-17):
+    // sw0 = TIME CODE, sw1 = FEET, sw2 = BEATS. Driven from REAPER's transport display
+    // mode, mirroring csurf_mcu.cpp's SMPTE/BEATS lights: tmode 5 = h:m:s:f (timecode),
+    // tmode 1-2 = measures/beats. (REAPER has no "feet" mode, so FEET stays dark.)
+    // Counter-mode indicator LEDs (zone 0x16). REAPER packs BOTH time units into tmode:
+    // the LOW byte is the primary display, the secondary unit rides in the high bits
+    // (hw-harvested 2026-06-17). Mask to the low byte, then group every subtype onto the
+    // right indicator. Primary values: 0=Min:Sec 11=Min:Sec(min) 3=Seconds 5=H:M:S:F |
+    // 2=Meas.Beats 6=Meas.Beats(min) 10=Meas.Fractions (1/7 = the same two under a
+    // Min:Sec secondary) | 4=Samples 8=Absolute Frames. tmode -1 (clear) masks to 0xFF
+    // and matches nothing, so all LEDs go off.
+    void SendCounterMode(int tmode)
+    {
+        int prim = tmode & 0xFF;
+        bool beats = (prim == 2 || prim == 6 || prim == 10 || prim == 1 || prim == 7);
+        bool feet  = (prim == 4 || prim == 8);
+        bool tcode = (prim == 0 || prim == 3 || prim == 5 || prim == 11);
+        SendGlobalLED(0x16, 0, tcode);   // TIME CODE  (sw0, hw-confirmed 2026-06-18)
+        SendGlobalLED(0x16, 1, feet);    // FEET       (sw1, hw-confirmed 2026-06-18)
+        SendGlobalLED(0x16, 2, beats);   // BEATS      (sw2, hw-confirmed)
+    }
+
     void SendCounter(bool clear = false)
     {
         if (!m_midiouts[0]) return;
@@ -680,6 +898,17 @@ private:
         else {
             tmodeptr = (int *)projectconfig_var_addr(NULL, __g_projectconfig_timemode);
             if (tmodeptr) tmode = *tmodeptr;
+        }
+
+        // drive the counter-mode indicator LEDs (zone 0x16) when the format changes
+        if (m_tc_lastmode != tmode)
+        {
+            m_tc_lastmode = tmode;
+            SendCounterMode(tmode);
+            // [debug] console: log the REAPER time-display value so all subtypes can be
+            // grouped onto the right TIME CODE / FEET / BEATS indicator (harvest each mode's number).
+            if (m_console_log && ShowConsoleMsg)
+            { char b[48]; sprintf_s(b, sizeof(b), "[DM2000] counter tmode = %d\n", tmode); ShowConsoleMsg(b); }
         }
 
         double pos = (GetPlayState() & 1) ? GetPlayPosition() : GetCursorPosition();
@@ -767,20 +996,18 @@ private:
         return true;
     }
 
-    // Match a marker name against the two scene prefixes. The scene number is the
-    // first token after the prefix; if it is absent or non-numeric, the marker's own
-    // number (mnum) is used. Anything after the number is a free label and ignored,
-    // e.g. "!SCENE 4 Chorus" -> recall scene 4. Returns false for non-scene markers.
-    bool ParseSceneMarker(const char *name, int mnum, int *scene, bool *recall)
+    // Match a marker name against the scene prefix. The scene number is the first
+    // token after the prefix; if it is absent or non-numeric, the marker's own number
+    // (mnum) is used. Anything after the number is a free label and ignored, e.g.
+    // "#SCENE 4 Chorus" -> scene 4. Returns false for non-scene markers.
+    bool ParseSceneMarker(const char *name, int mnum, int *scene)
     {
         if (!name) return false;
         const char *rest = NULL;
-        if      (MatchScenePrefix(name, m_scene_recall_prefix, &rest)) *recall = true;
-        else if (MatchScenePrefix(name, m_scene_prefix,        &rest)) *recall = false;
-        else return false;
+        if (!MatchScenePrefix(name, m_scene_prefix, &rest)) return false;
         while (*rest == ' ' || *rest == '\t') ++rest;
         *scene = (*rest >= '0' && *rest <= '9') ? atoi(rest) : mnum;
-        return true;
+        return (*scene >= 1 && *scene <= 99); // scene 0 / out-of-range: not a usable scene marker
     }
 
     // Scroll/display message: sets the console's pending scene number WITHOUT
@@ -806,53 +1033,66 @@ private:
     {
         if (!m_general_midiout || scene < 1 || scene > 99) return;
         m_general_midiout->Send(0xC0, (unsigned char)(scene - 1), 0, -1);
+        // arm echo suppression: the console PCs every recall back; a ring (not a single
+        // scalar) tracks a whole burst so each in-flight echo is matched exactly once.
+        m_scene_echo[m_scene_echo_pos] = scene;
+        m_scene_echo_t[m_scene_echo_pos] = timeGetTime();
+        m_scene_echo_pos = (m_scene_echo_pos + 1) % 8;
     }
 
-    // Receive: a console scene recall moves the REAPER cursor to the project marker
-    // whose NUMBER matches the scene (names may repeat, so we match by number -- the
-    // same target the Locate Memory "go to marker N" buttons use). No-op if no such
-    // marker exists, so an unmapped scene recall never fires a stray action.
+    // Receive: a console scene recall moves the REAPER cursor to the marker that
+    // represents that scene. To round-trip cleanly with the SEND side (which derives
+    // the scene from a "#SCENE N" token), prefer a scene marker whose parsed number
+    // matches; fall back to a plain marker numbered N (the Locate "go to marker N"
+    // convenience). No-op if neither exists.
     void GotoSceneMarker(int scene)
     {
         if (scene < 1 || scene > 99 || !EnumProjectMarkers || !SetEditCurPos) return;
+        double tagged = -1.0, numbered = -1.0;
         int idx = 0;
         bool isrgn; double mpos; const char *mname; int mnum;
         while ((idx = EnumProjectMarkers(idx, &isrgn, &mpos, NULL, &mname, &mnum)))
-            if (!isrgn && mnum == scene)
-            {
-                SetEditCurPos(mpos, true, (GetPlayState() & 1) != 0); // seek too if playing
-                // Record the scene the console just recalled so the send/follow de-dup
-                // won't echo this same recall straight back to the desk a moment later.
-                m_scene_applied = scene;
-                return;
-            }
+        {
+            if (isrgn) continue;
+            int s;
+            if (ParseSceneMarker(mname, mnum, &s) && s == scene) { tagged = mpos; break; } // exact #SCENE match wins
+            if (mnum == scene && numbered < 0.0) numbered = mpos;                          // plain marker numbered N
+        }
+        double pos = (tagged >= 0.0) ? tagged : numbered;
+        if (pos < 0.0) return;
+        SetEditCurPos(pos, true, (GetPlayState() & 1) != 0); // seek too if playing
+        // Record the scene the console just recalled so the send/follow de-dup won't
+        // echo this same recall straight back to the desk a moment later.
+        m_scene_applied = scene;
     }
 
     // Scene that owns a timeline position: the latest scene marker at or before it
-    // (false if none). Shared by the playback resync and the stopped follow path.
-    bool OwningScene(double atpos, int *scene, bool *recall)
+    // (false if none). Shared by the playback resync and the stopped display path.
+    bool OwningScene(double atpos, int *scene)
     {
-        int own = -1; bool rc = false; double best = -1.0;
+        int own = -1; double best = -1.0;
         int idx = 0;
         bool isrgn; double mpos; const char *mname; int mnum;
         while ((idx = EnumProjectMarkers(idx, &isrgn, &mpos, NULL, &mname, &mnum)))
         {
             if (isrgn || mpos > atpos) continue;
-            int s; bool r;
-            if (ParseSceneMarker(mname, mnum, &s, &r) && mpos >= best) { best = mpos; own = s; rc = r; }
+            int s;
+            if (ParseSceneMarker(mname, mnum, &s) && mpos >= best) { best = mpos; own = s; }
         }
         if (own < 0) return false;
-        *scene = own; *recall = rc; return true;
+        *scene = own; return true;
     }
 
-    // Send: drive the console's scene section from project markers. "#SCENE n" scrolls
-    // the display to scene n; "!SCENE n" scrolls AND recalls. During playback every
-    // marker the play cursor crosses forward fires in order; on play-start or a backward
-    // jump (loop wrap / seek) we resync to the scene owning the new position. While
-    // stopped, [scene] follow_cursor governs: 0 = nothing; 1 = once the edit cursor
-    // settles, apply the owning scene (honouring that marker's #/! intent); 2 = same but
-    // scroll-only, never recalls. m_scene_applied de-dupes so the desk is driven only when
-    // the scene actually changes -- no snapshot reload on every loop pass or nudge.
+    // Send: drive the console's scene section from "#SCENE n" project markers.
+    //   PLAYING  -> RECALL the scene as the play cursor crosses its marker (and on
+    //               play-start / loop-wrap / seek, resync to the scene owning the new
+    //               position). This physically reloads the desk in time with the music.
+    //   STOPPED  -> DISPLAY only: once the edit cursor settles, scroll the console's
+    //               scene number to the scene owning the cursor - never recalls while
+    //               stopped (so editing never sweeps the faders, and there is no recall
+    //               -> PC-echo -> jump feedback loop).
+    // m_scene_applied de-dupes so the desk is driven only when the scene actually
+    // changes - no snapshot reload on every loop pass or nudge.
     void PollSceneMarkers()
     {
         if (!m_scene_send || !m_general_midiout || !EnumProjectMarkers)
@@ -866,28 +1106,28 @@ private:
             if (m_scene_lastpos < 0.0 || pos < m_scene_lastpos)
             {
                 // play just started, or the play cursor jumped backwards (loop wrap or
-                // seek): resync to the scene that owns the new position, de-duped.
-                int scene; bool recall;
-                if (OwningScene(pos, &scene, &recall) && scene != m_scene_applied)
+                // seek): resync to (recall) the scene that owns the new position, de-duped.
+                int scene;
+                if (OwningScene(pos, &scene) && scene != m_scene_applied)
                 {
                     SendSceneDisplay(scene);
-                    if (recall) SendSceneRecall(scene);
+                    SendSceneRecall(scene);
                     m_scene_applied = scene;
                 }
             }
             else if (pos > m_scene_lastpos)
             {
-                // forward crossing: fire every scene marker in (lastpos, pos], in order
+                // forward crossing: recall every scene marker in (lastpos, pos], in order
                 int idx = 0;
                 bool isrgn; double mpos; const char *mname; int mnum;
                 while ((idx = EnumProjectMarkers(idx, &isrgn, &mpos, NULL, &mname, &mnum)))
                 {
                     if (isrgn || mpos <= m_scene_lastpos || mpos > pos) continue;
-                    int scene; bool recall;
-                    if (ParseSceneMarker(mname, mnum, &scene, &recall))
+                    int scene;
+                    if (ParseSceneMarker(mname, mnum, &scene))
                     {
                         SendSceneDisplay(scene);
-                        if (recall) SendSceneRecall(scene);
+                        SendSceneRecall(scene);
                         m_scene_applied = scene; // carry into stop so we don't re-recall on stop
                     }
                 }
@@ -897,21 +1137,19 @@ private:
             return;
         }
 
-        // stopped
+        // stopped: scroll the display to the owning scene once the cursor settles
         m_scene_lastpos = -1.0;            // re-arm playback crossing detection
-        if (m_scene_follow == 0) return;
 
         double cur = GetCursorPosition();
         DWORD now = timeGetTime();
         if (cur != m_scene_cursorpos) { m_scene_cursorpos = cur; m_scene_cursortime = now; return; }
         if (now - m_scene_cursortime < 300) return; // wait for the cursor to settle
 
-        int scene; bool recall;
-        if (OwningScene(cur, &scene, &recall) && scene != m_scene_applied)
+        int scene;
+        if (OwningScene(cur, &scene) && scene != m_scene_applied)
         {
             m_scene_applied = scene;
-            SendSceneDisplay(scene);
-            if (m_scene_follow == 1 && recall) SendSceneRecall(scene);
+            SendSceneDisplay(scene); // display only - no recall while stopped
         }
     }
 
@@ -921,6 +1159,30 @@ private:
         if (id < 0 || id >= 32 || !m_midiouts[id / 8]) return;
         m_midiouts[id / 8]->Send(0xB0, 0x0C, id & 7, -1);
         m_midiouts[id / 8]->Send(0xB0, 0x2C, (state ? 0x40 : 0x00) | sw, -1);
+    }
+
+    // Channel LED with a raw value byte (for multi-state LEDs like the colour AUTO
+    // indicator on sw4: 0x04 off, 0x34 green, 0x64 orange, 0x44 red - hw-captured).
+    void SendChannelLEDVal(int id, unsigned char val)
+    {
+        if (id < 0 || id >= 32 || !m_midiouts[id / 8]) return;
+        m_midiouts[id / 8]->Send(0xB0, 0x0C, id & 7, -1);
+        m_midiouts[id / 8]->Send(0xB0, 0x2C, val, -1);
+    }
+
+    // AUTO indicator (sw4) colour for a track's automation mode, mirroring Pro Tools:
+    // Read=green, Touch/Latch=orange, Write=red, Trim/off=dark.
+    unsigned char AutoColorByte(MediaTrack *tr)
+    {
+        if (!m_show_auto || !tr || !GetTrackAutomationMode) return 0x04;
+        switch (GetTrackAutomationMode(tr))
+        {
+            case AUTO_MODE_READ:  return 0x34; // green
+            case AUTO_MODE_TOUCH: return 0x64; // orange
+            case AUTO_MODE_LATCH: return 0x64; // orange
+            case AUTO_MODE_WRITE: return 0x44; // red
+            default:              return 0x04; // trim / off
+        }
     }
 
     // LED in a global (non-channel) zone; these controls live on the first HUI unit (port 1)
@@ -933,32 +1195,21 @@ private:
 
     void SendTransportLED(int sw, bool state) { SendGlobalLED(0x0E, sw, state); }
 
-    // light the one AUTOMIX button for the current mode
-    // hw-verified: enable=z0x19sw2, return=z0x18sw1, touch=z0x18sw0, write=z0x0Csw2, latch=z0x18sw5, rel=z0x18sw2
+    // Light the AUTOMIX mode button (zone 0x18) matching `mode`; clear the rest.
+    // Verified map (2026-06-17): TRIM=sw0(RELATIVE) LATCH=sw1(AUTO-REC) READ=sw2(RETURN)
+    //                            TOUCH=sw5(ABORT/UNDO) WRITE=sw4(REC). [TOUCH SENSE sw3 = Off]
     void SendAutomixLEDs(int mode)
     {
-        int lit_z = -1, lit_sw = -1;
-        switch (mode)
-        {
-            case 0: lit_z = 0x19; lit_sw = 2; break; // bypass -> ENABLE
-            case 1: lit_z = 0x18; lit_sw = 1; break; // read -> RETURN
-            case 2: lit_z = 0x18; lit_sw = 0; break; // touch -> TOUCH SENSE
-            case 3: lit_z = 0x0C; lit_sw = 2; break; // write -> REC
-            case 4: lit_z = 0x18; lit_sw = 5; break; // latch -> AUTO-REC
-            case 5: lit_z = 0x18; lit_sw = 2; break; // latch preview -> RELATIVE
-        }
+        static const int sw_for[5] = { 0, 2, 5, 4, 1 }; // AUTO_MODE_TRIM/READ/TOUCH/WRITE/LATCH -> zone 0x18 switch
+        int lit_sw = (mode >= 0 && mode <= 4) ? sw_for[mode] : -1;
         for (int p = 0; p < 3; ++p)
         {
             if (!m_midiouts[p]) continue;
-            for (int s = 0; s < 8; ++s)
+            for (int s = 0; s <= 5; ++s)
             {
                 m_midiouts[p]->Send(0xB0, 0x0C, 0x18, -1);
-                m_midiouts[p]->Send(0xB0, 0x2C, (lit_z == 0x18 && s == lit_sw ? 0x40 : 0x00) | s, -1);
+                m_midiouts[p]->Send(0xB0, 0x2C, (s == lit_sw ? 0x40 : 0x00) | s, -1);
             }
-            m_midiouts[p]->Send(0xB0, 0x0C, 0x19, -1);
-            m_midiouts[p]->Send(0xB0, 0x2C, (lit_z == 0x19 ? 0x42 : 0x02), -1); // sw2 on/off
-            m_midiouts[p]->Send(0xB0, 0x0C, 0x0C, -1);
-            m_midiouts[p]->Send(0xB0, 0x2C, (lit_z == 0x0C ? 0x42 : 0x02), -1); // sw2 on/off
         }
     }
 
@@ -1020,16 +1271,21 @@ private:
                 else                        MoveEditCursor(dir * speed * 0.1, false); // jog: 0.1s/click
             }
         }
-        else if (data1 >= 0x40 && data1 < 0x48)  // pan v-pot delta: bits 0-5 = amount, bit 6 = right
+        else if (data1 >= 0x40 && data1 < 0x48)  // channel encoder delta: pan (default) or send level
         {
             int gch = port * 8 + (data1 - 0x40);
-            double adj = (data2 & 0x3F) / -63.0;
-            if (data2 & 0x40) adj = -adj;
-
-            MediaTrack *tr = TrackFromCh(gch);
-            if (tr) CSurf_SetSurfacePan(tr, CSurf_OnPanChange(tr, adj, true), NULL);
-
-            m_pan_lasttouch[gch] = timeGetTime();
+            if (m_enc_send >= 0)                  // AUX/send mode: nudge the selected send
+            {
+                OnSendKnob(gch, data2);
+            }
+            else                                 // pan v-pot delta: bits 0-5 = amount, bit 6 = right
+            {
+                double adj = (data2 & 0x3F) / -63.0;
+                if (data2 & 0x40) adj = -adj;
+                MediaTrack *tr = TrackFromCh(gch);
+                if (tr) CSurf_SetSurfacePan(tr, CSurf_OnPanChange(tr, adj, true), NULL);
+                m_pan_lasttouch[gch] = timeGetTime();
+            }
         }
         else if (data1 >= 0x48 && data1 <= 0x4C && port == 0) // FX editor: param knobs 1-4 + page arrows
         {
@@ -1071,6 +1327,233 @@ private:
         }
     }
 
+    // ---- Channel-encoder "send level" mode (ch.19: AUX SELECT = Sends A-E) ----------
+    // The channel encoders normally ride pan; AUX SELECT [1-5] switches them to control
+    // send 1-5 instead (m_enc_send 0-4), ENC PAN returns to pan (-1). The v-pot ring shows
+    // the value either way (pan position, or send level 1-11).
+
+    // paint one channel's encoder ring for the current mode (pan or send), plus its V-pot
+    // ring-blink (sw5): while encoders ride a send, blink the channels that actually carry it
+    // (the blinking ring signals "this ring isn't pan"). The blink is cached so the live poll
+    // only toggles it on change - no stutter - and a send added/removed mid-session updates it.
+    void SendEncoderRing(int gch, bool force = true)
+    {
+        if (gch < 0 || gch >= 24 || !m_midiouts[gch / 8]) return;
+        MediaTrack *tr = TrackFromCh(gch);
+        unsigned char ring = 0;                                  // 0 = ring off
+        bool has_send = false;
+        if (tr)
+        {
+            if (m_enc_send < 0)                                  // pan
+            {
+                double vol, pan;
+                if (GetTrackUIVolPan && GetTrackUIVolPan(tr, &vol, &pan))
+                {
+                    unsigned char pc = panToChar(pan);
+                    m_pan_lastpos[gch] = pc;                     // keep SetSurfacePan's cache coherent
+                    ring = (unsigned char)(1 + ((pc * 11) >> 7));
+                }
+            }
+            else if (GetTrackNumSends && m_enc_send < GetTrackNumSends(tr, 0)) // send level
+            {
+                double sv = GetTrackSendInfo_Value ? GetTrackSendInfo_Value(tr, 0, m_enc_send, "D_VOL") : 0.0;
+                int iv = volToInt14(sv);
+                ring = (unsigned char)(1 + (iv * 10) / 16383);   // 1..11
+                has_send = true;
+            }
+        }
+        unsigned char blink = has_send ? 1 : 0;                  // only strips carrying the ridden send blink
+        if (blink != m_enc_blink_last[gch])
+        {
+            m_enc_blink_last[gch] = blink;
+            SendChannelLED(gch, 5, blink != 0);
+        }
+        if (!force && ring == m_enc_ring_last[gch]) return;     // live poll: only send the ring on change
+        m_enc_ring_last[gch] = ring;
+        m_midiouts[gch / 8]->Send(0xB0, 0x10 + (gch & 7), ring, -1);
+    }
+
+    void RefreshEncoders() { for (int i = 0; i < 24; ++i) SendEncoderRing(i); }
+
+    // While the encoders ride sends, REAPER pushes no send-level callbacks, so poll the
+    // rings and repaint only those that changed (keeps the display live without re-clicking).
+    void PollSendRings() { if (m_enc_send >= 0) for (int i = 0; i < 24; ++i) SendEncoderRing(i, false); }
+
+    // Paint one channel's scribble for the current state: a held peek (track number /
+    // fader dB) wins; else send-destination name while in send mode; else the cached
+    // track name. SendTrackTitle truncates to the 4-char strip.
+    // Format a track's fader level as a 4-char-friendly dB string ("-inf", "+0", "-6"...).
+    void FormatTrackDb(MediaTrack *tr, char *buf, int bufsz)
+    {
+        buf[0] = 0;
+        double vol, pan;
+        if (GetTrackUIVolPan && GetTrackUIVolPan(tr, &vol, &pan))
+        {
+            double db = VAL2DB(vol);
+            if (db <= -99.0) strcpy_s(buf, bufsz, "-inf");
+            else             sprintf_s(buf, bufsz, "%+.0f", db);
+        }
+    }
+
+    void RefreshScribble(int gch)
+    {
+        if (gch < 0 || gch >= 24) return;
+        MediaTrack *tr = TrackFromCh(gch);
+        char buf[16] = "";
+        if (tr)
+        {
+            if (m_auto_label_time[gch] && timeGetTime() - m_auto_label_time[gch] < 1200 && GetTrackAutomationMode)
+            {                                     // momentary: just cycled the AUTO key -> show the mode
+                static const char *nm[5] = { "Off ", "Read", "Touc", "Writ", "Latc" };
+                int m = GetTrackAutomationMode(tr);
+                strcpy_s(buf, sizeof(buf), (m >= 0 && m < 5) ? nm[m] : "Auto");
+            }
+            else if (m_touch_db && m_fader_touch[gch]) // riding this fader: show its dB
+            {
+                FormatTrackDb(tr, buf, sizeof(buf));
+            }
+            else if (m_scribble_peek == 1)       // hold: track number
+            {
+                sprintf_s(buf, sizeof(buf), "%d", CSurf_TrackToID(tr, false));
+            }
+            else if (m_scribble_peek == 2)       // hold: fader level in dB
+            {
+                FormatTrackDb(tr, buf, sizeof(buf));
+            }
+            else if (m_enc_send >= 0)            // send mode: destination name
+            {
+                if (GetTrackNumSends && m_enc_send < GetTrackNumSends(tr, 0) && GetTrackSendName)
+                    GetTrackSendName(tr, m_enc_send, buf, sizeof(buf));
+                else strcpy_s(buf, sizeof(buf), "-");
+            }
+            else                                 // normal: cached track name
+            {
+                int j; for (j = 0; j < 7 && m_scribble_name[gch][j]; ++j) buf[j] = m_scribble_name[gch][j];
+                buf[j] = 0;
+            }
+        }
+        SendTrackTitle(gch, buf);
+    }
+
+    void RefreshScribbles() { for (int i = 0; i < 24; ++i) RefreshScribble(i); }
+
+    // SELECT ASSIGN readout: the encoder-assignment label is scribble strip #8 on
+    // port 1 (hw-captured from Pro Tools 2026-06-17) - same zone 0x10 format as a
+    // channel name, channel index 0x08. F0 00 00 66 05 00 10 08 <4 chars> F7.
+    void SendSelectAssign(const char *text)
+    {
+        if (!m_midiouts[0]) return;
+        unsigned char sx[13] = { 0xF0,0x00,0x00,0x66,0x05,0x00,0x10, 0x08, 0x20,0x20,0x20,0x20, 0xF7 };
+        for (int i = 0; i < 4 && text[i]; ++i)
+        {
+            unsigned char c = (unsigned char)text[i];
+            sx[8 + i] = (c >= 0x20 && c < 0x7F) ? c : 0x20;
+        }
+        char buf[sizeof(MIDI_event_t) + 13];
+        MIDI_event_t *msg = (MIDI_event_t *)buf;
+        msg->frame_offset = -1;
+        msg->size = 13;
+        memcpy(msg->midi_message, sx, 13);
+        m_midiouts[0]->SendMsg(msg, -1);
+    }
+
+    // Paint SELECT ASSIGN from the current encoder mode, using the (optionally
+    // ini-overridden) labels: m_sa_pan in pan mode, m_sa_send[slot] in send mode.
+    void RefreshSelectAssign()
+    {
+        if (!m_drive_select_assign) return;
+        SendSelectAssign(m_enc_send < 0 ? m_sa_pan : m_sa_send[m_enc_send]);
+    }
+
+    // CURSOR MODE readout via zone 0x0D sw2 (hw-confirmed 2026-06-17): bit6 clear =
+    // NAVIGATION, set = ZOOM. The desk's third mode, SELECT, is a transient state that
+    // won't hold from a static LED (it needs continuous toggling) and, more to the point,
+    // maps to no plugin behaviour -- PT's SELECT makes the arrows extend the edit
+    // selection, but our arrows do scroll/zoom -- so we drive only NAVIGATION/ZOOM.
+    //   ENTER arrow-mode: 0 scroll -> NAVIGATION, 1 zoom -> ZOOM.
+    void SendCursorMode(int mode)
+    {
+        if (!m_drive_cursor_mode) return;
+        SendGlobalLED(0x0D, 2, mode == 1);
+    }
+
+
+    // ENC ASSIGN 1/2 scribble peek. Momentary by default (overlay while held);
+    // [display] peek_latch = 1 makes a press toggle the overlay on/off instead.
+    void OnPeek(bool press, int mode)
+    {
+        if (m_peek_latch)
+        {
+            if (press) { m_scribble_peek = (m_scribble_peek == mode) ? 0 : mode; RefreshScribbles(); }
+        }
+        else { m_scribble_peek = press ? mode : 0; RefreshScribbles(); }
+    }
+
+    // light the active AUX/PAN mode button (zone 0x0B: AUX1=sw7 .. AUX5=sw3, ENC PAN=sw2)
+    void SetEncModeLEDs()
+    {
+        for (int sw = 2; sw <= 7; ++sw) SendGlobalLED(0x0B, sw, false);
+        if (m_enc_send < 0) SendGlobalLED(0x0B, 2, true);                  // PAN
+        else                SendGlobalLED(0x0B, 7 - m_enc_send, true);     // AUX (slot 0->sw7)
+    }
+
+    // AUX SELECT / ENC PAN press -> switch encoder mode and repaint
+    void OnEncMode(int sw)
+    {
+        if (sw == 2)                  m_enc_send = -1;           // ENC PAN
+        else if (sw >= 3 && sw <= 7)  { if (!m_enc_sends) return; m_enc_send = 7 - sw; } // AUX 1-5 -> send 0-4
+        else return;
+        SetEncModeLEDs();
+        RefreshEncoders();
+        RefreshScribbles();             // show send-destination names (send mode) or restore track names
+        RefreshSelectAssign();          // update the SELECT ASSIGN readout (Pan / SndA-E)
+    }
+
+    // channel encoder turned while in send mode: nudge that channel's send level (1 dB/detent)
+    void OnSendKnob(int gch, unsigned char data2)
+    {
+        MediaTrack *tr = TrackFromCh(gch);
+        if (!tr || !GetTrackNumSends || !GetTrackSendInfo_Value || !SetTrackSendInfo_Value) return;
+        if (m_enc_send < 0 || m_enc_send >= GetTrackNumSends(tr, 0)) return;
+        int steps = data2 & 0x3F;
+        if (!steps) return;
+        double db = VAL2DB(GetTrackSendInfo_Value(tr, 0, m_enc_send, "D_VOL"));
+        db += (data2 & 0x40 ? 1.0 : -1.0) * steps;
+        if (db > 12.0) db = 12.0;
+        if (db < -120.0) db = -120.0;
+        SetTrackSendInfo_Value(tr, 0, m_enc_send, "D_VOL", DB2VAL(db));
+        SendEncoderRing(gch);
+    }
+
+    // Per-channel AUTO key, configurable via [channel] auto_button:
+    //   0 unity      -> snap that fader to 0 dB
+    //   1 automation -> cycle the track's REAPER automation mode (read->touch->latch->write)
+    //   2 monitor    -> cycle the track's record monitor (off->on->auto)
+    // The AUTO LED (lit in touch/write/latch via the poll) gives feedback in mode 1.
+    void OnAutoButton(MediaTrack *tr)
+    {
+        if (!tr) return;
+        if (m_auto_button == 0)
+        {
+            CSurf_SetSurfaceVolume(tr, CSurf_OnVolumeChange(tr, 1.0, false), NULL); // unity gain
+        }
+        else if (m_auto_button == 2)
+        {
+            if (GetMediaTrackInfo_Value && CSurf_OnInputMonitorChange)
+            {
+                int cur = (int)GetMediaTrackInfo_Value(tr, "I_RECMON"); // 0=off,1=on,2=auto
+                CSurf_OnInputMonitorChange(tr, (cur + 1) % 3);
+            }
+        }
+        else if (GetTrackAutomationMode && SetTrackAutomationMode)
+        {
+            static const int order[5] = { AUTO_MODE_TRIM, AUTO_MODE_READ, AUTO_MODE_TOUCH, AUTO_MODE_LATCH, AUTO_MODE_WRITE };
+            int cur = GetTrackAutomationMode(tr), next = AUTO_MODE_TRIM;
+            for (int i = 0; i < 5; ++i) if (order[i] == cur) { next = order[(i + 1) % 5]; break; }
+            SetTrackAutomationMode(tr, next);
+        }
+    }
+
     // val: 0x40|sw = press, 0x00|sw = release
     void OnSwitch(int port, int zone, unsigned char val)
     {
@@ -1084,6 +1567,24 @@ private:
             if (sw == 0)                         // fader touch / release
             {
                 m_fader_touch[gch] = press ? 1 : 0;
+                if (m_double_touch)              // double-tap a fader -> snap it to 0 dB (REAPER double-click)
+                {
+                    if (press)
+                    {
+                        // detect the 2nd tap, but defer the snap to RELEASE: applying 0 dB while the
+                        // fader is still held loses to its position echo (hw-confirmed), so it won't stick
+                        DWORD tnow = timeGetTime();
+                        if (tnow - m_fader_touchtime[gch] < 500) m_snap_pending[gch] = 1;
+                        m_fader_touchtime[gch] = tnow;
+                    }
+                    else if (m_snap_pending[gch]) // release of the 2nd tap: finger off -> the snap sticks
+                    {
+                        m_snap_pending[gch] = 0;
+                        MediaTrack *trd = TrackFromCh(gch);
+                        if (trd) CSurf_SetSurfaceVolume(trd, CSurf_OnVolumeChange(trd, 1.0, false), NULL); // unity
+                    }
+                }
+                if (m_touch_db) RefreshScribble(gch); // swap strip to dB on touch, name on release
             }
             else if (sw == 1)                    // SELECT: tracked on press AND release (hold-to-multi-select)
             {
@@ -1097,12 +1598,23 @@ private:
                 {
                     case 2: CSurf_SetSurfaceMute(tr, CSurf_OnMuteChange(tr, -1), NULL); break; // MUTE
                     case 3: CSurf_SetSurfaceSolo(tr, CSurf_OnSoloChange(tr, -1), NULL); break; // SOLO
-                    case 4: // AUTO button -> reset fader to 0 dB (unity gain = 1.0)
-                        CSurf_SetSurfaceVolume(tr, CSurf_OnVolumeChange(tr, 1.0, false), NULL);
+                    case 4: // AUTO key: configurable ([channel] auto_button)
+                        OnAutoButton(tr);
+                        if (m_auto_button == 1 && gch < 24)  // automation mode: flash the new mode on the strip
+                        { m_auto_label_time[gch] = timeGetTime(); RefreshScribble(gch); }
                         break;
-                    case 5: // pan knob press -> center pan
-                        CSurf_SetSurfacePan(tr, CSurf_OnPanChange(tr, 0.0, false), NULL);
-                        m_pan_lasttouch[gch] = timeGetTime();
+                    case 5: // V-pot press: in send mode reset that send to 0 dB; else center pan
+                        if (m_enc_send >= 0 && GetTrackNumSends && SetTrackSendInfo_Value &&
+                            m_enc_send < GetTrackNumSends(tr, 0))
+                        {
+                            SetTrackSendInfo_Value(tr, 0, m_enc_send, "D_VOL", DB2VAL(0.0));
+                            SendEncoderRing(gch);
+                        }
+                        else
+                        {
+                            CSurf_SetSurfacePan(tr, CSurf_OnPanChange(tr, 0.0, false), NULL);
+                            m_pan_lasttouch[gch] = timeGetTime();
+                        }
                         break;
                     case 7: CSurf_OnRecArmChange(tr, -1); break;                               // REC/RDY
                 }
@@ -1126,6 +1638,17 @@ private:
         {
             if (sw == 2)      DispatchUDK(0); // UDK 1
             else if (sw == 0) DispatchUDK(8); // UDK 9
+            else if (sw == 5)                 // EFFECTS/PLUG-INS DISPLAY (no LED): toggle ONLY whether a
+            {                                 // knob-touch auto-floats the FX window. F4/PARAM and the knobs
+                m_window_on_knob = !m_window_on_knob;   // still show/hide it; this never moves the window itself.
+                for (int c = 0; c < 8; ++c) SendDisplayCell(c, "");   // clear all 8 (2 rows x 4 cols) for the flash
+                SendDisplayCell(1, "VST plugin");                     // centred in the middle two columns:
+                SendDisplayCell(2, " window");                        //   top row: "VST plugin window" (cells abut,
+                                                                      //   and "VST plugin" fills cell 1, so lead-space)
+                SendDisplayCell(5, "auto-show");                      //   btm row  (cols 2-3): auto-show ON/OFF
+                SendDisplayCell(6, m_window_on_knob ? "ON" : "OFF");
+                m_winflash_time = timeGetTime();
+            }
         }
         else if (zone == 0x0A && press)          // BANK/CH arrows; also UDK 3/4/10/11
         {
@@ -1144,6 +1667,12 @@ private:
                 }
                 if (amt) AdjustBankOffset(amt);
             }
+        }
+        else if (zone == 0x0B && port == 0)      // ENCODER MODE / AUX SELECT + ENC ASSIGN peek modifiers
+        {
+            if (sw == 1 && m_peek_number)      OnPeek(press, 1); // ENC ASSIGN1: track number
+            else if (sw == 0 && m_peek_db)     OnPeek(press, 2); // ENC ASSIGN2: fader dB
+            else if (press && sw >= 2)         OnEncMode(sw);    // PAN (sw2) / AUX 1-5 (sw3-7)
         }
         else if (zone == 0x0E && !press && (sw == 1 || sw == 2))
         {
@@ -1166,6 +1695,7 @@ private:
             {
                 case 0: if (m_la_rtz)    SendMessage(g_hwnd, WM_COMMAND, m_la_rtz,    0); else CSurf_GoStart(); break; // RTZ
                 case 1: if (m_la_end)    SendMessage(g_hwnd, WM_COMMAND, m_la_end,    0); else CSurf_GoEnd();   break; // END
+                case 2: if (m_la_online) SendMessage(g_hwnd, WM_COMMAND, m_la_online, 0); break;                       // ONLINE
                 case 3: if (m_la_loop)   SendMessage(g_hwnd, WM_COMMAND, m_la_loop,   0); break;                       // LOOP
                 case 4: if (m_la_qpunch) SendMessage(g_hwnd, WM_COMMAND, m_la_qpunch, 0); break;                       // QUICK PUNCH
             }
@@ -1174,6 +1704,8 @@ private:
         {
             switch (sw)
             {
+                case 0: if (m_la_audition) SendMessage(g_hwnd, WM_COMMAND, m_la_audition, 0); break; // AUDITION
+                case 1: if (m_la_pre)      SendMessage(g_hwnd, WM_COMMAND, m_la_pre,      0); break; // PRE
                 case 2: if (m_la_in)   SendMessage(g_hwnd, WM_COMMAND, m_la_in,   0); break; // IN
                 case 3: if (m_la_out)  SendMessage(g_hwnd, WM_COMMAND, m_la_out,  0); break; // OUT
                 case 4: if (m_la_post) SendMessage(g_hwnd, WM_COMMAND, m_la_post, 0); break; // POST
@@ -1190,21 +1722,13 @@ private:
                 // arrows: fire immediately and arm auto-repeat in Run()
                 case 4: CSurf_OnArrow(0, m_arrow_mode == 1); m_held_arrow = 0; m_arrow_held_since = timeGetTime(); break; // up
                 case 0: CSurf_OnArrow(1, m_arrow_mode == 1); m_held_arrow = 1; m_arrow_held_since = timeGetTime(); break; // down
-                case 1: // left: scroll/zoom or bank-scroll+mixer-scroll
-                    if (m_arrow_mode == 2)
-                    {
-                        AdjustBankOffset(-1); m_held_arrow = 2; m_arrow_held_since = timeGetTime();
-                        if (SetMixerScroll) { MediaTrack *t = CSurf_TrackFromID(m_bank_offset + 1, false); if (t) SetMixerScroll(t); }
-                    }
-                    else { CSurf_OnArrow(2, m_arrow_mode == 1); m_held_arrow = 2; m_arrow_held_since = timeGetTime(); }
+                case 1: // left: scroll (NAVIGATION) or zoom (ZOOM)
+                    CSurf_OnArrow(2, m_arrow_mode == 1);
+                    m_held_arrow = 2; m_arrow_held_since = timeGetTime();
                     break;
-                case 3: // right: scroll/zoom or bank-scroll+mixer-scroll
-                    if (m_arrow_mode == 2)
-                    {
-                        AdjustBankOffset(1); m_held_arrow = 3; m_arrow_held_since = timeGetTime();
-                        if (SetMixerScroll) { MediaTrack *t = CSurf_TrackFromID(m_bank_offset + 1, false); if (t) SetMixerScroll(t); }
-                    }
-                    else { CSurf_OnArrow(3, m_arrow_mode == 1); m_held_arrow = 3; m_arrow_held_since = timeGetTime(); }
+                case 3: // right: scroll (NAVIGATION) or zoom (ZOOM)
+                    CSurf_OnArrow(3, m_arrow_mode == 1);
+                    m_held_arrow = 3; m_arrow_held_since = timeGetTime();
                     break;
                 case 2:                                        // INC -> next marker
                     SendMessage(g_hwnd, WM_COMMAND, ID_MARKER_NEXT, 0);
@@ -1237,52 +1761,58 @@ private:
         {
             SendMessage(g_hwnd, WM_COMMAND, ID_MARKER_PREV, 0);
         }
-        else if (zone == 0x14 && sw == 0 && press) // ENTER: cycle cursor arrows scroll -> zoom -> bank-scroll
+        else if (zone == 0x14 && sw == 0 && press) // ENTER: toggle cursor arrows NAVIGATION (scroll) <-> ZOOM
         {
-            m_arrow_mode = (m_arrow_mode + 1) % 3;
+            m_arrow_mode = (m_arrow_mode + 1) % 2;
+            SendCursorMode(m_arrow_mode); // update the CURSOR MODE readout (NAVIGATION/ZOOM)
         }
-        else if (zone == 0x19 && press && port == 0) // AUTOMIX ENABLE (sw2) + UDK 6/7/8/14 (broadcast, deduped via port 0)
+        else if (zone == 0x19 && press && port == 0) // UDK 6/7/8/14 (broadcast on 3 ports, deduped via port 0)
         {
             switch (sw)
             {
-                case 2:
-                {
-                    int newMode = (m_auto_mode == 0) ? 1 : 0; // toggle bypass <-> read
-                    CSurf_SetAutoMode(newMode, this);
-                    m_auto_mode = newMode;
-                    SendAutomixLEDs(newMode);
-                    break;
-                }
                 case 5: DispatchUDK(5);  break; // UDK 6
                 case 3: DispatchUDK(6);  break; // UDK 7
                 case 4: DispatchUDK(7);  break; // UDK 8
                 case 1: DispatchUDK(13); break; // UDK 14
             }
         }
-        else if (zone == 0x0C && sw == 2 && press && port == 0) // AUTOMIX REC/WRITE (hw-verified)
+        else if (zone == 0x0C && sw == 2 && press && port == 0) // AUTOMIX ENABLE = Pro Tools SUSPEND (configurable)
         {
-            CSurf_SetAutoMode(3, this);
-            m_auto_mode = 3;
-            SendAutomixLEDs(3);
+            if (m_automix_suspend) SendMessage(g_hwnd, WM_COMMAND, m_automix_suspend, 0);
         }
-        else if (zone == 0x18 && press && port == 0) // AUTOMIX modes (hw-verified; all 3 ports; dedup via port 0)
+        else if (zone == 0x18 && press && port == 0) // AUTOMIX automation-mode buttons (hw-verified 2026-06-17)
         {
-            // sw0=touch, sw1=return/read, sw2=relative/latch-preview, sw4=abort/undo, sw5=auto-rec/latch
-            int newMode = -1;
+            // Each sets the SELECTED tracks' automation mode (select all to apply to all).
+            int mode = -1;
             switch (sw)
             {
-                case 0: newMode = 2; break; // touch sense -> touch
-                case 1: newMode = 1; break; // return -> read
-                case 2: newMode = 5; break; // relative -> latch preview
-                case 4: SendMessage(g_hwnd, WM_COMMAND, IDC_EDIT_UNDO, 0); break; // abort/undo -> undo
-                case 5: newMode = 4; break; // auto-rec -> latch
+                case 0: mode = AUTO_MODE_TRIM;  break; // RELATIVE  -> Trim
+                case 1: mode = AUTO_MODE_LATCH; break; // AUTO-REC  -> Latch
+                case 2: mode = AUTO_MODE_READ;  break; // RETURN    -> Read
+                case 3: mode = AUTO_MODE_TRIM;  break; // TOUCH SENSE (Off) -> Trim (REAPER has no per-track Off)
+                case 4: mode = AUTO_MODE_WRITE; break; // REC        -> Write
+                case 5: mode = AUTO_MODE_TOUCH; break; // ABORT/UNDO -> Touch
             }
-            if (newMode >= 0)
+            if (mode >= 0)
             {
-                CSurf_SetAutoMode(newMode, this);
-                m_auto_mode = newMode;
-                SendAutomixLEDs(newMode);
+                if (SetAutomationMode) SetAutomationMode(mode, true); // only selected tracks
+                m_auto_mode = mode;
+                SendAutomixLEDs(mode);
             }
+        }
+        else if (zone == 0x17 && press && port == 0) // AUTOMIX-OVERWRITE param-arm row -> configurable [automix] actions
+        {
+            int act = 0;
+            switch (sw)
+            {
+                case 0: act = m_ow_eq;    break; // EQ     (Pro Tools Plug-in)
+                case 1: act = m_ow_pan;   break; // PAN
+                case 2: act = m_ow_fader; break; // FADER  (Pro Tools Volume)
+                case 3: act = m_ow_auxon; break; // AUX ON (Pro Tools Send mute)
+                case 4: act = m_ow_aux;   break; // AUX    (Pro Tools Send)
+                case 5: act = m_ow_on;    break; // ON     (Pro Tools Mute)
+            }
+            if (act) SendMessage(g_hwnd, WM_COMMAND, act, 0);
         }
         else if (zone == 0x1C && press && port == 0) // EFFECTS/PLUG-INS section: generic FX parameter editor
         {
@@ -1307,8 +1837,12 @@ private:
         memset(m_meter_lastlvl, 0xff, sizeof(m_meter_lastlvl));
         memset(m_meter_hist, 0, sizeof(m_meter_hist));
         memset(m_fader_touch, 0, sizeof(m_fader_touch));
+        memset(m_fader_touchtime, 0, sizeof(m_fader_touchtime)); // physical-strip cache: stale tap time must not snap the new track to 0 dB
+        memset(m_snap_pending, 0, sizeof(m_snap_pending));       // and no armed snap should carry across a bank/track change
         TrackList_UpdateAllExternalSurfaces(); // repaint faders/LEDs for the new bank
         SetTrackListChange();                  // blank scribbles on channels past the last track
+        if (m_enc_send >= 0) RefreshEncoders(); // send-level rings aren't driven by SetSurfacePan
+        if (m_enc_send >= 0 || m_scribble_peek) RefreshScribbles(); // repaint override scribbles for the new bank
     }
 
     // Fire a User Defined Key's configured action. idx 0-15 = UDK 1-16.
@@ -1347,6 +1881,21 @@ private:
         TrackFX_SetParam(tr, fx, param, mn + norm * (mx - mn));
     }
 
+    // Reset an FX parameter to its neutral/default value. REAPER has no per-plugin
+    // "default" accessor; TrackFX_GetParamEx's midval is the closest (the parameter's
+    // neutral point - e.g. center for pan/gain). Falls back to the minimum if absent.
+    void ResetFXParamDefault(MediaTrack *tr, int fx, int param)
+    {
+        if (!TrackFX_SetParam) return;
+        if (TrackFX_GetParamEx)
+        {
+            double mn = 0.0, mx = 1.0, mid = 0.0;
+            TrackFX_GetParamEx(tr, fx, param, &mn, &mx, &mid);
+            TrackFX_SetParam(tr, fx, param, mid);
+        }
+        else SetFXParamNorm(tr, fx, param, 0.0); // older REAPER: fall back to minimum
+    }
+
     // Log current FX/param state to the REAPER console (temporary mapping aid).
     // Only emits when the (fx, param) target changes, so a knob sweep doesn't flood.
     void LogFXParam(const char *tag, MediaTrack *tr, int fx, int param)
@@ -1376,16 +1925,18 @@ private:
             ShowConsoleMsg("[DM2000 dump] selected track has no FX\n");
             return;
         }
+        int slot = m_fx_slot;                              // dump the slot the FX editor is on, not always FX 0
+        if (slot < 0 || slot >= TrackFX_GetCount(tr)) slot = 0;
         char fxname[128] = "";
-        if (TrackFX_GetFXName) TrackFX_GetFXName(tr, 0, fxname, sizeof(fxname));
-        int np = TrackFX_GetNumParams ? TrackFX_GetNumParams(tr, 0) : 0;
+        if (TrackFX_GetFXName) TrackFX_GetFXName(tr, slot, fxname, sizeof(fxname));
+        int np = TrackFX_GetNumParams ? TrackFX_GetNumParams(tr, slot) : 0;
         char hdr[200];
-        sprintf_s(hdr, sizeof(hdr), "[DM2000 dump] FX 0 '%s' - %d params:\n", fxname, np);
+        sprintf_s(hdr, sizeof(hdr), "[DM2000 dump] FX %d '%s' - %d params:\n", slot, fxname, np);
         ShowConsoleMsg(hdr);
         for (int p = 0; p < np; ++p)
         {
             char pname[128] = "";
-            if (TrackFX_GetParamName) TrackFX_GetParamName(tr, 0, p, pname, sizeof(pname));
+            if (TrackFX_GetParamName) TrackFX_GetParamName(tr, slot, p, pname, sizeof(pname));
             char line[180];
             sprintf_s(line, sizeof(line), "  %d = %s\n", p, pname);
             ShowConsoleMsg(line);
@@ -1410,13 +1961,13 @@ private:
         bool invert = false;              // joystick Y reads inverted vs the plugin's axis
         switch (data1)
         {
-            case 0x10: param = m_surround_param[0]; break;                 // THRESHOLD -> front
-            case 0x11: param = m_surround_param[1]; break;                 // ATTACK    -> rear
-            case 0x12: param = m_surround_param[2]; break;                 // DECAY     -> lr
-            case 0x13: param = m_surround_param[3]; break;                 // RANGE     -> lfe
-            case 0x14: param = m_surround_param[4]; break;                 // HOLD      -> vol
-            case 0x02: param = m_surround_param[2]; absolute = true; break; // joystick X -> lr
-            case 0x03: param = m_surround_param[0]; absolute = true; invert = true; break; // joystick Y -> front (inverted)
+            case 0x10: param = m_surround_param[0]; break;                 // knob 1 -> X (precise)
+            case 0x11: param = m_surround_param[1]; break;                 // knob 2 -> Y (precise)
+            case 0x12: param = m_surround_param[2]; break;                 // knob 3 -> Z
+            case 0x13: param = m_surround_param[3]; break;                 // knob 4 -> spread
+            case 0x14: param = m_surround_param[4]; break;                 // knob 5 -> gain
+            case 0x02: param = m_surround_param[0]; absolute = true; break; // joystick X -> X (same param as knob 1)
+            case 0x03: param = m_surround_param[1]; absolute = true; invert = true; break; // joystick Y -> Y (same param as knob 2)
             default: return false;                                          // not a surround control
         }
 
@@ -1544,6 +2095,67 @@ private:
 
     // Parameter knob 1-4 (port 1, CC 0x48-0x4B) -> current FX slot param on this page.
     // Always live: edits the selected track's current FX slot (no mode to enter).
+    // REMOTE "INSERT ASSIGN/EDIT" text display (HUI zone 0x12): 8 cells x 10 chars -
+    // cells 0-3 = top line above knobs 1-4, cells 4-7 = bottom line (hw-mapped 2026-06-16).
+    // SysEx is 7-bit, so only printable ASCII is sent; the field is space-padded to 10.
+    void SendDisplayCell(int cell, const char *text)
+    {
+        if (!m_midiouts[0] || cell < 0 || cell > 7) return;
+        unsigned char sx[19] = { 0xF0,0x00,0x00,0x66,0x05,0x00,0x12,(unsigned char)cell,
+                                 0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20, 0xF7 };
+        for (int i = 0; i < 10 && text[i]; ++i)
+        {
+            unsigned char c = (unsigned char)text[i];
+            sx[8 + i] = (c >= 0x20 && c < 0x7F) ? c : 0x20;
+        }
+        char buf[sizeof(MIDI_event_t) + 19];
+        MIDI_event_t *msg = (MIDI_event_t *)buf;
+        msg->frame_offset = -1;
+        msg->size = 19;
+        memcpy(msg->midi_message, sx, 19);
+        m_midiouts[0]->SendMsg(msg, -1);
+    }
+
+    // Paint the FX editor onto that display: top line = the 4 current-page param NAMES,
+    // bottom line = their formatted VALUES, one column per param knob. Columns past the
+    // last parameter are blanked. Driven from the FX-editor knob/page/slot handlers.
+    void RefreshFXDisplay()
+    {
+        if (!m_splash_done) return;          // hold the FX view until the startup splash finishes
+        MediaTrack *tr = GetSelectedTrack ? GetSelectedTrack(NULL, 0) : NULL;
+        int n = (tr && TrackFX_GetCount) ? TrackFX_GetCount(tr) : 0;
+        if (m_fx_slot >= n) m_fx_slot = n > 0 ? n - 1 : 0; // keep the cached slot valid after the FX count shrinks
+        bool slotValid = tr && m_fx_slot >= 0 && m_fx_slot < n;
+        int np = (slotValid && TrackFX_GetNumParams) ? TrackFX_GetNumParams(tr, m_fx_slot) : 0;
+        for (int k = 0; k < 4; ++k)
+        {
+            char name[32] = "", val[32] = "";
+            int param = m_fx_page * 4 + k;
+            bool live = slotValid && param < np;
+            unsigned char ringv = 0;           // EFFECTS SEL ring (CC 0x18+k): 0 = off when no live param
+            if (live)
+            {
+                if (TrackFX_GetParamName) TrackFX_GetParamName(tr, m_fx_slot, param, name, sizeof(name));
+                double pmin = 0, pmax = 1;
+                double v = TrackFX_GetParam ? TrackFX_GetParam(tr, m_fx_slot, param, &pmin, &pmax) : 0.0;
+                if (TrackFX_FormatParamValue) TrackFX_FormatParamValue(tr, m_fx_slot, param, v, val, sizeof(val));
+                double norm = (pmax > pmin) ? (v - pmin) / (pmax - pmin) : 0.0;
+                if (norm < 0) norm = 0; else if (norm > 1) norm = 1;
+                // TODO(smart-ring): per-param mode - boostcut (0x10) for bipolar params (normalized
+                // neutral ~0.5 via TrackFX_GetParamEx), else fill. For now fill suits most params.
+                ringv = (unsigned char)(0x20 | (1 + (int)(norm * 10 + 0.5)));   // fill mode, position 1..11
+            }
+            SendDisplayCell(k, name);          // top line: parameter name
+            SendDisplayCell(k + 4, val);       // bottom line: formatted value
+            SendGlobalLED(0x1C, 2 + k, live);  // knob-SEL box (sw2-5): lit when that knob drives a real param
+            if (m_midiouts[0]) m_midiouts[0]->Send(0xB0, 0x18 + k, ringv, -1);  // EFFECTS SEL parameter ring
+        }
+        // EFFECTS/PLUG-INS indicator boxes (zone 0x1C, hw-captured): PARAM lit while a slot
+        // is shown; BYPASS lit when that slot is bypassed (the state the screen used to hide).
+        SendGlobalLED(0x1C, 0, slotValid);                                              // PARAM (sw0)
+        SendGlobalLED(0x1C, 6, slotValid && TrackFX_GetEnabled && !TrackFX_GetEnabled(tr, m_fx_slot)); // BYPASS (sw6)
+    }
+
     void OnParamKnob(int knob, unsigned char data2)
     {
         MediaTrack *tr = GetSelectedTrack ? GetSelectedTrack(NULL, 0) : NULL;
@@ -1551,7 +2163,7 @@ private:
         int n = TrackFX_GetCount(tr);
         if (m_fx_slot < 0 || m_fx_slot >= n) return;
 
-        int delta = relStep(data2);
+        int delta = -relStep(data2); // hw: these knobs read reversed vs the page encoder; flip to match
         if (!delta) return;
 
         int param = m_fx_page * 4 + knob;
@@ -1560,6 +2172,31 @@ private:
 
         NudgeFXParam(tr, m_fx_slot, param, delta, 0.001); // finer than the surround knobs (0.01)
         LogFXParam("param", tr, m_fx_slot, param);
+        if (m_window_on_knob) ShowFXWindow(); // touching a param floats the plug-in window (if enabled)
+        RefreshFXDisplay();
+    }
+
+    // FX floating-window control: a param knob opens it; the PARAM button toggles it.
+    // showflag: 2 = hide floating window, 3 = show floating window.
+    MediaTrack *CurFXTrack()
+    {
+        MediaTrack *tr = GetSelectedTrack ? GetSelectedTrack(NULL, 0) : NULL;
+        int n = (tr && TrackFX_GetCount) ? TrackFX_GetCount(tr) : 0;
+        if (!tr || !TrackFX_Show || m_fx_slot < 0 || m_fx_slot >= n) return NULL;
+        return tr;
+    }
+    void ShowFXWindow()   // knob-move: float the window unless it's already up
+    {
+        MediaTrack *tr = CurFXTrack();
+        if (tr && !(TrackFX_GetFloatingWindow && TrackFX_GetFloatingWindow(tr, m_fx_slot)))
+            TrackFX_Show(tr, m_fx_slot, 3);
+    }
+    void ToggleFXWindow() // PARAM button: show/hide the floating window
+    {
+        MediaTrack *tr = CurFXTrack();
+        if (!tr) return;
+        bool open = TrackFX_GetFloatingWindow && TrackFX_GetFloatingWindow(tr, m_fx_slot);
+        TrackFX_Show(tr, m_fx_slot, open ? 2 : 3);
     }
 
     // Page arrows (CC 0x4C): up arrow (dir>0) = next page, down arrow (dir<0) = previous,
@@ -1578,9 +2215,10 @@ private:
         int np = TrackFX_GetNumParams ? TrackFX_GetNumParams(tr, m_fx_slot) : 0;
         int maxpage = np > 0 ? (np - 1) / 4 : 0;
 
-        if (dir > 0) m_fx_page = (m_fx_page >= maxpage) ? 0 : m_fx_page + 1; // up = next, wrap
-        else         m_fx_page = (m_fx_page <= 0) ? maxpage : m_fx_page - 1; // down = prev, wrap
+        if (dir > 0) { if (m_fx_page < maxpage) m_fx_page++; } // up = next, stop at last page
+        else         { if (m_fx_page > 0)       m_fx_page--; } // down = prev, stop at first page
         FXReport(tr);
+        RefreshFXDisplay();
     }
 
     // Report the current FX slot / page to the console (temporary debugging aid).
@@ -1603,30 +2241,31 @@ private:
 
     // EFFECTS/PLUG-INS buttons (zone 0x1C) - the F1-F4 buttons below the display.
     // The param knobs + page arrows are always live, so these just steer which FX:
-    //   F4 (sw0) = jump to FX slot 0 / page 0 and report   F1 (sw1) = next FX slot
-    //   F3 (sw6) = bypass current slot                      F2 (sw7) = previous FX slot
+    //   F4 (sw0) = jump to FX slot 0 / page 0 and report   F2 (sw7) = next FX slot
+    //   F3 (sw6) = bypass current slot                      F1 (sw1) = previous FX slot
+    //   F1/F2 read left-to-right as prev/next FX (like < / > arrows).
     void OnFXSwitch(int sw)
     {
         MediaTrack *tr = GetSelectedTrack ? GetSelectedTrack(NULL, 0) : NULL;
         switch (sw)
         {
-            case 0: // F4 (INSERT/PARAM): home to FX slot 0, page 0, and report
-                m_fx_slot = 0; m_fx_page = 0; FXReport(tr);
+            case 0: // PARAM (F4): toggle the current FX slot's floating window on/off
+                ToggleFXWindow();
                 break;
-            case 1: // F1 (ASSIGN): cycle to next FX slot
-                if (tr && TrackFX_GetCount)
-                {
-                    int n = TrackFX_GetCount(tr);
-                    if (n > 0) m_fx_slot = (m_fx_slot + 1) % n;
-                    m_fx_page = 0;
-                    FXReport(tr);
-                }
-                break;
-            case 7: // F2 (COMPARE): cycle to previous FX slot
+            case 1: // F1 (ASSIGN): cycle to PREVIOUS FX slot (left arrow)
                 if (tr && TrackFX_GetCount)
                 {
                     int n = TrackFX_GetCount(tr);
                     if (n > 0) m_fx_slot = (m_fx_slot + n - 1) % n;
+                    m_fx_page = 0;
+                    FXReport(tr);
+                }
+                break;
+            case 7: // F2 (COMPARE): cycle to NEXT FX slot (right arrow)
+                if (tr && TrackFX_GetCount)
+                {
+                    int n = TrackFX_GetCount(tr);
+                    if (n > 0) m_fx_slot = (m_fx_slot + 1) % n;
                     m_fx_page = 0;
                     FXReport(tr);
                 }
@@ -1648,12 +2287,13 @@ private:
                              ? TrackFX_GetNumParams(tr, m_fx_slot) : 0;
                     if (param >= 0 && param < np)
                     {
-                        SetFXParamNorm(tr, m_fx_slot, param, 0.0);
+                        ResetFXParamDefault(tr, m_fx_slot, param);
                         LogFXParam("reset", tr, m_fx_slot, param);
                     }
                 }
                 break;
         }
+        RefreshFXDisplay();
     }
 };
 

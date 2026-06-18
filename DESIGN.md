@@ -10,7 +10,7 @@ port (Layer 3); port 8 native SysEx (extended scribble names, meter bridge) is
 partly stubbed and not yet active.
 No existing tool does this; this is the first open-source DM2000 csurf for REAPER.
 
-Version: v0.7
+Version: v0.8
 Homepage: bmroz.eu/projects/dm2000-csurf
 Repository: `git.pg.edu.pl/p829296` / `github.com/mormegil6`
 License: LGPL v3
@@ -112,14 +112,14 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 | Zone | Meaning | Switches used |
 |------|---------|---------------|
 | 0x08 | Display History + UDK 4/5/12/13/15/16 | sw2=BACK (undo), sw6=FORWARD (redo); UDK: sw1=UDK4, sw5=UDK5, sw0=UDK12, sw4=UDK13, sw3=UDK15, sw7=UDK16 (dispatch via [udk]; port 0) |
-| 0x09 | Display buttons + UDK 1/9 | sw2=UDK1, sw0=UDK9 (sw1 fires alongside UDK9 - ignored); dispatch via [udk], port 0. Remaining sw = DM2000 display selects |
+| 0x09 | Display buttons + UDK 1/9 | sw2=UDK1, sw0=UDK9 (sw1 fires alongside UDK9 - ignored); dispatch via [udk], port 0. DISPLAY-select buttons (no LED, hw 2026-06-18): **sw5 = EFFECTS/PLUG-INS DISPLAY** -> toggles FX-window auto-float; **sw4 = UDK DISPLAY**, **sw3 = LOCATOR DISPLAY** (no action - available input hooks) |
 | 0x0A | BANK ◄/►, CH ◄/► = UDK 2/3/10/11 (manual ch.19) | 0=CH◄/UDK10, 1=BANK◄/UDK2, 2=CH►/UDK11, 3=BANK►/UDK3. Navigation by default; an [udk] entry (key2/3/10/11) overrides that button |
 
 **EQ & routing control**
 | Zone | Meaning | Switches used |
 |------|---------|---------------|
 | 0x0B | Aux select + encoder assign | sw7=AUX1, sw6=AUX2, sw5=AUX3, sw4=AUX4, sw3=AUX5; sw2=ENC PAN, sw1=ENC ASSIGN1, sw0=ENC ASSIGN2 |
-| 0x0C | Fader mode + AUTOMIX REC + matrix select | sw3=FADER, sw0=FAD ASSIGN2; sw2=AUTOMIX REC; sw1=MATRIX1, sw4=MATRIX2 |
+| 0x0C | Fader mode + matrix select + track-arm/automix (corrected hw 2026-06-18) | sw3=FADER (exclusive: clear=FADER, set=AUX/MTRX), sw0=FAD ASSIGN3 (ASSIGN4 = no MIDI), sw2=AUTOMIX ENABLE, sw6=TRACK ARM master; MATRIX sw1=1, sw4=2, sw5=4 (MATRIX3 = no MIDI). LEDs: only MATRIX1/2 + FADER are host-drivable; the rest are console-local |
 
 **Cursor, jog & transport**
 | Zone | Meaning | Switches used |
@@ -140,8 +140,8 @@ Zone assignments (all hw-verified from full-surface MIDI-OX capture 2026-06-15; 
 | Zone | Meaning | Switches used |
 |------|---------|---------------|
 | 0x17 | OVERWRITE section | 0=AUX ON, 1=PAN, 2=FADER, 3=AUX, 4=SURROUND, 5=ON |
-| 0x18 | AUTOMIX mode buttons | 0=TOUCH SENSE, 1=RETURN/READ, 2=RELATIVE, 4=ABORT/UNDO, 5=AUTO-REC/LATCH |
-| 0x19 | AUTOMIX ENABLE + UDK 6/7/8/14 | sw2=ENABLE (toggle bypass/read); sw5=UDK6, sw3=UDK7, sw4=UDK8, sw1=UDK14 (broadcast on all 3 ports, deduped on port 0) |
+| 0x18 | AUTOMIX mode buttons (corrected hw 2026-06-18; broadcast on ports 1-3) | 0=RELATIVE, 1=AUTO-REC, 2=RETURN, 3=TOUCH SENSE, 4=REC/WRITE, 5=ABORT (TOUCH SENSE LED is console-local; the rest are host-driven) |
+| 0x19 | AUTOMIX DISPLAY + UDK 6/7/8/14 | sw2=**AUTOMIX DISPLAY** (display-select, no LED/action; corrected hw 2026-06-18 - *not* ENABLE, which is 0x0C sw2); sw5=UDK6, sw3=UDK7, sw4=UDK8, sw1=UDK14 (broadcast on all 3 ports, deduped on port 0) |
 | 0x1C | EFFECTS/PLUG-INS (F1-F4 below display) - FX parameter editor | F4=sw0 (home: FX slot 0 / page 0), F1=sw1 (next FX slot), F2=sw7 (prev FX slot), F3=sw6 (bypass slot), sw2-sw5=knob 1-4 press (reset that param to 0). The 4 param knobs + 0x4C page arrows are always live (no edit mode) |
 
 **DEC button (separate zone from INC)**
@@ -300,7 +300,9 @@ to slot 0 / page 0 and reports; **F1** (sw1) next FX slot; **F2** (sw7) previous
 **F3** (sw6) toggles
 `TrackFX_SetEnabled`; the knob presses (sw2-sw5) reset their param to 0. Param/slot/page
 changes log to the console only when `[debug] console = 1` (off by default); the UDK-16
-FX-param dump always prints.
+FX-param dump always prints. The **EFFECTS/PLUG-INS DISPLAY** button (zone 0x09 sw5, no LED)
+toggles `[fx] window_on_knob` at runtime - the floating window pops/closes as the visual
+confirmation, since the button has no lamp (hw 2026-06-18).
 
 **Switch/LED feedback (host → DM2000):**
 LEDs use a different CC pair to avoid confusion with the incoming zone-select:
@@ -311,6 +313,52 @@ B0  2C  vv      - value: bits 0–3 = switch number, bit 6 = on (0x40), 0 = off
 
 Channel LEDs (switch numbers): 1=SELECT, 2=MUTE, 3=SOLO, 7=REC/RDY
 Transport LEDs (target 0x0E, switch numbers): 3=STOP, 4=PLAY, 5=REC. LOOP LED is at target 0x0F sw3 (wired via SetRepeatState), not on transport row.
+
+**Host-drivable vs console-local LEDs** (hw-verified 2026-06-18 with the `tools/hui_send.py`
+`all_on` lamp test). Not every button LED can be lit by the host. The DM2000 accepts `B0 2C`
+LED output only for buttons that carry a real HUI feedback role; the rest transmit their
+presses but **the console lights their own LEDs locally** - no HUI message reaches them (the
+same wall as the EQ/SELECTED CHANNEL knobs, which send no MIDI at all).
+- **Host-drivable:** channel SELECT/ON(mute)/SOLO/REC/INS, AUTO colour, fader, meter, pan
+  ring, V-pot ring blink; transport (0x0E); SHUTTLE/SCRUB (0x0D sw5/6); AUX SELECT + ENC
+  PAN/ASSIGN 1/2 (0x0B); MATRIX 1/2 (0x0C sw1/sw4); the FADER MODE pair (0x0C sw3); AUTOMIX
+  modes (0x18 sw0/1/2/4/5); AUTOMIX OVERWRITE (0x17); EFFECTS F1-F4 + SEL boxes (0x1C);
+  counter-mode (0x16); cursor-mode NAV/ZOOM (0x0D sw2); scribbles / counter / SELECT ASSIGN /
+  REMOTE; ROUTING objects 1-8 (port 4, see below).
+- **Console-local (press transmits, LED is NOT host-drivable):** FAD ASSIGN 3 (0x0C sw0),
+  AUTOMIX ENABLE (0x0C sw2), MATRIX 4 (0x0C sw5), AUTOMIX TOUCH SENSE (0x18 sw3), ROUTING
+  DIRECT (port 4 N=8), UDK 1-16, LOCATE MEMORY 1-8. MATRIX 3 and FAD ASSIGN 4 send no MIDI at
+  all; BACK/FORWARD (0x08 sw2/sw6) transmit but have no LED.
+
+**EFFECTS SEL rings ARE host-driven, on CC 0x18-0x1B** (MITM of a Pro Tools session, 2026-06-18 -
+corrects an earlier "input-only" note). Beyond the 8 channel V-pot rings (`B0 10-17`), the desk
+has a **second ring bank** for the four EFFECTS/PLUG-INS parameter wheels: `B0 18 vv` .. `B0 1B vv`
+(port 1). They fire in groups of four alongside the zone-0x1C SEL-box LEDs and the param LCD. The
+value byte is `(center 0x40) | (mode << 4) | position(1-11)`. The four ring **display modes** are
+hw-confirmed (2026-06-18): **0 dot** = one segment at the position (sweeps left-to-right as the
+value rises); **1 boost/cut** = a bar from centre (fills
+right above position 6, left below it); **2 fill** = fills left-to-right, full at position 11;
+**3 spread** = grows both ways from centre, full at position 6 (positions above 6 look identical
+- saturated). `tools/hui_send.py selring <1-4> <0..1> [dot|boostcut|fill|spread]` drives them;
+`all_on` uses fill at max for a full ring. The **plugin** drives these rings in `RefreshFXDisplay()`
+to show the 4 visible FX params, in **fill** mode (normalized value → position 1-11). *TODO
+(smart-ring):* pick the mode per param - **boostcut** for bipolar params (normalized neutral ≈ 0.5
+via `TrackFX_GetParamEx`), **fill** otherwise - so pan/EQ-gain knobs read centre-origin.
+
+**Channel ON LED is inverted:** the strip button is labelled **ON** (not MUTE) and the logic is
+reversed - `B0 2C 0x42` (sw2 with bit 6) **darkens** it (= muted), `B0 2C 0x02` lights it (= on).
+
+**V-pot ring blink:** `B0 0C <ch>` then `B0 2C 0x45` (channel zone, sw5) blinks that strip's
+pan ring; the desk animates the blink itself (one message, no host timer), cleared with sw5 off.
+The plugin drives it on the strips carrying the ridden send while encoders are in AUX/send mode.
+
+**FADER MODE is one exclusive switch:** 0x0C sw3 is a two-state toggle, not on/off - `B0 2C 0x03`
+(clear) lights **FADER**, `B0 2C 0x43` (set) lights **AUX/MTRX**; they can never both light.
+
+**MCS PANNER ROUTING LEDs (host → DM2000, PORT 4):** a separate encoding, not zone/sw. `BE 00 N`
+lights button N, `BE 01 N` clears it, N in 2-column wire order `{0,4,1,5,2,6,3,7}` for objects
+1-8 (DIRECT = N=8, LED console-local). The console powers them on by default, so the host
+clears all-but-selected; the `[surround]` plugin's `Run()` poll drives this on selection/object change.
 
 **HUI meter (host → DM2000):**
 Polyphonic key pressure, one message per meter side:
@@ -345,6 +393,11 @@ F0 00 00 66 05 00 11  20 20 20 20 20 20 20 20  F7   (16 bytes, 8 x 0x20)
 ```
 Sent once at plugin load and on close. 0x20 is a special "blank" code distinct from digit 0 (0x00).
 
+**Caveat (full-width send, hw-verified 2026-06-18):** 0x20 blanks only at *leading* positions;
+a 0x20 to the **right** of the value renders as **"0"**, not blank. A full 8-position send must
+therefore right-align the value (pad blanks on the left), exactly as the delta example below -
+this is what `tools/hui_send.py counter` builds.
+
 **Position update (delta, during playback):**
 ```
 F0 00 00 66 05 00 11  [N bytes]  F7   (N = 1–8)
@@ -374,6 +427,81 @@ silent when the transport is stopped.
 | `0:12.458` | `08 05 04 12 01` (positions 7→3; `0:` in pos 2 unchanged) |
 | `0:51.882` | `02 08 08 11 05` |
 | `1:23.626` | `06 02 06 13 02 11` (6 bytes; minute digit changed) |
+
+**HUI display SysEx zones (host → DM2000, port 1):**
+
+All host→console text/segment displays share the prefix `F0 00 00 66 05 00 <zone> … F7`.
+Three zones are in use (decoded 2026-06-17 from a Pro Tools sniff, see "Reverse-engineering
+method" below):
+
+| Zone | Display | Payload format |
+|---|---|---|
+| `0x10` | Channel scribble strips **and** the master SELECT ASSIGN field | `<cell> <4 ASCII chars>` |
+| `0x11` | LED timecode counter | delta BCD, see counter section above |
+| `0x12` | REMOTE / INSERT editor (8 cells × 10 chars) | `<cell 0-7> <10 ASCII chars>` |
+
+Zone `0x12`'s 8 cells are physically a **2 rows × 4 columns** grid (hw-confirmed 2026-06-18):
+top row = cells 0,1,2,3 (left→right), bottom row = cells 4,5,6,7. The FX editor uses it as 4
+columns of one param each — **name on the top cell, value on the bottom cell** (`RefreshFXDisplay`
+writes cell `k` and cell `k+4`). The middle two columns are cells 1,2 (top) and 5,6 (bottom).
+
+For zone `0x10`, cells `0x00`–`0x07` are the eight channel-strip names of that port's HUI unit.
+Cell **`0x08`** — one past the channel strips — is the master-section **SELECT ASSIGN** readout.
+
+**SELECT ASSIGN (encoder-assignment label, host → DM2000, port 1):**
+
+```
+F0 00 00 66 05 00 10 08 <c0> <c1> <c2> <c3> F7      (13 bytes; 4 ASCII chars at cell 8)
+```
+Pro Tools repaints it whenever the encoder assignment changes. Captured values:
+
+| Encoder mode | ASCII | Bytes (`…10 08` then) |
+|---|---|---|
+| Pan | `Pan ` | `50 61 6E 20` |
+| Pan (rotary) | `PanR` | `50 61 6E 52` |
+| Send A | `SndA` | `53 6E 64 41` |
+| Send B…E | `SndB`…`SndE` | `53 6E 64 42` … `45` |
+
+The plugin drives `"Pan "` and `"SndA"`–`"SndE"` from `m_enc_send` (`SendSelectAssign()` /
+`RefreshSelectAssign()`), on every encoder-mode change and at startup. Pro Tools also uses
+`Inp` / `Out` / `ASGN` for input/output/assign modes the plugin doesn't expose.
+
+**CURSOR MODE (NAVIGATION / ZOOM / SELECT readout) — NOT a text field:**
+
+Unlike SELECT ASSIGN, this is derived by the console from the cursor-cluster LED state, zone
+`0x0D`. The console reads **bit 6 (`0x40`) of the sw2 LED value**:
+
+| sw2 LED value | Label |
+|---|---|
+| `B0 0C 0D  B0 2C 02` (bit6 clear, e.g. `0x02/12/22/32`) | **NAVIGATION** |
+| `B0 0C 0D  B0 2C 42` (bit6 set, e.g. `0x42/52/62/72`) | **ZOOM** |
+
+(bits 4–5 are ignored — only bit 6 selects the label.) The desk's third label, **SELECT**, is a
+**transient flash** (~1s, hw-cracked 2026-06-18): the console shows it when it receives a fast
+bit-6 **transition** on sw2 — NAV then ZOOM (`02` then `42`) *or* ZOOM then NAV (`42` then `02`)
+back-to-back — then settles to whichever value was sent **last** (`02→42` lands on ZOOM, `42→02`
+on NAV). It has no steady code, so it cannot be held. (`tools/hui_send.py cursormode select`
+sends `02` then `42`; the earlier "PT animates sw1/sw3" guess was wrong.) The plugin drives only
+NAVIGATION/ZOOM (`SendCursorMode()`), mapped from the ENTER arrow-mode (scroll → NAVIGATION,
+zoom/h-zoom → ZOOM); SELECT is intentionally omitted — a momentary flash with no matching plugin
+arrow behaviour (PT's SELECT extends the edit selection; our arrows scroll/zoom).
+
+**Reverse-engineering method (none of the above is in any public Yamaha/Avid doc):**
+
+The display protocol was not documented anywhere. It was recovered by man-in-the-middling Pro
+Tools' HUI stream: `Pro Tools → loopMIDI → bridge → DM2000`, with PT's *input* wired straight
+from the desk (low latency keeps PT online). A small purpose-built bridge, `tools/hui_bridge.py`
+(python-rtmidi), forwards loopMIDI→desk and **live-decodes** each message — naming the SysEx
+zones and rendering payloads as ASCII — so `F0 00 00 66 05 00 10 08 50 61 6E 20 F7` prints as
+`SYSX zone=0x10 (scribble) [08 50 61 6E 20] '.Pan '` instead of raw hex. That decode is what
+revealed SELECT ASSIGN was simply scribble cell 8.
+
+The `tools/` folder holds three Python diagnostic/utility scripts (sharing `hui_common.py`):
+`hui_bridge.py` (MITM tap of a DAW's HUI output - needs the DAW + loopMIDI), `hui_deskmon.py`
+(answers the keepalive itself to bring the desk online and logs everything it transmits - needs
+no DAW; used to confirm e.g. that the EQ knobs send nothing), and `hui_send.py` (interactive CLI
+that keeps the desk online and sends any surface message - LEDs, meters, faders, scribbles,
+counter, displays - building the MIDI for you; a playground for the protocol).
 
 ### Yamaha native SysEx (port 8)
 
@@ -470,6 +598,56 @@ The scene scroll/recall protocol was captured on the GENERAL port - scroll
 `F0 43 10 3E 06 04 0A 00 00 00 00 00 <scene+1> F7`, recall `C0 <scene-1>` - and is wired
 bidirectionally (see **GENERAL MIDI port** above). REAPER marker positions trigger DM2000 scene
 changes via `!SCENE`/`#SCENE` markers; DM2000 recalls jump REAPER to the matching marker.
+
+---
+
+## Pro Tools Remote Layer reference (Owner's Manual ch.19, pp.221-252)
+
+This chapter is the **authoritative** description of how the DM2000 behaves on the Pro Tools
+Remote Layer (= the HUI mode we drive). It documents button functions, encoder modes, and the
+channel-strip display elements, and it confirms much of what we reverse-engineered. Reference it
+before adding any control-surface feature.
+
+**Channel-strip display (the small per-fader screen), p.227:**
+graphically shows the value of whatever parameter the Encoders are assigned to, plus the channel
+name (abbreviated, our 4-char scribble), the **selected-channel border**, **Fader Touch** sense,
+the **INS** indicator (track has plug-ins - our `sw6`), and pan / send-level meters.
+
+**Encoder modes (ENCODER MODE + AUX SELECT + FADER MODE sections), pp.226-229, 240-243:**
+the channel Encoders are multi-purpose; a mode button decides what they control:
+| Button | Function | Our use |
+|---|---|---|
+| ENCODER MODE [PAN] | Encoders = pan | ✅ we drive pan (in1) |
+| ENCODER MODE [AUX/MTRX] (SEND LEVEL) | Encoders = send level | 🔨 **encoder-sends** (planned) |
+| AUX SELECT [AUX 1]-[AUX 5] | select **Send A-E** (lit = active send) | 🔨 send slot 1-5 |
+| ENCODER MODE [ASSIGN 1] (INPUT) | encoders pick input source; displays show it | spare / configurable |
+| ENCODER MODE [ASSIGN 2] (OUTPUT) | encoders pick output dest; displays show **1-8/S/D** | spare / configurable |
+| ENCODER MODE [ASSIGN 3] (SEND ASSIGN) | encoders pick send destination | spare / configurable |
+| ENCODER MODE [ASSIGN 4] (INSERT) | toggles [SEL] between channel-select and insert-select | part of FX editor |
+| MATRIX SELECT [1] (DEFAULT) | reset fader/pan/send/plug-in to default | spare / configurable |
+| MATRIX SELECT [2] (SEND MUTE) | encoder-push mutes sends | spare / configurable |
+| MATRIX SELECT [4] (INSERT BYPASS) | bypass plug-in | (FX editor has its own bypass) |
+| FADER MODE [FADER]/[AUX/MTRX] | **Flip** mode (faders control sends) | spare / configurable |
+
+Note: the **1-8/S/D "routing fields"** are not a standalone indicator - they are the channel-strip
+display's content while in **[ASSIGN 2] (OUTPUT)** mode (output-destination names). They only
+populate when the *surface* is put in that encoder mode, which is why changing a PT output in
+software drove nothing to the desk.
+
+**Confirmed against our implementation:**
+- **Surround / DYNAMICS knobs** (p.232): THRESHOLD=front, RANGE/RATIO=rear, ATTACK=F/R, DECAY=LFE,
+  HOLD=volume; ROUTING [6] toggles position↔divergence. Matches `[surround]` exactly.
+- **Exclusive SEL** (p.239): hold one [SEL], press others in the same 8-block to add/remove - matches
+  our `[select] exclusive` behaviour verbatim.
+- **EFFECTS/PLUG-INS** (p.230): [5]=ASSIGN, [6]=COMPARE, [7]=BYPASS, [8]=INSERT/PARAM, Parameter
+  Up/Down (< SCROLL / SCROLL >) - matches the FX parameter editor.
+- **INS** (p.227), **[ON]=mute, inverted** (p.241), **REC/RDY flash→lit** (p.233), **AUTO STATUS**
+  shows all channels' automation modes on the displays (p.233) - the per-track automation indicator.
+
+**Design stance:** implement the genuinely useful features (encoder-sends, INS, AUTO); the
+PT-specific spare buttons (MATRIX, the ASSIGN input/output/send-assign modes, FADER-MODE Flip) are
+of little use in a REAPER/ambisonics workflow, so they are exposed as **user-assignable** (same idea
+as `[udk]`/`[locate]`) rather than hard-wired to their Pro Tools meaning.
 
 ---
 
@@ -573,6 +751,11 @@ Tasks:
       track's current FX-slot page and the up/down arrows scroll pages (up=next, wrapping), no edit
       mode. F1 next FX slot, F2 prev, F3 bypass, F4 home to slot 0, knob press resets its param to
       0. Slot/page logged to console only with `[debug] console = 1`. Hardware-tested 2026-06-16.
+- [x] Master-section display readouts (decoded 2026-06-17, see "HUI display SysEx zones"):
+      **SELECT ASSIGN** = scribble cell 8 on port 1, repainted from `m_enc_send`
+      (`Pan` / `SndA`-`SndE`) on every encoder-mode change and at startup. **CURSOR MODE** =
+      zone 0x0D sw2 bit6 (clear = NAVIGATION, set = ZOOM), driven from the ENTER arrow-mode;
+      the desk's transient SELECT mode is intentionally not driven.
 - [ ] EQ parameter control via selected-channel knobs; sends/aux routing; talkback.
 
 ### macOS port (complete, hardware-verified each release)
@@ -708,11 +891,15 @@ runs on the GENERAL port, not port 8.)
   console (send, default off). Runs on a dedicated GENERAL port chosen in the config dialog. Full
   SysEx scene *dump/restore* (an entire scene's contents) is out of scope - PC recall covers the
   live workflow.
-- **EQ from the console's EQ knobs is not possible**: confirmed 2026-06-16 - the SELECTED CHANNEL
-  EQ section is wired to the DM2000's internal EQ, not the DAW remote layer (the EQ knobs do nothing
-  for the DAW in Pro Tools either). Use the FX parameter editor (assign ReaEQ) instead. Send routing
-  via the channel encoders and talkback remain candidate Layer-4 features. (Surround joystick, display
-  parameter knobs, and dynamics knobs are implemented in v0.6.)
+- **EQ from the console's EQ knobs is not possible**: confirmed 2026-06-16, re-verified 2026-06-18 by
+  direct desk sniff (`tools/hui_deskmon.py`, console online, no DAW) - the SELECTED CHANNEL EQ knobs emit
+  **no MIDI at all** in the DAW remote layer (they drive the DM2000's internal EQ only; the only
+  selected-channel knobs that transmit are the DYNAMICS ones, which we use for surround). Use the FX
+  parameter editor (assign ReaEQ) instead. Send routing via the channel encoders and talkback remain
+  candidate Layer-4 features.
+- **ENC ASSIGN buttons (DAW layer, hw 2026-06-18)**: ASSIGN 1/2 = zone 0x0B sw1/sw0 (scribble peeks);
+  **ASSIGN 4 emits no MIDI** (its on-desk blink/SEL behaviour is internal); **ASSIGN 3 = zone 0x0C
+  sw0** (transmits, currently unmapped - a free assignable button).
 
 ---
 
