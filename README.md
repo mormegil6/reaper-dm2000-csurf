@@ -117,10 +117,9 @@ WDL clone, `make`, binary verification, install).
 - 4-port MIDI open/close, keepalive ping echo, config dialog
 - Faders both directions, touch detect (touch automation works)
 - Mute / solo / rec-arm / select buttons with LED feedback
-- Transport (play/stop/record/rewind/forward, RETURN TO ZERO, END, LOOP) with LEDs; all switch positions
-  hardware-verified 2026-06-15 (RETURN TO ZERO/END are zone 0x0F sw0/1; LOOP is zone 0x0F sw3 - Locate row, not transport zone 0x0E)
+- Transport (play/stop/record/rewind/forward, RETURN TO ZERO, END, LOOP) with LEDs
 - Bank switching (channel +-1, bank +-24)
-- Automation modes: the AUTOMIX section sets the **selected tracks'** automation mode (Trim / Read / Touch / Latch / Write) with LED feedback; all sw assignments hardware-verified 2026-06-15
+- Automation modes: the AUTOMIX section sets the **selected tracks'** automation mode (Trim / Read / Touch / Latch / Write) with LED feedback
 
 ### Layer 2 - Channel strip feedback: complete (hardware-tested)
 
@@ -131,29 +130,25 @@ WDL clone, `make`, binary verification, install).
 - [x] 4-char track names on scribble strips (HUI SysEx)
 - [x] VU meters on channel strips (100ms peak polling, 3-cycle peak hold,
       red OVER only above 0 dBFS - matches REAPER's clip indication)
-- [x] Locate section buttons (all hw-verified 2026-06-15, fully configurable via `[locate]` in `dm2000_keys.ini`):
-      - Row 2 (zone 0x0F): RETURN TO ZERO (sw0, go to project start), END (sw1, go to project end),
-        LOOP (sw3, toggle repeat with LED feedback), QUICK PUNCH (sw4, insert marker).
-        ONLINE (sw2), SET/REHEARSAL/MTR/MASTER: no HUI output - DM2000 internal only.
-      - Row 1 (zone 0x10): IN (sw2, set loop in-point), OUT (sw3, set loop out-point),
-        POST (sw4, insert region from time selection). AUDITION/PRE: no default action.
-      - LOCATE MEMORY 1-8 (zone 0x13 sw1/sw3/sw6/sw2/sw4/sw7 for LM1-6; zone 0x15
-        sw0/sw1 for LM7-8): jump to REAPER markers 1-8. Configurable via dm2000_keys.ini.
-- [x] BACK button (zone 0x08 sw2) -> undo; FORWARD (zone 0x08 sw6) -> redo.
-- [x] ENTER button (zone 0x14 sw0) toggles cursor arrows between two modes: scroll
-      (NAVIGATION) and zoom (ZOOM).
-- [x] REW/FF (zone 0x0E sw1/sw2) support auto-repeat when held (400 ms delay, 80 ms interval), same as cursor arrows.
-- [x] AUTO button (per-channel, zone 0-7 sw4) cycles that track's automation mode by default (`[channel] auto_button`; `unity` instead resets the fader to 0 dB).
+- [x] Locate section buttons (fully configurable via `[locate]` in `dm2000_keys.ini`):
+      - Row 2: RETURN TO ZERO (go to project start), END (go to project end),
+        LOOP (toggle repeat with LED feedback), QUICK PUNCH (insert marker).
+        ONLINE, SET/REHEARSAL/MTR/MASTER: no HUI output - DM2000 internal only.
+      - Row 1: IN (set loop in-point), OUT (set loop out-point),
+        POST (insert region from time selection). AUDITION/PRE: no default action.
+      - LOCATE MEMORY 1-8: jump to REAPER markers 1-8. Configurable via dm2000_keys.ini.
+- [x] BACK button -> undo; FORWARD -> redo.
+- [x] ENTER button toggles cursor arrows between two modes: scroll (NAVIGATION) and zoom (ZOOM).
+- [x] REW/FF support auto-repeat when held, same as cursor arrows.
+- [x] AUTO button (per-channel) cycles that track's automation mode by default (`[channel] auto_button`; `unity` instead resets the fader to 0 dB).
 - [x] Scrub wheel speed increased (10x); jog wheel unchanged.
-- [x] Scene recall (bidirectional, hardware-verified 2026-06-16): a DM2000 scene recall
-      jumps REAPER to the matching marker, and `#SCENE` markers drive the console as playback
-      crosses them (recall while playing, scroll-only while stopped) - over a dedicated GENERAL
-      port chosen in the config dialog. Optional; see
-      [Scene recall](#scene-recall-general-port) below
-- [x] LED counter display: position sent at a configurable rate (default 33 ms ≈ 30 Hz) as HUI SysEx. Protocol decoded
-      2026-06-15 from Pro Tools loopMIDI capture - delta BCD update, bytes right-to-left,
-      each byte `(sep_flag<<4)|digit`. Follows REAPER's transport display format setting
-      (right-click transport). Hardware-verified 2026-06-15.
+- [x] Scene recall (bidirectional): a DM2000 scene recall jumps REAPER to the matching
+      marker, and `#SCENE` markers drive the console as playback crosses them (recall while
+      playing, scroll-only while stopped) - over a dedicated GENERAL port chosen in the
+      config dialog. Optional; see [Scene recall](#scene-recall-general-port) below
+- [x] LED counter display: timecode position sent to the front-panel counter at a configurable
+      rate (default 33 ms ≈ 30 Hz). Follows REAPER's transport display format setting
+      (right-click transport).
 
 Full button/zone/MIDI reference: [DESIGN.md - Button / function / MIDI reference table](DESIGN.md#button--function--midi-reference-table).
 
@@ -161,7 +156,7 @@ Full button/zone/MIDI reference: [DESIGN.md - Button / function / MIDI reference
 
 - **Fader taper is calibrated to the console's printed scale**: REAPER dB and
   the printed marks agree along the throw (11-point piecewise-linear table from
-  DM2000 Editor captures, post-fader-calibration, 2026-06-15).
+  DM2000 Editor captures, post-fader-calibration).
 - **The console's fader physical maximum is the printed +10 mark** (wire value
   16383). REAPER volumes above +10 dB clamp to that position.
 - The console keeps an internal model of DAW fader positions and springs motors
@@ -171,7 +166,7 @@ Full button/zone/MIDI reference: [DESIGN.md - Button / function / MIDI reference
 
 ### Layer 3 - extended SysEx: partial
 
-- [x] **Scene recall** (GENERAL port) - bidirectional, hardware-verified 2026-06-16. See
+- [x] **Scene recall** (GENERAL port) - bidirectional. See
       [Scene recall](#scene-recall-general-port) below. Full SysEx scene *dump/restore* (an
       entire scene's contents) is out of scope - PC recall covers the live workflow.
 - [x] Meter bridge - driven by existing HUI meter messages (Layer 2); no native SysEx needed
