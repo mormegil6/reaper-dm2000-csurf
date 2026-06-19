@@ -106,8 +106,8 @@ WDL clone, `make`, binary verification, install).
 5. OK.
 
 <table align="center"><tr>
-<td align="center"><img src="doc/config-dialog.png" alt="Config dialog - Windows" width="320"><br><sub>Windows</sub></td>
-<td align="center"><img src="doc/config-dialog-macos.png" alt="Config dialog - macOS" width="320"><br><sub>macOS</sub></td>
+<td align="center"><img src="doc/config-dialog.png" alt="Config dialog - Windows" height="247"><br><sub>Windows</sub></td>
+<td align="center"><img src="doc/config-dialog-macos.png" alt="Config dialog - macOS" height="247"><br><sub>macOS</sub></td>
 </tr></table>
 
 ## Feature status
