@@ -21,23 +21,38 @@ under each item, then fold the findings into `hui-canonical-coverage.md` /
 
 ## A. "Does the desk send it?" — run `hui_deskmon.py`, then operate controls
 
-- [ ] **A1 — Footswitch input** (canonical zone `0x1d` p0/p1). Plug a pedal into the
+- [ ] **A1 — TALKBACK** (canonical zone `0x0e` p0). We already handle this zone's
+      p1–p5 (REW / FFWD / STOP / PLAY / REC); **p0 is the one port we don't use.**
+      Press the desk's TALKBACK control and watch for `0x0e` sw0 (`b0 0f 0e` +
+      `b0 2f 40`). **Highest-value item on this list** — if it transmits, it's an
+      immediately implementable hardware talkback hook for recording sessions.
+      _Result:_ …  → if yes, wire to a REAPER talkback action / send.
+
+- [ ] **A2 — Footswitch input** (canonical zone `0x1d` p0/p1). Plug a pedal into the
       DM2000's foot-switch jack(s) and press. Watch for `0x1d` / footswitch
       (`b0 0f 1d` + `b0 2f 40/41`).
       _Result:_ …  → if it transmits, expose as an assignable `[foot]` action.
 
-- [ ] **A2 — Edit operations** (canonical zone `0x1a` = paste/cut/capture/delete/
+- [ ] **A3 — Edit operations** (canonical zone `0x1a` = paste/cut/capture/delete/
       copy/separate). Press the desk's edit-ish buttons that we don't decode yet.
       Watch for any `0x1a` press; note which physical button maps to which switch.
       _Result:_ …  → if present, free cut/copy/paste/delete action hooks.
 
-- [ ] **A3 — Monitor / control-room section** (canonical `0x11` monitor-input,
-      `0x12` monitor-output). Operate the monitor/control-room buttons; watch for
-      `0x11` / `0x12` switch presses. (Note: `0x12` is also the REMOTE-display *TX*
-      zone — here we're looking at switch *RX*.)
+- [ ] **A4 — Monitor / control-room section** (canonical switch zones `0x11`
+      monitor-input, `0x12` monitor-output). Operate the monitor/control-room
+      buttons; watch for `0x11` / `0x12` switch presses.
+      ⚠️ This switch/LED **zone** `0x12` is unrelated to the display SysEx
+      **sub-command** `0x12` in test B2 — two different namespaces that happen to
+      share the number `0x12`.
       _Result:_ …  → could map to REAPER monitoring.
 
-- [ ] **A4 — Completeness sweep.** With deskmon running, press every remaining
+- [ ] **A5 — Power-cycle / system reset** (`0xff`). With deskmon running, power the
+      DM2000 off and on and confirm one or more `0xff` (MIDI System Reset) arrive.
+      Then repeat with REAPER + csurf running and confirm the plugin recovers
+      gracefully (re-onlines, no stuck LEDs/faders).
+      _Result:_ …
+
+- [ ] **A6 — Completeness sweep.** With deskmon running, press every remaining
       unmapped button / section once. Note any zone/switch that transmits but we
       don't currently handle.
       _Result:_ …
@@ -51,15 +66,29 @@ under each item, then fold the findings into `hui-canonical-coverage.md` /
       Does a global "something is soloed" indicator light anywhere on the desk?
       _Result:_ …  → if yes, drive it whenever any track is soloed (cheap win).
 
-- [ ] **B2 — Full REMOTE / 2×40 main display** (canonical `<hdr> 12 …`; this *is*
-      our zone `0x12` REMOTE display, already used by the FX editor as 8×10). Use
-      the tool's display/`remote` command (see `help`) to write **all eight cells /
-      both lines** and confirm how wide and how many lines the desk actually
-      renders.
+- [ ] **B2 — Full REMOTE / 2×40 main display** (display SysEx **sub-command** `0x12`:
+      `F0 00 00 66 05 00 12 …` — *not* the switch zone `0x12` of test A4). This is
+      the REMOTE / INSERT display, which we already drive for the FX editor. Use the
+      tool's display/`remote` command (see `help`) to write **all eight cells / both
+      lines** and confirm how wide and how many lines the desk actually renders.
       _Result:_ …  → decides whether a general 2-line status/parameter readout
       (beyond the FX editor's current use) is worthwhile.
 
-- [ ] **B3 — Click / Beep** (canonical zone `0x1d` p2 = click, p3 = beep). Send
+- [ ] **B3 — Non-ASCII scribble characters.** REAPER track names can contain
+      non-ASCII (e.g. Polish ł / ó / ż). The HUI small-display set
+      (`hui-spec/HUI_CSET.txt`) is its own ~7-bit set, not Latin-1 / UTF-8. Send a
+      scribble with accented / Polish characters and see what the strip renders;
+      decide how the plugin should map or fold unsupported characters. (Partly a
+      code question — the UTF-8 → HUI-charset mapping — but needs the desk to
+      confirm what actually displays.)
+      _Result:_ …
+
+- [ ] **B4 — Timecode decimal points / separators.** Send a known counter value
+      with separators, e.g. `counter 1:23:45.67`, and confirm the digits, the
+      decimal point, and the field separators all land in the right positions.
+      _Result:_ …
+
+- [ ] **B5 — Click / Beep** (canonical zone `0x1d` p2 = click, p3 = beep). Send
       `led 0x1d 2 on` (click) and `led 0x1d 3 on` (beep). Any audible response?
       _Result:_ …  (low priority — only if curious.)
 

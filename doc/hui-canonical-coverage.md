@@ -46,7 +46,7 @@ share the same zone/port. Host lights an LED with `b0 0c <zone>` then
 | Ping / keep-alive | `90 00 00` → `90 00 7f` | ✅ | echo implemented |
 | 4-char channel text | `<hdr> 10 ...` | ✅ | scribble strips |
 | SELECT-ASSIGN text | `<hdr> 10 08 ...` | ✅ | encoder-mode readout |
-| **2×40 main display** | `<hdr> 12 ...` | ❌ 🔬 | we drive the REMOTE display with bespoke Yamaha SysEx, not the standard HUI `12` frame — **test whether the DM2000 honours `12`** |
+| 2×40 main display | `<hdr> 12 ...` (display SysEx **sub-command** `0x12`) | ✅ 🔬 | this is the REMOTE / INSERT display; we already drive it for the FX editor. Open question is full 2-line / 8-cell addressing & width. Note: unrelated to switch/LED **zone** `0x12` (monitor output) |
 | VU meters | `a0 0y sv` | ✅ | our scale matches the doc (−60..0 dB → `0x00`..`0x0b`, `0x0c` = clip) |
 | Timecode display | `<hdr> 11 ...` | ✅ | same delta-BCD digit encoding |
 | V-Pot rings | `b0 1y vv` | ✅ | pan + send rings |
@@ -87,20 +87,27 @@ share the same zone/port. Host lights an LED with `b0 0c <zone>` then
 Worked up as a runnable checklist (using the `tools/` helpers) in
 [hui-test-plan.md](hui-test-plan.md). Rough priority order (most useful first):
 
-1. **2×40 main display (`<hdr> 12 ...`).** Does the REMOTE display render standard
-   HUI main-display frames? If yes, we could show a proper 2-line status/parameter
-   readout through standard HUI instead of bespoke SysEx.
-2. **RUDE SOLO LED** (`0x16` p3). We already drive `0x16` p0–p2 (TIME CODE / FEET /
+1. **TALKBACK** (switch zone `0x0e` p0). We handle p1–p5 (REW/FFWD/STOP/PLAY/REC);
+   p0 is the one port in that zone we don't use. Does the desk's TALKBACK control
+   transmit it? **Highest value** — an immediate hardware talkback hook for
+   recording sessions.
+2. **2×40 main display** (display SysEx sub-command `0x12`). We already drive this
+   for the FX editor — open question is the full 2-line / 8-cell width, i.e. whether
+   a general status/parameter readout is worthwhile. (Not the same `0x12` as the
+   monitor-output switch zone.)
+3. **RUDE SOLO LED** (`0x16` p3). We already drive `0x16` p0–p2 (TIME CODE / FEET /
    BEATS). Does the desk have/light a "rude solo" indicator we can drive whenever
    any track is soloed? Easy win if present.
-3. **Footswitch input** (`0x1d` p0/p1). Plug a pedal into the DM2000's foot-switch
+4. **Footswitch input** (`0x1d` p0/p1). Plug a pedal into the DM2000's foot-switch
    jack(s) and watch for `b0 0f 1d` / `b0 2f 40`. If it transmits, expose as an
    assignable action (like `[udk]`).
-4. **Edit zone `0x1a`** (paste/cut/capture/delete/copy/separate in canonical HUI).
+5. **Edit zone `0x1a`** (paste/cut/capture/delete/copy/separate in canonical HUI).
    Does any DM2000 button emit `0x1a`? If so, free edit-action hooks.
-5. **Monitor sections `0x11` / `0x12`** (input/output monitor rows). Do the desk's
+6. **Monitor sections `0x11` / `0x12`** (input/output monitor rows). Do the desk's
    monitor buttons emit these? Could map to REAPER monitoring.
-6. **Click / Beep** (`0x1d` p2/p3). Low value — only worth a quick poke.
+7. **Non-ASCII scribble characters & timecode separators**, and **power-cycle /
+   `0xff` handling** — display-fidelity and resilience checks; see the test plan.
+8. **Click / Beep** (`0x1d` p2/p3). Low value — only worth a quick poke.
 
 ## Archiving these docs
 
