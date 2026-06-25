@@ -1,0 +1,319 @@
+MACKIE HUI COMMAND REFERENCE (TRANSMITTING DATA)
+------------------------------------------------
+
+This is the result of a 2-day reverse-engineering-session on a 
+MACKIE HUI (firmware version 1.45). It's so sad that every developer
+has to spend this time (ok, perhaps only a few hours for an experienced 
+developer) if he doesn't get the the chance to obtain an sdk by Mackie.
+We are talking about a 13 Year old product (May, 2010). 
+By the way: the MIDI implementation for the Emagic Logic Control is
+available for free (even for end users).
+
+Anyway, i *think* i covered every possible aspect in this text. But i'm
+not really sure. So if you find a feature, i missed, please feel free to
+extend this document with your knowledge.
+
+All MIDI data displayed here, is hexadecimal.
+
+PS: There are many sysex bulks, used to transport data larger than 3 bytes.
+    All these sysex bulks start with a header (f0 00 00 66 05 00) and end
+    with 'end of sysex' (f7).
+    Whenever you find a <hdr> in this text, just substitute that with 
+    f0 00 00 66 05 00.
+    This header is composed of:
+    f7       : start of sysex data
+    00 00 66 : manufacturer id (mackie)
+    05       : product id (hui)
+    00       : i even don't know, if this is part of a sysex header.
+               I could look it up, but i'm too lazy ;)
+
+Have fun,
+AgeMan.
+
+
+
+
+Content
+
+Ping ....................................................................... 1
+Text ....................................................................... 2
+  4-character channel and 'SELECT-ASSIGN' text displays .................... a
+  2*40 character main display .............................................. b
+VU-meters .................................................................. 3
+Timecode display ........................................................... 4
+V-Pot rings ................................................................ 5
+LEDs ....................................................................... 6
+Faders ..................................................................... 7
+Relays ..................................................................... 8
+Klick ...................................................................... 9
+Beep ...................................................................... 10
+
+
+
+
+1) Ping
+
+   It is important to send a ping in regular intervals. This will keep
+   the HUI in online mode. If the HUI doesn't get a ping for about 2
+   seconds, it will go offline.
+   
+   Sending a ping is quite simple (note on, key 0, velocity 0):
+   90 00 00
+
+   The HUI will respond to a ping with a ping-reply:
+   90 00 7f
+
+   This indicates an existing connection to the HUI. If you don't
+   get a ping-reply, the HUI is probably not connected to the
+   computer anymore.
+
+   The funny thing is, that you actually don't have to send a ping at 
+   all, to control the HUI. If you never send a ping, the HUI won't go
+   offline and you can control everything *EXCEPT* the faders!
+
+   But since you probably want to control the faders, just send the
+   ping every second or so.
+
+2) Text
+    a) 4-character channel and 'SELECT-ASSIGN' text displays
+
+       f0 00 00 66 05 00 10 yy gg hh ii jj f7
+       - or -
+       <hdr> 10 yy gg hh ii jj f7 
+
+       yy : 0..7 = channel 1..8
+            8    = SELECT-ASSIGN
+       gg,
+       hh,
+       ii,
+       jj : four MACKIE HUI characters (see HUI_CSET.txt)
+ 
+       All characters should be in the range 00..7f, otherwise there
+       might be some scrolling chars/undefined behavior.
+
+    b) 2*40 character main display
+       
+       The display is divided into 8 zones (0..7):
+       0000000000111111111122222222223333333333
+       4444444444555555555566666666667777777777
+
+       Text can be sent for up to 4 zones simultaneously (perhaps
+       even more? I didn't try out more than 4 zones.):
+
+       f0 00 00 66 05 00 12 z1 g0 g1 g2 g3 g4 g5 g6 g7 g8 g9
+                           [z2 h0 h1 h2 h3 h4 h5 h6 h7 h8 h9]
+                           [z3 i0 i1 i2 i3 i4 i5 i6 i7 i8 i9]
+                           [z4 j0 j1 j2 j3 j4 j5 j6 j7 j8 j9] f7
+       - or -
+       <hdr> 12 z1 g0 g1 g2 g3 g4 g5 g6 g7 g8 g9
+               [z2 h0 h1 h2 h3 h4 h5 h6 h7 h8 h9]
+               [z3 i0 i1 i2 i3 i4 i5 i6 i7 i8 i9]
+               [z4 j0 j1 j2 j3 j4 j5 j6 j7 j8 j9] f7
+
+       [...]  denotes optional data.
+       z1..z4 denote the above mentioned zones (00..07).
+              They can be in any order.
+       g0..g9: 10 (ten) MACKIE HUI-2 characters (see HUICSET2.txt).
+       h0..h9: 10 (ten) MACKIE HUI-2 characters (see HUICSET2.txt).
+       i0..i9: 10 (ten) MACKIE HUI-2 characters (see HUICSET2.txt).
+       j0..j9: 10 (ten) MACKIE HUI-2 characters (see HUICSET2.txt).
+ 
+       Please note that this display has a different character set!
+       All characters should be in the range 10..7f, otherwise there
+       might be some scrolling chars/undefined behavior.
+
+3) VU-Meters
+   
+   Format: a0 0y sv
+
+   y : channel (0..7)
+   s : side (left/right)
+         s = 0 : side = left
+         s = 1 : side = right
+   v : value (0..c)
+         v = c : signal >=   0dB; red (clip)
+         v = b : signal >=  -2dB; yellow
+         v = a : signal >=  -4dB; yellow
+         v = 9 : signal >=  -6dB; yellow
+         v = 8 : signal >=  -8dB; green
+         v = 7 : signal >= -10dB; green
+         v = 6 : signal >= -14dB; green
+         v = 5 : signal >= -20dB; green
+         v = 4 : signal >= -30dB; green
+         v = 3 : signal >= -40dB; green
+         v = 2 : signal >= -50dB; green
+         v = 1 : signal >= -60dB; green
+         v = 0 : signal <  -60dB; all leds off
+
+4) Timecode display
+
+   The TC display consists of eight 7-segment displays (called digits here).
+   To keep MIDI data bandwidth as low as possible data gets transmitted with
+   lsb first. Every digit except the first one (the rightmost) has a decimal 
+   point (dp). 
+   It is possible to send up to 8 digits to the surface within one sysex frame.
+   
+   Format: f0 00 00 66 05 00 11 y0 [y1 [y2 [y3 [y4 [y5 [y6 [y7]]]]]]] f7
+
+   where y0 is the rightmost digit (lsb) and y7 is the leftmost digit (msb).
+   [...] denotes optional data.
+
+   Valid values for y0..y7 are :
+     00 : '0'     10 : '0.' (only valid for y1..y7)
+     01 : '1'     11 : '1.' (only valid for y1..y7)
+     02 : '2'     12 : '2.' (only valid for y1..y7)
+     03 : '3'     13 : '3.' (only valid for y1..y7)
+     04 : '4'     14 : '4.' (only valid for y1..y7)
+     05 : '5'     15 : '5.' (only valid for y1..y7)
+     06 : '6'     16 : '6.' (only valid for y1..y7)
+     07 : '7'     17 : '7.' (only valid for y1..y7)
+     08 : '8'     18 : '8.' (only valid for y1..y7)
+     09 : '9'     19 : '9.' (only valid for y1..y7)
+     0a : 'A'     1a : 'A.' (only valid for y1..y7)
+     0b : 'b'     1b : 'b.' (only valid for y1..y7)
+     0c : 'C'     1c : 'C.' (only valid for y1..y7) 
+     0d : 'd'     1d : 'd.' (only valid for y1..y7)
+     0e : 'E'     1e : 'E.' (only valid for y1..y7)
+     0f : 'F'     1f : 'F.' (only valid for y1..y7)
+   
+   Notes: There might be some more combinations i didn't check out. When the 
+          surface loses the connection to a host for example, it displays
+          'OFF-LINE'. But i think the internal mcu manages this type of message.
+
+5) V-Pot rings
+   
+   The V-Pot rings consist of 11 leds (numbered 0..a). The center-led is number 5.
+
+   Format: b0 1y vv
+   
+   y : channel (0..7)/param (8..b)
+
+   v =  0 : ...........   v = 10 : ...........   v = 20 : ...........
+   v =  1 : *..........   v = 11 : ******.....   v = 21 : *..........
+   v =  2 : .*.........   v = 12 : .*****.....   v = 22 : **.........
+   v =  3 : ..*........   v = 13 : ..****.....   v = 23 : ***........
+   v =  4 : ...*.......   v = 14 : ...***.....   v = 24 : ****.......
+   v =  5 : ....*......   v = 15 : ....**.....   v = 25 : *****......
+   v =  6 : .....*.....   v = 16 : .....*.....   v = 26 : ******.....
+   v =  7 : ......*....   v = 17 : .....**....   v = 27 : *******....
+   v =  8 : .......*...   v = 18 : .....***...   v = 28 : ********...
+   v =  9 : ........*..   v = 19 : .....****..   v = 29 : *********..
+   v =  a : .........*.   v = 1a : .....*****.   v = 2a : **********.
+   v =  b : ..........*   v = 1b : .....******   v = 2b : ***********
+
+   v = 30 : ...........
+   v = 31 : .....*.....
+   v = 32 : ....***....
+   v = 33 : ...*****...
+   v = 34 : ..*******..
+   v = 35 : .*********.
+   v = 36 : ***********
+   v = 37 : ***********
+   v = 38 : ***********
+   v = 39 : ***********
+   v = 3a : ***********
+   v = 3b : ***********
+
+   There is also a small led under the encoder that can be turned on by
+   adding 40 to v.
+   
+6) LEDs
+
+   The HUI is divided into 29(decimal) zones (00..1d). Each zone
+   can have up to 8 ports. It seems that the internal
+   multiplexers/demultiplexers are 8 bit devices.
+   All leds have the same zone/port pair as the corresponding
+   button. For example the led for the 'next bank' button is:
+   zone 0a, port 3 (0a/3). The button is also at 0a/3.
+
+   To control a led you must have selected the right zone first.
+   After selecting a zone you can control all 8 ports within that zone:
+
+   Zone select: b0 0c zz
+   zz(zone) = 00..1d
+
+   Switch on port: b0 2c 4p
+   p(port) = 0..7
+
+   Switch off port: b0 2c 0p
+   p(port) = 0..7 
+
+   It is also possible to control multiple port within the same zone
+   using 'running status':
+   b0 2c 00 2c 01 2c 02 2c 03 2c 04 2c 05 2c 06 2c 07
+   switches off ports 0..7 in the pre-selected zone.
+
+   The zone/port selection can be combined as well:
+   b0 0c 08 2c 40 2c 41 2c 42
+   This will select zone 08 and switch on ports 0..2!
+
+   But the HUI will always send a zone select/port control pair
+   if you press a button. That is 6 bytes for a button press and
+   another 6 bytes for a button release - 12 bytes in total. 
+
+   For information regarding the zones and ports please see HUIZONES.txt. 
+
+7) Faders
+
+   Faders consist of 2 different devices. Every fader has a switch
+   and a motor. The switch will be closed when you touch the fader.
+   When you release the fader, the switch will be opened.
+   When you move the fader it will send fader positions.
+
+   Sending a fader position is quite simple.
+
+   Format:
+   b0 0z hi
+   b0 2z lo
+
+   Where z denotes the zone (the same as the fader number) - 0..7
+   hi and lo are in the range 00..7f (7 bit values).
+   The total resolution is therefor 14 bit (0..3fff = 0..16383 dec).
+   As far as I know, the internal resolution of the faders are 9 bit,
+   so the HUI will set the 5 least significant bits of the lo-value
+   to zero.
+
+   The format for sending fader positions can be shortened using 
+   'running status' to:
+
+   b0 0z hi 2z lo
+
+8) Relays
+
+   There are two controlable relays in the hui. They have the same
+   zone/port as the corresponding footswitches.
+   Zone: 1d
+   Relay1/footswitch1 : port 0
+   Relay2/footswitch2 : port 1
+
+   For example to switch on relay2 you would have to send:
+   b0 0c 1d (to select zone 1d, if not already selected)
+   b0 2c 41 (switch on port 1)
+
+   To turn it off, send:
+   b0 2c 01
+   
+9) Klick
+
+   The HUI features a small klick sound used to indicate button 
+   presses etc. To create that sound, send:   
+
+   b0 0c 1d (select zone 1d)
+   b0 2c 42 (switch on port 2)
+
+   This is the only port that doesn't have to be switched off
+   afterwartds. You may send as many 'switch on'-commands as
+   you like, without sending a 'switch off'-command in between.
+
+10) Beep
+
+   The HUI also features a beeper for indicating error conditions etc.
+   To switch on the beeper, send:
+
+   b0 0c 1d (select zone 1d)
+   b0 2c 43 (switch on port 3)
+
+   The beeper will sound until you send a 'switch off'-command:
+
+   b0 2c 03
+

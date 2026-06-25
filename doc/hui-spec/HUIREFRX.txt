@@ -1,0 +1,152 @@
+MACKIE HUI COMMAND REFERENCE (RECEIVING DATA)
+---------------------------------------------
+
+You should read HUIREFTX.txt first for a more in depth discussion on
+the HUI protocol. 
+
+Have fun,
+AgeMan.
+
+
+
+
+Content
+
+Ping ....................................................................... 1
+Switches ................................................................... 2
+V-Pots ..................................................................... 3
+Jog wheel .................................................................. 4
+Faders ..................................................................... 5
+Footswitches ............................................................... 6
+System Reset ............................................................... 7
+
+
+1) Ping
+
+   As long as you recieve a ping-reply from the HUI (90 00 7f) the HUI is 
+   still online. But remember that you will have to send a ping first in
+   in order to recieve a ping reply in regular intervals. 
+   Sending a ping (90 00 00) should be done about every second.
+
+2) Switches
+
+   There is a significant difference between transmitting port switches and
+   receiving port switches.
+   To select a zone you would send something like b0 0c zz. 
+   When the HUI selects a zone (because the user pressed a button for example),
+   it sends b0 0f zz (where zz denotes the zone).
+   To *send* a port switch, you would say something like b0 2c yp, where y 
+   would be 0 to turn off, y would be 40 to turn on, and p would be the port
+   in question (0..7).
+   But you will *receive* something like b0 2f yp if the user presses or 
+   releases a button on the HUI.
+
+   To summarize this:
+
+   Command     |Transmit |Receive
+   ------------|---------|--------
+   Zone select |b0 0c zz |b0 0f zz
+   Port on     |b0 2c 4p |b0 2f 4p
+   Port off    |b0 2c 0p |b0 2f 0p
+
+   The HUI will always send a complete pair of 'zone select'/'port on/off'
+   pair to the computer. For example, when the user presses the solo button
+   on the fifth channelstrip, the HUI will send:
+
+   b0 0f 04  - meaning : select zone 04
+   b0 2f 43  - meaning : port 3 switched on
+
+   After the user releases the button, the HUI will send:
+
+   b0 0f 04  - meaning : select zone 04
+   b0 2f 03  - meaning : port 3 switched off
+
+   As far as i can tell, the HUI *never* makes use of a 'running status'.
+
+   For information regarding zones and port, please have a look at 
+   HUIZONES.txt.
+
+3) V-Pots
+   
+   V-Pots send its data using delta valus.
+
+   Format: b0 4p vv
+
+   where p is the V-Pot number and vv is the delta value.
+   p can be anything from 0 to c. This is just a linear mapping of the 
+   V-Pots from left to right. That means, when p equals c then the 'scroll'-
+   V-Pot has been operated.
+
+   vv denotes the delta value. 
+   If vv>40 then delta=vv-40.
+   If vv<40 then delta=-vv.
+   vv never seems to equal 40.
+
+   I was able to obtain deltas as high as 2d (by turning the knobs real
+   fast).
+
+4) Jog wheel
+
+   The jog wheel sends its data using delta values as well.
+
+   Format: b0 0d vv
+
+   vv denotes the delta value.
+   if vv>40 then delta=vv-40
+   if vv<40 then delta=-vv
+   vv never seems to equal 40.
+
+   delta seems to be in the range [-f..-1,1..f]
+
+5) Faders
+   
+   As already mentioned in HUIREFTX.txt, the faders have 2 functions.
+   The first function is 'touch fader' and 'release fader'. And the second
+   function is 'move fader'.
+
+   A complete sequence for altering a fader looks like this:
+
+   touch fader
+   move fader
+   move fader
+     .
+     .
+     .
+   move fader
+   release fader
+
+   This behavior gives you the chance, to manage automation. When, for 
+   example, your software constantly moves the fader according to recorded
+   automation data, but still shall be able to update that data using
+   fader movements made by the user, your software can react to 'touch fader'-
+   commands and 'release-fader'-commands.
+
+   Format:
+
+   'touch fader':
+     b0 0f 0z
+     b0 2f 40
+
+   'release fader':
+     b0 0f 0z
+     b0 2f 00
+
+   'move fader':
+     b0 0z hi 
+     b0 2z lo
+   
+   where z is the corresponding zone (the fader number, 0..7) and 
+   value = (hi << 7) + lo,
+   giving a range of 0..3fff.
+
+6) Footswitches
+
+   Footswitch# |Close             |Open
+   ------------|------------------|-----------------
+   1           |b0 0f 1d b0 2f 40 |b0 0f 1d b0 2f 00
+   2           |b0 0f 1d b0 2f 41 |b0 0f 1d b0 2f 01
+
+7) System reset
+
+   Whenever the HUI is turned on or off, it sends one ore more ff.
+   This is MIDI slang and means 'System reset'.

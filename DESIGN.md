@@ -16,6 +16,12 @@ Repository: `git.pg.edu.pl/p829296` / `github.com/mormegil6`
 License: LGPL v3
 Build target: Windows x64 DLL + macOS universal dylib (arm64 + x86_64), REAPER 6+
 
+**HUI protocol reference:** the canonical reverse-engineered Mackie HUI spec
+(theageman, 2010) is mirrored with credit under [doc/hui-spec/](doc/hui-spec/);
+[doc/hui-canonical-coverage.md](doc/hui-canonical-coverage.md) maps it to this
+plugin, and [doc/hui-test-plan.md](doc/hui-test-plan.md) lists the open questions
+to settle at the desk.
+
 ---
 
 ## Hardware context

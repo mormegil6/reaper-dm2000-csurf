@@ -1,0 +1,77 @@
+MACKIE ZONES FOR LEDS/SWITCHES AND FADERS
+-----------------------------------------
+
+Reverse engineered by AgeMan, 2010.
+
+Zone |port 0  |port 1  |port 2  |port 3  |port 4  |port 5  |port 6  |port 7  |
+-----|--------|--------|--------|--------|--------|--------|--------|--------|
+  00 |fader   |select  |mute    |solo    |auto    |v-sel   |insert  |rec/rdy |
+  01 |fader   |select  |mute    |solo    |auto    |v-sel   |insert  |rec/rdy |
+  02 |fader   |select  |mute    |solo    |auto    |v-sel   |insert  |rec/rdy |
+  03 |fader   |select  |mute    |solo    |auto    |v-sel   |insert  |rec/rdy |
+  04 |fader   |select  |mute    |solo    |auto    |v-sel   |insert  |rec/rdy |
+  05 |fader   |select  |mute    |solo    |auto    |v-sel   |insert  |rec/rdy |
+  06 |fader   |select  |mute    |solo    |auto    |v-sel   |insert  |rec/rdy |
+  07 |fader   |select  |mute    |solo    |auto    |v-sel   |insert  |rec/rdy |
+  08 |ctrl/clt|shift/ad|editmode|undo    |alt/fine|option/a|edittool|save    |
+  09 |mix     |edit    |transprt|mem-loc |status  |alt     |        |        |
+  0a |<- chanl|<- bank |chanl ->|bank -> |        |        |        |        |
+  0b |output  |input   |pan     |send e  |send d  |send c  |send b  |send a  |
+  0c |assign  |default |suspend |shift   |mute    |bypass  |recrdyal|        |
+  0d |down    |left    |mode    |right   |up      |scrub   |shuttle |        |
+  0e |talkback|rewind  |fast fwd|stop    |play    |record  |        |        |
+  0f ||<rtz   |end>|   |on line |loop    |qck pnch|        |        |        |
+  10 |audition|pre     |in      |out     |post    |        |        |        |
+  11 |input 3 |input 2 |input 1 |mute    |discrete|        |        |        |
+  12 |output 3|output 2|output 1|dim     |mono    |        |        |        |
+  13 |0       |1       |4       |2       |5       |.       |3       |6       |
+  14 |enter   |+       |        |        |        |        |        |        |
+  15 |7       |8       |9       |-       |clr     |=       |/       |*       |
+  16 |timecode|feet    |beats   |rudesolo|        |        |        |        |
+  17 |plug in |pan     |fader   |sendmute|send    |mute    |        |        |
+  18 |trim    |latch   |read    |off     |write   |touch   |        |        |
+  19 |phase   |monitor |auto    |suspend |create  |group   |        |        |
+  1a |paste   |cut     |capture |delete  |copy    |separate|        |        |
+  1b |f1      |f2      |f3      |f4      |f5      |f6      |f7      |f8/esc  |
+  1c |ins/para|assign  |select 1|select 2|select 3|select 4|bypass  |compare |
+  1d |fs/rlay1|fs/rlay2|click   |beep    |        |        |        |        |
+
+
+Names:
+
+Zone |Name                                                                   |
+-----|-----------------------------------------------------------------------|
+  00 |channel strip 1                                                        |
+  01 |channel strip 2                                                        |
+  02 |channel strip 3                                                        |
+  03 |channel strip 4                                                        |
+  04 |channel strip 5                                                        |
+  05 |channel strip 6                                                        |
+  06 |channel strip 7                                                        |
+  07 |channel strip 8                                                        |
+  08 |keyboard shortcuts                                                     |
+  09 |window                                                                 |
+  0a |channel selection                                                      |
+  0b |assignment 1                                                           |
+  0c |assignment 2                                                           |
+  0d |cursor movement/mode/scrub/shuttle                                     |
+  0e |transporter main (big switches)                                        |
+  0f |transporter loop/rtz/end                                               |
+  10 |transporter punch                                                      |
+  11 |monitor input                                                          |
+  12 |monitor output                                                         |
+  13 |num pad 1                                                              |
+  14 |num pad 2                                                              |
+  15 |num pad 3                                                              |
+  16 |timecode leds (no associated buttons)                                  |
+  17 |auto enable                                                            |
+  18 |auto mode                                                              |
+  19 |status/group                                                           |
+  1a |edit                                                                   |
+  1b |function keys                                                          |
+  1c |parameter edit                                                         |
+  1d |click/beep/relay/footswitch (no associated buttons or leds)            |
+-----|-----------------------------------------------------------------------|
+
+
+(HUIZONES.txt)   
