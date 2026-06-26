@@ -19,7 +19,7 @@ REQUIREMENTS (this tool needs a DAW and a loopMIDI port):
   * Nothing else holding the loopMIDI / DM2000 ports (close MIDI-OX etc.).
 
 Usage:
-    py hui_bridge.py [loopmidi-port-fragment] [dm2000-port-fragment]
+    python hui_bridge.py [loopmidi-port-fragment] [dm2000-port-fragment]
 Defaults: "loopMIDI IN1"  ->  "Yamaha DM2000-1".   Ctrl-C to stop.
 
 For sniffing the desk on its own (no DAW), use hui_deskmon.py instead.

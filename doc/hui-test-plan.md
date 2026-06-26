@@ -12,9 +12,9 @@ under each item, then fold the findings into `hui-canonical-coverage.md` /
 - Tools need `python-rtmidi` (`pip install python-rtmidi`); they keep the desk
   online on their own (echo the keepalive), so no DAW is required.
 - Two tools do all of this:
-  - **`py tools/hui_deskmon.py`** — decodes everything the desk *transmits*
+  - **`python tools/hui_deskmon.py`** — decodes everything the desk *transmits*
     (find out whether a control sends MIDI, and capture its zone/switch).
-  - **`py tools/hui_send.py`** — drives any surface element by hand
+  - **`python tools/hui_send.py`** — drives any surface element by hand
     (`led <zone> <sw> [on|off]`, plus display/counter/meter aliases; type `help`).
 
 ---

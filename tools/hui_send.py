@@ -18,7 +18,7 @@ first (this tool holds the ports and keeps the desk online on its own).
 Nothing is cleared on exit - whatever you set stays while this runs; the desk only
 reverts because it goes offline when the tool quits. `clear` is the explicit wipe.
 
-Run:   py hui_send.py        (type `help`; `quit` or Ctrl-C exits)
+Run:   python hui_send.py    (type `help`; `quit` or Ctrl-C exits)
 
 Examples:
     channel 1 sel on            channel 1 SELECT lights
