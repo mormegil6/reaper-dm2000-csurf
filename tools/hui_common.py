@@ -5,11 +5,14 @@ The DM2000's Pro Tools "DAW Remote" layer speaks the HUI protocol. Both tools
 here (the DAW-output bridge and the standalone desk monitor) need the same two
 things, centralised below:
 
-  * find_port()  - locate a MIDI port by a case-insensitive name fragment.
-  * decode()     - turn one raw HUI message into a readable line.
+  * find_port()         - locate a MIDI port by a case-insensitive name fragment.
+  * dm2000_daw_ports()  - auto-discover the four DAW HUI port names (OS-independent).
+  * decode()            - turn one raw HUI message into a readable line.
 
 Requires: python-rtmidi   (pip install python-rtmidi)
 """
+
+import re
 
 # HUI display-SysEx header:  F0 00 00 66 05 00 <zone> <payload...> F7
 HUI_SYSEX_HEADER = bytes([0xF0, 0x00, 0x00, 0x66, 0x05, 0x00])
@@ -30,6 +33,21 @@ def find_port(midi, name_fragment):
         if want in name.lower():
             return index, name
     return None, None
+
+
+def dm2000_daw_ports(midi, count=4):
+    """Auto-discover the DM2000's DAW HUI port names, independent of how the OS names
+    the device - macOS calls them "YAMAHA DM2000 Port1".."Port8", Windows
+    "Yamaha DM2000-1".."-8". Returns the first `count` input ports whose name contains
+    "dm2000", ordered by trailing number (ports 1-4 = the DAW layer; 5-8 = GENERAL /
+    other). `midi` is an rtmidi.MidiIn() instance, as for find_port()."""
+    found = []
+    for name in midi.get_ports():
+        if "dm2000" in name.lower():
+            m = re.search(r"(\d+)\s*$", name)
+            found.append((int(m.group(1)) if m else 0, name))
+    found.sort()
+    return [name for _, name in found[:count]]
 
 
 def is_keepalive(msg):

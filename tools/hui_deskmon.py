@@ -14,18 +14,17 @@ REQUIREMENT: the DM2000 ports must be free - close REAPER / Pro Tools / MIDI-OX
 (anything that holds them) before running.
 
 Usage:
-    py hui_deskmon.py [dm2000-name-fragment]
-Default monitors all four "Yamaha DM2000-1".."-4" ports.   Ctrl-C to stop.
+    python hui_deskmon.py [dm2000-name-fragment]
+With no argument it auto-discovers the four DAW ports, regardless of how the OS
+names them - macOS "YAMAHA DM2000 Port1", Windows "Yamaha DM2000-1".   Ctrl-C to stop.
 
 To watch a DAW's output instead (LED / display feedback), use hui_bridge.py.
 """
 import sys
 import time
 import rtmidi
-from hui_common import find_port, decode
+from hui_common import find_port, decode, dm2000_daw_ports
 
-DEFAULT_PORTS = ["yamaha dm2000-1", "yamaha dm2000-2",
-                 "yamaha dm2000-3", "yamaha dm2000-4"]
 SHOW_KEEPALIVE = False
 
 
@@ -35,7 +34,7 @@ def _is_device_pong(msg):
 
 
 def main(argv):
-    names = [argv[1]] if len(argv) > 1 else DEFAULT_PORTS
+    names = [argv[1]] if len(argv) > 1 else dm2000_daw_ports(rtmidi.MidiIn())
 
     ports = []  # list of (midi_in, midi_out, label, zone_state)
     for name in names:

@@ -37,10 +37,7 @@ import sys
 import shlex
 import threading
 import rtmidi
-from hui_common import find_port
-
-PORT_NAMES = ["yamaha dm2000-1", "yamaha dm2000-2",
-              "yamaha dm2000-3", "yamaha dm2000-4"]
+from hui_common import find_port, dm2000_daw_ports
 
 HUI = [0xF0, 0x00, 0x00, 0x66, 0x05, 0x00]   # display-SysEx header
 
@@ -162,7 +159,7 @@ class Sender:
         self.lock = threading.Lock()
 
     def open(self):
-        for name in PORT_NAMES:
+        for name in dm2000_daw_ports(rtmidi.MidiIn()):
             midi_out, midi_in = rtmidi.MidiOut(), rtmidi.MidiIn()
             out_idx, out_label = find_port(midi_out, name)
             in_idx, _ = find_port(midi_in, name)

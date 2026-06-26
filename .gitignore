@@ -5,7 +5,8 @@ doc/RETEST.md
 doc/TEST_PROTOCOL.md
 doc/TODO.md
 
-# python tool caches
+# python tool venv + caches (tools/ diagnostics; created per-machine)
+.venv/
 __pycache__/
 *.pyc
 
