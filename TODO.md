@@ -172,7 +172,9 @@
       rings ride volume (1 dB/detent, ring shows volume). The send-level poll drives the faders
       (no REAPER send callback); SetSurfaceVolume drives the ring in flip. The FADER/AUX-MTRX LED
       (B0 2C 03/43) tracks state. Pan mode = no-op (nothing to swap). `[fader] flip` (default on).
-      Sends-only first cut; pan-on-fader swap is a possible later extension. **Pending hardware test.**
+      Sends-only first cut; pan-on-fader swap is a possible later extension. **Hardware-verified
+      2026-06-26**: swap, both control directions, encoder-press + double-tap resets, send-dB on the
+      strip, and no motor spring-back all confirmed on the desk.
 
 - [x] **Scribble non-ASCII transliteration** - implemented 2026-06-26. The 4-char scribble
       strips drop any byte >= 0x80 (hardware-confirmed: "Łóżko" was showing as just "k"), so
