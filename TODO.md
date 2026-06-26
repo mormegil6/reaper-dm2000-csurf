@@ -166,6 +166,14 @@
 - [x] **macOS port** - cross-platform SWELL build; every release is hardware-verified on
       macOS (universal arm64+x86_64) as well as Windows.
 
+- [x] **FLIP (FADER MODE button)** - implemented 2026-06-26 (reserved for v0.9). The FADER MODE
+      button (zone 0x0C sw3) toggles FLIP: while the encoders ride a send (an AUX SELECT active),
+      the motor faders ride the selected send (calibrated taper, absolute set), and the encoders +
+      rings ride volume (1 dB/detent, ring shows volume). The send-level poll drives the faders
+      (no REAPER send callback); SetSurfaceVolume drives the ring in flip. The FADER/AUX-MTRX LED
+      (B0 2C 03/43) tracks state. Pan mode = no-op (nothing to swap). `[fader] flip` (default on).
+      Sends-only first cut; pan-on-fader swap is a possible later extension. **Pending hardware test.**
+
 - [x] **Scribble non-ASCII transliteration** - implemented 2026-06-26. The 4-char scribble
       strips drop any byte >= 0x80 (hardware-confirmed: "Łóżko" was showing as just "k"), so
       track names with Polish/accented characters were vanishing. `scribbleAsciiFold` now folds

@@ -650,7 +650,7 @@ the channel Encoders are multi-purpose; a mode button decides what they control:
 | MATRIX SELECT [1] (DEFAULT) | reset fader/pan/send/plug-in to default | spare / configurable |
 | MATRIX SELECT [2] (SEND MUTE) | encoder-push mutes sends | spare / configurable |
 | MATRIX SELECT [4] (INSERT BYPASS) | bypass plug-in | (FX editor has its own bypass) |
-| FADER MODE [FADER]/[AUX/MTRX] | **Flip** mode (faders control sends) | spare / configurable |
+| FADER MODE [FADER]/[AUX/MTRX] | **Flip** mode (faders control sends) | ✅ **FLIP** (`[fader] flip`): in send mode, faders ride the send / encoders ride volume |
 
 Note: the **1-8/S/D "routing fields"** are not a standalone indicator - they are the channel-strip
 display's content while in **[ASSIGN 2] (OUTPUT)** mode (output-destination names). They only
@@ -671,10 +671,12 @@ software drove nothing to the desk.
 - **INS** (p.227), **[ON]=mute, inverted** (p.241), **REC/RDY flash→lit** (p.233), **AUTO STATUS**
   shows all channels' automation modes on the displays (p.233) - the per-track automation indicator.
 
-**Design stance:** implement the genuinely useful features (encoder-sends, INS, AUTO); the
-PT-specific spare buttons (MATRIX, the ASSIGN input/output/send-assign modes, FADER-MODE Flip) are
-of little use in a REAPER/ambisonics workflow, so they are exposed as **user-assignable** (same idea
-as `[udk]`/`[locate]`) rather than hard-wired to their Pro Tools meaning.
+**Design stance:** implement the genuinely useful features (encoder-sends, INS, AUTO,
+**FLIP**); the remaining PT-specific spare buttons (MATRIX, the ASSIGN input/output/send-assign
+modes) are of little use in a REAPER/ambisonics workflow, so they are exposed as **user-assignable**
+(same idea as `[udk]`/`[locate]`) rather than hard-wired to their Pro Tools meaning. **FADER-MODE
+Flip is now implemented** (`[fader] flip`): in send mode the faders ride the selected send and the
+encoders/rings ride volume.
 
 ---
 

@@ -154,6 +154,9 @@ class CSurf_DM2000 : public IReaperControlSurface
     DWORD m_fx_page_last;                            // last page-arrow event (debounce; arrows fire 0x4C twice)
     int m_enc_send;                                  // channel-encoder mode: -1 = pan, 0-4 = send slot (AUX A-E)
     bool m_enc_sends;                                // [encoder] sends: AUX SELECT switches encoders to send-level mode
+    bool m_flip;                                     // FADER MODE / FLIP: in send mode, faders ride the send, encoders ride volume
+    bool m_flip_enabled;                             // [fader] flip: enable the FADER MODE button as FLIP
+    int m_send_fader_last[24];                       // FLIP: last send-level fader value sent per channel (change cache)
     char m_scribble_name[24][8];                     // cached track name per surface channel (for override restore)
     int m_scribble_peek;                             // held scribble override: 0 = none, 1 = track number, 2 = fader dB
     bool m_peek_number;                              // [display] peek_number: hold ENC ASSIGN1 to show track numbers
@@ -228,6 +231,7 @@ public:
     memset(m_pan_lastpos, 0xff, sizeof(m_pan_lastpos));
     memset(m_enc_ring_last, 0xff, sizeof(m_enc_ring_last));
     memset(m_enc_blink_last, 0xff, sizeof(m_enc_blink_last));
+    memset(m_send_fader_last, 0xff, sizeof(m_send_fader_last));
     memset(m_pan_lasttouch, 0, sizeof(m_pan_lasttouch));
     memset(m_meter_lastlvl, 0xff, sizeof(m_meter_lastlvl));
     memset(m_meter_hist, 0, sizeof(m_meter_hist));
@@ -287,6 +291,8 @@ public:
     m_fx_page_last = 0;
     m_enc_send = -1;                         // start in pan mode
     m_enc_sends = true;                      // [encoder] sends on by default
+    m_flip = false;                          // FLIP off until the FADER MODE button toggles it
+    m_flip_enabled = true;                   // [fader] flip on by default
     memset(m_scribble_name, 0, sizeof(m_scribble_name));
     m_scribble_peek = 0;
     m_peek_number = m_peek_db = true;        // [display] peek modifiers on by default
@@ -387,6 +393,8 @@ public:
             GetPrivateProfileString("labels", auxkey[i], def, m_sa_send[i], sizeof(m_sa_send[i]), _la_ini); } }
         // [encoder] sends = 1 (default): AUX SELECT switches channel encoders to send-level mode
         m_enc_sends = GetPrivateProfileInt("encoder", "sends", 1, _la_ini) != 0;
+        // [fader] flip: FADER MODE button swaps faders <-> send encoders (send mode only)
+        m_flip_enabled = GetPrivateProfileInt("fader", "flip", 1, _la_ini) != 0;
         m_console_log = GetPrivateProfileInt("debug", "console", 0, _la_ini) != 0;
 
         // [scene] scene recall via the GENERAL port (only active if a GENERAL port is set).
@@ -711,8 +719,15 @@ public:
       {
           m_vol_lastpos[id] = volint;
           int ch = id & 7;
-          m_midiouts[id / 8]->Send(0xB0, ch, (volint >> 7) & 0x7F, -1);
-          m_midiouts[id / 8]->Send(0xB0, 0x20 + ch, volint & 0x7F, -1);
+          if (flipSends() && id < 24)        // FLIP: volume rides the V-pot ring, not the motor fader
+          {
+              m_midiouts[id / 8]->Send(0xB0, 0x10 + ch, (unsigned char)(1 + (volint * 10) / 16383), -1);
+          }
+          else
+          {
+              m_midiouts[id / 8]->Send(0xB0, ch, (volint >> 7) & 0x7F, -1);
+              m_midiouts[id / 8]->Send(0xB0, 0x20 + ch, volint & 0x7F, -1);
+          }
           // live-update the strip when it is showing dB (held peek, or this fader is touched)
           if (id < 24 && (m_scribble_peek == 2 || (m_touch_db && m_fader_touch[id]))) RefreshScribble(id);
       }
@@ -1320,12 +1335,20 @@ private:
         else if (data1 >= 0x20 && data1 < 0x28)  // fader value LSB -> apply the move
         {
             int ch = data1 - 0x20;
-            MediaTrack *tr = TrackFromCh(port * 8 + ch);
-            if (tr)
+            int gch = port * 8 + ch;
+            MediaTrack *tr = TrackFromCh(gch);
+            double gain = int14ToVol(m_fader_msb[port][ch], data2);
+            if (tr && flipSends() && gch < 24)   // FLIP: the fader rides the selected send level
+            {
+                if (GetTrackNumSends && SetTrackSendInfo_Value && m_enc_send < GetTrackNumSends(tr, 0))
+                    SetTrackSendInfo_Value(tr, 0, m_enc_send, "D_VOL", gain);
+                m_send_fader_last[gch] = volToInt14(gain);   // we drove the fader; keep the poll from fighting it
+            }
+            else if (tr)
                 // ignoresurf=NULL on purpose: the DM2000 keeps an internal model of
                 // the DAW's fader positions and springs the motor back to it on touch
                 // release, so our own moves must be echoed back (Pro Tools does this)
-                CSurf_SetSurfaceVolume(tr, CSurf_OnVolumeChange(tr, int14ToVol(m_fader_msb[port][ch], data2), false), NULL);
+                CSurf_SetSurfaceVolume(tr, CSurf_OnVolumeChange(tr, gain, false), NULL);
         }
         else if (data1 == 0x0D)                  // jog wheel: bits 0-5 = speed (1-6), bit 6 = direction
         {
@@ -1342,9 +1365,10 @@ private:
         else if (data1 >= 0x40 && data1 < 0x48)  // channel encoder delta: pan (default) or send level
         {
             int gch = port * 8 + (data1 - 0x40);
-            if (m_enc_send >= 0)                  // AUX/send mode: nudge the selected send
+            if (m_enc_send >= 0)                  // AUX/send mode
             {
-                OnSendKnob(gch, data2);
+                if (m_flip) OnVolumeKnob(gch, data2);  // FLIP: the encoder rides volume
+                else        OnSendKnob(gch, data2);    // normal: the encoder rides the send
             }
             else                                 // pan v-pot delta: bits 0-5 = amount, bit 6 = right
             {
@@ -1445,7 +1469,12 @@ private:
 
     // While the encoders ride sends, REAPER pushes no send-level callbacks, so poll the
     // rings and repaint only those that changed (keeps the display live without re-clicking).
-    void PollSendRings() { if (m_enc_send >= 0) for (int i = 0; i < 24; ++i) SendEncoderRing(i, false); }
+    void PollSendRings()
+    {
+        if (m_enc_send < 0) return;
+        if (m_flip) for (int i = 0; i < 24; ++i) SendFlipFader(i, false);   // FLIP: faders ride the send
+        else        for (int i = 0; i < 24; ++i) SendEncoderRing(i, false); // normal: rings ride the send
+    }
 
     // Paint one channel's scribble for the current state: a held peek (track number /
     // fader dB) wins; else send-destination name while in send mode; else the cached
@@ -1572,7 +1601,8 @@ private:
         else if (sw >= 3 && sw <= 7)  { if (!m_enc_sends) return; m_enc_send = 7 - sw; } // AUX 1-5 -> send 0-4
         else return;
         SetEncModeLEDs();
-        RefreshEncoders();
+        if (m_flip) RefreshFlip();      // flip on: repaint faders (send) + rings (volume) for the new mode
+        else        RefreshEncoders();
         RefreshScribbles();             // show send-destination names (send mode) or restore track names
         RefreshSelectAssign();          // update the SELECT ASSIGN readout (Pan / SndA-E)
     }
@@ -1591,6 +1621,72 @@ private:
         if (db < -120.0) db = -120.0;
         SetTrackSendInfo_Value(tr, 0, m_enc_send, "D_VOL", DB2VAL(db));
         SendEncoderRing(gch);
+    }
+
+    // FLIP is active only when it has something to swap, i.e. while the encoders ride a
+    // send. Then the motor faders ride that send and the encoders/rings ride volume.
+    bool flipSends() const { return m_flip && m_enc_send >= 0; }
+
+    // FLIPped channel encoder turned: nudge that channel's VOLUME (1 dB/detent). The ring
+    // (which shows volume in flip) repaints via SetSurfaceVolume's flip branch.
+    void OnVolumeKnob(int gch, unsigned char data2)
+    {
+        MediaTrack *tr = TrackFromCh(gch);
+        if (!tr || !GetTrackUIVolPan) return;
+        int steps = data2 & 0x3F;
+        if (!steps) return;
+        double vol, pan;
+        if (!GetTrackUIVolPan(tr, &vol, &pan)) return;
+        double db = VAL2DB(vol) + (data2 & 0x40 ? 1.0 : -1.0) * steps;
+        if (db > 12.0) db = 12.0;
+        if (db < -120.0) db = -120.0;
+        CSurf_SetSurfaceVolume(tr, CSurf_OnVolumeChange(tr, DB2VAL(db), false), NULL);
+    }
+
+    // FLIP + send mode: drive the motor fader from the channel's selected send level
+    // (REAPER pushes no send-level callbacks, so the Run() poll calls this).
+    void SendFlipFader(int gch, bool force)
+    {
+        if (gch < 0 || gch >= 24 || !m_midiouts[gch / 8]) return;
+        MediaTrack *tr = TrackFromCh(gch);
+        int iv = 0;
+        if (tr && GetTrackNumSends && GetTrackSendInfo_Value && m_enc_send < GetTrackNumSends(tr, 0))
+            iv = volToInt14(GetTrackSendInfo_Value(tr, 0, m_enc_send, "D_VOL"));
+        if (!force && iv == m_send_fader_last[gch]) return;
+        m_send_fader_last[gch] = iv;
+        m_midiouts[gch / 8]->Send(0xB0, gch & 7, (iv >> 7) & 0x7F, -1);
+        m_midiouts[gch / 8]->Send(0xB0, 0x20 + (gch & 7), iv & 0x7F, -1);
+    }
+
+    // FADER MODE button -> toggle FLIP, drive its LED (0x43 lights AUX/MTRX = flip on,
+    // 0x03 lights FADER = off), and repaint faders + rings for the new state.
+    void OnFlip()
+    {
+        m_flip = !m_flip;
+        SendGlobalLED(0x0C, 3, m_flip);
+        RefreshFlip();
+    }
+
+    // Repaint every channel's fader and ring for the current flip/encoder state. In flip
+    // (send mode) the fader rides the send and the ring rides volume; otherwise normal.
+    void RefreshFlip()
+    {
+        memset(m_vol_lastpos, 0xff, sizeof(m_vol_lastpos));     // force fader/ring repaint
+        memset(m_enc_ring_last, 0xff, sizeof(m_enc_ring_last));
+        memset(m_send_fader_last, 0xff, sizeof(m_send_fader_last));
+        bool flip = flipSends();
+        for (int i = 0; i < 24; ++i)
+        {
+            MediaTrack *tr = TrackFromCh(i);
+            if (tr)
+            {
+                double vol, pan;
+                if (GetTrackUIVolPan && GetTrackUIVolPan(tr, &vol, &pan)) SetSurfaceVolume(tr, vol);
+            }
+            if (flip) { SendFlipFader(i, true);
+                        if (m_enc_blink_last[i]) { m_enc_blink_last[i] = 0; SendChannelLED(i, 5, false); } } // no blink in flip
+            else      SendEncoderRing(i);
+        }
     }
 
     // Per-channel AUTO key, configurable via [channel] auto_button:
@@ -1847,6 +1943,10 @@ private:
         else if (zone == 0x0C && sw == 2 && press && port == 0) // AUTOMIX ENABLE = Pro Tools SUSPEND (configurable)
         {
             if (m_automix_suspend) SendMessage(g_hwnd, WM_COMMAND, m_automix_suspend, 0);
+        }
+        else if (zone == 0x0C && sw == 3 && press && port == 0) // FADER MODE = FLIP (faders <-> send encoders)
+        {
+            if (m_flip_enabled) OnFlip();
         }
         else if (zone == 0x18 && press && port == 0) // AUTOMIX automation-mode buttons (hw-verified 2026-06-17)
         {

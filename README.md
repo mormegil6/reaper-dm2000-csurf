@@ -216,13 +216,17 @@ Full button/zone/MIDI reference: [DESIGN.md - Button / function / MIDI reference
   double-tapping a fader snaps it to 0 dB (`[channel] double_touch`).
 - **Startup splash** - on load the REMOTE display briefly shows `DM2000 csurf online vX.Y` and the
   project website, then hands off to the FX view - clearing the console's "Off-Line" message.
+- **FLIP** (FADER MODE button) - while the encoders ride a send, FLIP swaps them: the
+  motorized faders ride the selected send (calibrated taper) and the encoders/rings ride
+  volume; press again to swap back. The FADER / AUX-MTRX LED tracks it. Toggle with `[fader] flip`.
 
 Everything above is configurable in `dm2000_keys.ini`; defaults are documented in
 [doc/dm2000_keys.ini.example](doc/dm2000_keys.ini.example) and
 [doc/dm2000_keys_guide.md](doc/dm2000_keys_guide.md).
 
-Still to come: FLIP (faders ↔ encoders), talkback. (The DM2000's EQ / SELECTED CHANNEL knobs
-send no MIDI on the HUI layer, so EQ isn't controllable from the surface - see Known limitations.)
+Still to come: talkback / control-room (via the native SysEx layer - see
+[doc/dm2000-native-sysex.md](doc/dm2000-native-sysex.md)). (The DM2000's EQ / SELECTED CHANNEL
+knobs send no MIDI on any port, so EQ isn't controllable from the surface - see Known limitations.)
 See [DESIGN.md](DESIGN.md).
 
 ## Scene recall (GENERAL port)

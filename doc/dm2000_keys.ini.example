@@ -397,6 +397,25 @@ sends = 1
 
 
 ; ===========================================================================
+; [fader] - FADER MODE button = FLIP (faders <-> send encoders)
+;
+; While the encoders ride a send (an AUX SELECT is active), pressing FADER MODE
+; swaps them: the motorized faders ride the selected send (with the calibrated
+; taper, so a send rides a real fader), and the channel encoders + rings ride
+; volume. Press FADER MODE again to swap back. The FADER / AUX-MTRX label-LED
+; tracks the state. In pan (ENC PAN) mode FLIP has nothing to swap and does
+; nothing. (Pro Tools' "Flip".)
+;
+; flip = 1 (default): FADER MODE button toggles FLIP.
+; flip = 0: FADER MODE does nothing on the surface.
+; ===========================================================================
+
+[fader]
+
+flip = 1
+
+
+; ===========================================================================
 ; [automix] - AUTOMIX section (button map hardware-verified 2026-06-17)
 ;
 ; The AUTOMIX section's two rows speak Pro Tools' automation model. Mapped to REAPER:
