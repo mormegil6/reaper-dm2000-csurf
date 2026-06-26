@@ -2551,7 +2551,7 @@ private:
         else         { if (m_fx_page > 0)       m_fx_page--; } // down = prev, stop at first page
         FXReport(tr);
         RefreshFXDisplay();                  // update the SEL rings/LEDs for the new page
-        OverlayFXParams(tr, 1000);       // brief "params A-B/N" flash, then back to the params
+        OverlayFXParams(tr, 800);       // brief "params A-B/N" flash, then back to the params
     }
 
     // Report the current FX slot / page to the console (temporary debugging aid).
@@ -2596,10 +2596,17 @@ private:
         char fxname[128] = ""; if (TrackFX_GetFXName) TrackFX_GetFXName(tr, m_fx_slot, fxname, sizeof(fxname));
         char clean[64]; StripFXName(fxname, clean, sizeof(clean));
         int a = m_fx_page * 4 + 1, b = m_fx_page * 4 + 4; if (b > np) b = np;
-        char top[80];
-        if (np > 0) sprintf_s(top, sizeof(top), "%s  %d-%d/%d", clean, a, b, np);
-        else        sprintf_s(top, sizeof(top), "%s", clean);
-        SendDisplayLine(0, top);                               // line 1 (cells 0-3)
+        // line 1: fixed sections - FX number (left) | name (middle, truncates) | bank range
+        // (right) - so the number and range stay visible even when the name is long.
+        char num[16], rng[16] = "";
+        sprintf_s(num, sizeof(num), "FX %d/%d", m_fx_slot + 1, n);
+        if (np > 0) sprintf_s(rng, sizeof(rng), "%d-%d/%d", a, b, np);
+        char line[41]; memset(line, ' ', 40); line[40] = 0;
+        int nl = (int)strlen(num); if (nl > 40) nl = 40; memcpy(line, num, nl);     // number, left
+        int rl = (int)strlen(rng); if (rl) memcpy(line + 40 - rl, rng, rl);         // range, right
+        int ns = nl + 1, navail = (40 - rl - 1) - ns;                               // name field between
+        if (navail > 0) { int cl = (int)strlen(clean); if (cl > navail) cl = navail; memcpy(line + ns, clean, cl); }
+        SendDisplayLine(0, line);                              // line 1 (cells 0-3)
         for (int k = 0; k < 4; ++k)                            // line 2 (cells 4-7): one param name each
         {
             char nm[32] = ""; int param = m_fx_page * 4 + k;
