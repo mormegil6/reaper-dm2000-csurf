@@ -179,27 +179,33 @@ only for the DAW/HUI layer).
       indicator (a Mackie-HUI hardware feature it doesn't implement). **Absent.**
       (Other LEDs/counter from the same tool do light, so the desk is reachable.)
 
-- [ ] **B2 — Full REMOTE / 2×40 main display** (display SysEx **sub-command** `0x12`:
+- [x] **B2 — Full REMOTE / 2×40 main display** (display SysEx **sub-command** `0x12`:
       `F0 00 00 66 05 00 12 …` — *not* the switch zone `0x12` of test A4). This is
       the REMOTE / INSERT display, which we already drive for the FX editor. Use the
       tool's display/`remote` command (see `help`) to write **all eight cells / both
       lines** and confirm how wide and how many lines the desk actually renders.
-      _Result:_ …  → decides whether a general 2-line status/parameter readout
-      (beyond the FX editor's current use) is worthwhile.
+      _Result (2026-06-26):_ all 8 lines × 10 chars render — but this only confirms what
+      the FX editor already uses; nothing new. → **No action.**
 
-- [ ] **B3 — Non-ASCII scribble characters.** REAPER track names can contain
+- [x] **B3 — Non-ASCII scribble characters.** REAPER track names can contain
       non-ASCII (e.g. Polish ł / ó / ż). The HUI small-display set
       (`hui-spec/HUI_CSET.txt`) is its own ~7-bit set, not Latin-1 / UTF-8. Send a
       scribble with accented / Polish characters and see what the strip renders;
       decide how the plugin should map or fold unsupported characters. (Partly a
       code question — the UTF-8 → HUI-charset mapping — but needs the desk to
       confirm what actually displays.)
-      _Result:_ …
+      _Result (2026-06-26):_ **Non-ASCII is dropped.** "łóżk" → "k", "café" → "caf" —
+      only 7-bit ASCII survives; accented / Polish chars vanish entirely. → **Action:**
+      transliterate non-ASCII track names to ASCII before sending (ł→l, ó→o, ż→z, é→e,
+      …) so e.g. "Łóżko" shows as "Lozk" instead of "k". Small, worthwhile fix.
 
-- [ ] **B4 — Timecode decimal points / separators.** Send a known counter value
+- [x] **B4 — Timecode decimal points / separators.** Send a known counter value
       with separators, e.g. `counter 1:23:45.67`, and confirm the digits, the
       decimal point, and the field separators all land in the right positions.
-      _Result:_ …
+      _Result (2026-06-26):_ The LED counter has **dots only** — no colon segment, so
+      `:` renders as `.` (`1:23:45.67` → `01.23.45.67`). Matches the canonical HUI
+      timecode display (per-digit decimal points) and our hardware-verified counter.
+      → **No action** — works as designed; the hardware simply has no colons.
 
 - [x] **B5 — Click / Beep** (canonical zone `0x1d` p2 = click, p3 = beep). Send
       `led 0x1d 2 on` (click) and `led 0x1d 3 on` (beep).
