@@ -320,6 +320,11 @@ touch_db       = 1
 select_assign  = 1
 cursor_mode    = 1
 
+; name_overlay = 1 (default): pressing a channel SEL briefly shows that track's FULL
+; name on the big 2x40 REMOTE display (vs the 4-char scribble), then reverts to the FX
+; editor view. Set 0 to disable.
+name_overlay   = 1
+
 
 ; ===========================================================================
 ; [fx] - generic FX parameter editor (EFFECTS/PLUG-INS section)

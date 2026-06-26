@@ -96,6 +96,9 @@ class CSurf_DM2000 : public IReaperControlSurface
     char m_splash_done;              // startup "REAPER online" splash shown once (clears desk Off-Line text)
     DWORD m_splash_start;            // first-Run timestamp, splash timing base
     unsigned char m_splash_render;   // last splash on/off state sent (de-dupe)
+    DWORD m_overlay_until;           // momentary 2x40 display overlay active until this time (0 = none)
+    char m_track_name[24][48];       // full (untruncated) track name per channel, for the display overlay
+    bool m_overlay_names;            // [display] name_overlay: flash the full track name on SEL press
     bool m_sel_exclusive;            // [select] exclusive: single SEL selects only that track (Pro Tools-style)
     unsigned char m_sel_held[32];    // SELECT buttons currently held (for hold-to-multi-select)
     int m_auto_button;               // [channel] auto_button: 0=unity (reset fader to 0 dB), 1=automation (cycle track mode), 2=monitor (cycle rec-monitor)
@@ -222,6 +225,8 @@ public:
     memset(m_acc_tr, 0, sizeof(m_acc_tr)); memset(m_acc_fx, 0, sizeof(m_acc_fx)); memset(m_acc_param, 0, sizeof(m_acc_param));
     memset(m_acc_val, 0, sizeof(m_acc_val)); m_acc_next = 0; m_fxdisp_throttle = 0;
     m_splash_done = 0; m_splash_start = 0; m_splash_render = 0;
+    m_overlay_until = 0; m_overlay_names = true;
+    memset(m_track_name, 0, sizeof(m_track_name));
     m_show_ins = m_show_auto = true;        // [display] indicators on by default
     memset(m_ins_state, 0xff, sizeof(m_ins_state));   // 0xff = unknown -> first poll sends
     memset(m_auto_state, 0xff, sizeof(m_auto_state));
@@ -382,6 +387,7 @@ public:
         m_peek_latch  = GetPrivateProfileInt("display", "peek_latch",  0, _la_ini) != 0;
         m_touch_db    = GetPrivateProfileInt("display", "touch_db",    1, _la_ini) != 0;
         m_drive_select_assign = GetPrivateProfileInt("display", "select_assign", 1, _la_ini) != 0;
+        m_overlay_names = GetPrivateProfileInt("display", "name_overlay", 1, _la_ini) != 0; // full track name on SEL
         m_drive_cursor_mode   = GetPrivateProfileInt("display", "cursor_mode",   1, _la_ini) != 0;
         m_window_on_knob      = GetPrivateProfileInt("fx",      "window_on_knob", 1, _la_ini) != 0;
         // [labels] override the 4-char SELECT ASSIGN strings (pan, aux1-5); default = built-in
@@ -637,6 +643,7 @@ public:
               }
               else if (age >= 1000 + 2500) { m_splash_done = 1; RefreshFXDisplay(); } // ~2.5s, then hand off to FX view
           }
+          if (m_overlay_until && now >= m_overlay_until) { m_overlay_until = 0; RefreshFXDisplay(); } // overlay expired -> FX view
           PollRoutingLEDs(); // refresh surround routing LEDs on selection/object/plugin change
           PollSendRings();   // live-refresh encoder send-level rings while in send mode
           m_meter_histpos = (m_meter_histpos + 1) % 3;
@@ -785,6 +792,8 @@ public:
       {
           int j; for (j = 0; j < 7 && title && title[j]; ++j) m_scribble_name[id][j] = title[j];
           m_scribble_name[id][j] = 0;
+          int k; for (k = 0; k < 47 && title && title[k]; ++k) m_track_name[id][k] = title[k]; // full name (overlay)
+          m_track_name[id][k] = 0;
       }
       if (m_scribble_peek == 0 && m_enc_send < 0) // no scribble override active: show the name now
           SendTrackTitle(id, title);
@@ -1400,6 +1409,10 @@ private:
         if (!press) return;
         MediaTrack *tr = TrackFromCh(gch);
         if (!tr) return;
+
+        // momentary overlay: flash this track's full (untruncated) name on the 2x40 display
+        if (m_overlay_names && gch >= 0 && gch < 24 && m_track_name[gch][0])
+            ShowOverlay(m_track_name[gch], "", 1500);
 
         bool chord = false;                       // another SEL already held -> add to selection
         for (int i = 0; i < 32; ++i) if (i != gch && m_sel_held[i]) { chord = true; break; }
@@ -2367,12 +2380,38 @@ private:
         m_midiouts[0]->SendMsg(msg, -1);
     }
 
+    // Write a 40-char string across four abutting 10-char cells (firstcell..firstcell+3).
+    void SendDisplayLine(int firstcell, const char *text)
+    {
+        char line[41];
+        int i = 0;
+        for (; i < 40 && text && text[i]; ++i) line[i] = text[i];
+        for (; i < 40; ++i) line[i] = ' ';
+        char cell[11]; cell[10] = 0;
+        for (int c = 0; c < 4; ++c) { memcpy(cell, line + c * 10, 10); SendDisplayCell(firstcell + c, cell); }
+    }
+
+    // Momentary 2x40 overlay: two 40-char lines for ~ms, then Run() reverts to the FX view.
+    // While active it suppresses the FX display (RefreshFXDisplay early-returns) so knob /
+    // selection refreshes don't stomp it. Non-ASCII is ASCII-folded for the 7-bit display.
+    void ShowOverlay(const char *top, const char *bottom, DWORD ms = 1500)
+    {
+        if (!m_splash_done || !m_midiouts[0]) return;
+        char tf[48], bf[48];
+        scribbleAsciiFold(top ? top : "", tf, sizeof(tf));
+        scribbleAsciiFold(bottom ? bottom : "", bf, sizeof(bf));
+        SendDisplayLine(0, tf);
+        SendDisplayLine(4, bf);
+        m_overlay_until = timeGetTime() + ms;
+    }
+
     // Paint the FX editor onto that display: top line = the 4 current-page param NAMES,
     // bottom line = their formatted VALUES, one column per param knob. Columns past the
     // last parameter are blanked. Driven from the FX-editor knob/page/slot handlers.
     void RefreshFXDisplay()
     {
         if (!m_splash_done) return;          // hold the FX view until the startup splash finishes
+        if (m_overlay_until && timeGetTime() < m_overlay_until) return; // a momentary overlay owns the display
         MediaTrack *tr = GetSelectedTrack ? GetSelectedTrack(NULL, 0) : NULL;
         int n = (tr && TrackFX_GetCount) ? TrackFX_GetCount(tr) : 0;
         if (m_fx_slot >= n) m_fx_slot = n > 0 ? n - 1 : 0; // keep the cached slot valid after the FX count shrinks
