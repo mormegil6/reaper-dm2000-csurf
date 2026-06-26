@@ -25,11 +25,16 @@ under each item, then fold the findings into `hui-canonical-coverage.md` /
       p1–p5 (REW / FFWD / STOP / PLAY / REC); **p0 is the one port we don't use.**
       Press the desk's TALKBACK control and watch for `0x0e` sw0 (`b0 0f 0e` +
       `b0 2f 40`).
-      _Result (2026-06-26):_ **No HUI output.** No button in the console's
-      talkback / rightmost section transmits anything on the DAW layer (confirmed
-      with `hui_deskmon`). → **Drop** — talkback is internal to the console and not
-      addressable from the surface. (Any "talkback" feature would instead have to be
-      an assignable button — e.g. a UDK — triggering a REAPER-side talkback action.)
+      _Result (2026-06-26):_ **No HUI output — but they DO transmit as native Yamaha
+      SysEx on ports 5 & 8** (found via the all-8 sweep, `hui_deskmon.py all`):
+      - TALKBACK = `F0 43 10 3E 06 04 15 11 00 00 00 00 VV F7` (VV: 01 press / 00 release)
+      - SLATE    = `F0 43 10 3E 06 04 15 12 00 00 00 00 VV F7`
+      - a companion `…06 04 15 0D …VV…` fires alongside both
+      - (P8 also spams a `F0 43 10 3E 06 7F F7` native heartbeat — ignore.)
+      → **Reopened: implementable.** Not via HUI, but the plugin already opens the
+      GENERAL port (port 5) for scene recall, and these arrive there too — so it can
+      sniff `06 04 15 11/12` and fire a configurable REAPER talkback/slate action.
+      (Supersedes the earlier "drop"; that was only true for the DAW layer.)
 
 - [ ] **A2 — Footswitch input** (canonical zone `0x1d` p0/p1). Plug a pedal into the
       DM2000's foot-switch jack(s) and press. Watch for `0x1d` / footswitch
@@ -74,7 +79,90 @@ under each item, then fold the findings into `hui-canonical-coverage.md` /
       ports** — any traffic on the non-DAW ports 5-8 is outside our mapping. Re-press
       the A1-A4 buttons (talkback / edit / monitor) during this pass: if ports 5-8
       stay silent, that confirms those controls emit nothing on *any* port.
-      _Result:_ … (run the all-8 pass to confirm)
+      _Result (2026-06-26):_ all-8 sweep done — see the bonus finding below. The
+      rightmost / control-room section is **not** silent: it transmits native Yamaha
+      SysEx on ports 5 & 8 (just not HUI). No *unmapped HUI* traffic appeared.
+
+---
+
+## Bonus finding — native control-room SysEx (ports 5 & 8, 2026-06-26)
+
+The all-8 sweep showed the DM2000's **control-room / monitor section** — silent on
+the HUI/DAW layer (ports 1-4) — transmitting **Yamaha native parameter-change SysEx**
+on ports 5 (GENERAL) and 8. The plugin already opens the GENERAL port for scene
+recall, so these are sniffable there with no extra wiring.
+
+Format: `F0 43 10 3E 06 EE AA PP 00 00 00 00 VV F7`
+(`43`=Yamaha, `3E`=DM2000, `10`=param-change; `EE AA PP` address the control; `VV`=value.)
+Most monitor controls live in element `06 04 15` (so `PP` is the parameter); the SOLO
+knob is element `06 03 2D 03`. Source selects within a group are **exclusive radio-buttons**
+(selecting one clears the others, hence the paired `01`/`00`). Confirmed on ports 5 & 8.
+
+**STUDIO monitor source** — `06 04 15 PP`, exclusive (`01`=selected / `00`=cleared)
+
+| `PP` | Source |
+|------|--------|
+| `00` | Control Room |
+| `01` | Stereo |
+| `02` | Aux 11 |
+| `03` | Aux 12 |
+
+**CONTROL ROOM monitor source** — `06 04 15 PP`
+
+| `PP` | Source | Value |
+|------|--------|-------|
+| `08` | 2TR select | `04`=2TR A1, `05`=2TR A2 (2TR D1/D2/D3 transmit nothing) |
+| `09` | Stereo | `01` / `00` |
+| `0A` | Assign 1 | `01` / `00` |
+| `0B` | Assign 2 | `01` / `00` |
+
+**Monitor switches** — `06 04 15 PP` (`01` on / `00` off)
+
+| `PP` | Control |
+|------|---------|
+| `0C` | Mono |
+| `0D` | Dimmer (also auto-fires when Talkback/Slate engage — talkback auto-dims) |
+| `0F` | Small |
+
+**Surround monitor** — `06 04 15 PP`
+
+| `PP` | Control | Value |
+|------|---------|-------|
+| `10` | Surround group (Assign1 / Assign2 / Bus) | `01` / `02` / `04` |
+| `13` | Surround Monitor Level knob | `00`–`7F` continuous |
+
+**Talkback** — `06 04 15 PP` (`01` press / `00` release)
+
+| `PP` | Control |
+|------|---------|
+| `11` | Talkback |
+| `12` | Slate |
+
+**Solo** — element `06 03 2D 03`
+
+| Address | Control | Value |
+|---------|---------|-------|
+| `06 03 2D 03` | Solo contrast / dim knob | `00`–`7F` continuous |
+
+**Stereo master strip** — channel-strip controls (mixed encodings)
+
+| Control | Message(s) | Value |
+|---------|-----------|-------|
+| AUTO | `F0 43 10 3E 06 04 54 00 0n 00 00 00 VV F7` (sub-indices `00`/`01` both fire) | `VV` 01/00 |
+| SEL | `F0 43 10 3E 06 04 5E 00 0n 00 00 00 VV F7` — also `… 7F 01 4D …` SysEx + CC `B4 77 VV` (ch 5) | 01/00 |
+| ON | `F0 43 10 3E 06 04 09 21 00 00 00 00 VV F7` (coupled `09 18`=level) | 01 on / 00 off |
+| Fader | **14-bit CC on ch 4**: `B3 1D <msb>` + `B3 3D <lsb>`; also `F0 43 10 3E 7F 01 4F 00 01 00 00 HH LL F7` | position 0 … `07 7F` (~0–1023) |
+
+→ The stereo-master **fader** is a clean 14-bit value — it could drive (and, with the
+SysEx-set form, be driven by) the REAPER master fader. AUTO/SEL/ON are addressable too.
+
+Silent / not captured: `15 0E` (gap), the SOLO **CLEAR** button, and 2TR **D1/D2/D3**
+all transmit nothing. Port 8 also spams a constant `F0 43 10 3E 06 7F F7` heartbeat — ignore.
+
+→ Opens a potential **control-room feature** (talkback / slate / dim / mono / small /
+surround-monitor → REAPER monitoring actions), driven from the desk via the GENERAL
+port. Layer-4; record-session-friendly. Supersedes the A1/A4 "drop" calls (those held
+only for the DAW/HUI layer).
 
 ---
 
