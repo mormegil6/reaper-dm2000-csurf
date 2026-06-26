@@ -99,6 +99,9 @@ class CSurf_DM2000 : public IReaperControlSurface
     DWORD m_overlay_until;           // momentary 2x40 display overlay active until this time (0 = none)
     char m_track_name[24][48];       // full (untruncated) track name per channel, for the display overlay
     bool m_overlay_names;            // [display] name_overlay: flash the full track name on SEL press
+    bool m_overlay_fx;               // [display] fx_overlay: flash the plugin name on FX-slot change
+    bool m_overlay_scene;            // [display] scene_overlay: flash the scene/marker name on recall
+    bool m_overlay_send;             // [display] send_overlay: flash the AUX/send name on AUX SELECT
     bool m_sel_exclusive;            // [select] exclusive: single SEL selects only that track (Pro Tools-style)
     unsigned char m_sel_held[32];    // SELECT buttons currently held (for hold-to-multi-select)
     int m_auto_button;               // [channel] auto_button: 0=unity (reset fader to 0 dB), 1=automation (cycle track mode), 2=monitor (cycle rec-monitor)
@@ -226,6 +229,7 @@ public:
     memset(m_acc_val, 0, sizeof(m_acc_val)); m_acc_next = 0; m_fxdisp_throttle = 0;
     m_splash_done = 0; m_splash_start = 0; m_splash_render = 0;
     m_overlay_until = 0; m_overlay_names = true;
+    m_overlay_fx = m_overlay_scene = m_overlay_send = true;
     memset(m_track_name, 0, sizeof(m_track_name));
     m_show_ins = m_show_auto = true;        // [display] indicators on by default
     memset(m_ins_state, 0xff, sizeof(m_ins_state));   // 0xff = unknown -> first poll sends
@@ -388,6 +392,9 @@ public:
         m_touch_db    = GetPrivateProfileInt("display", "touch_db",    1, _la_ini) != 0;
         m_drive_select_assign = GetPrivateProfileInt("display", "select_assign", 1, _la_ini) != 0;
         m_overlay_names = GetPrivateProfileInt("display", "name_overlay", 1, _la_ini) != 0; // full track name on SEL
+        m_overlay_fx    = GetPrivateProfileInt("display", "fx_overlay",    1, _la_ini) != 0; // plugin name on FX-slot change
+        m_overlay_scene = GetPrivateProfileInt("display", "scene_overlay", 1, _la_ini) != 0; // scene name on recall
+        m_overlay_send  = GetPrivateProfileInt("display", "send_overlay",  1, _la_ini) != 0; // AUX/send name on AUX SELECT
         m_drive_cursor_mode   = GetPrivateProfileInt("display", "cursor_mode",   1, _la_ini) != 0;
         m_window_on_knob      = GetPrivateProfileInt("fx",      "window_on_knob", 1, _la_ini) != 0;
         // [labels] override the 4-char SELECT ASSIGN strings (pan, aux1-5); default = built-in
@@ -1141,14 +1148,17 @@ private:
     {
         if (scene < 1 || scene > 99 || !EnumProjectMarkers || !SetEditCurPos) return;
         double tagged = -1.0, numbered = -1.0;
+        char tname[64] = "", nname[64] = "";                                              // matched marker names
         int idx = 0;
         bool isrgn; double mpos; const char *mname; int mnum;
         while ((idx = EnumProjectMarkers(idx, &isrgn, &mpos, NULL, &mname, &mnum)))
         {
             if (isrgn) continue;
             int s;
-            if (ParseSceneMarker(mname, mnum, &s) && s == scene) { tagged = mpos; break; } // exact #SCENE match wins
-            if (mnum == scene && numbered < 0.0) numbered = mpos;                          // plain marker numbered N
+            if (ParseSceneMarker(mname, mnum, &s) && s == scene)                          // exact #SCENE match wins
+            { tagged = mpos; if (mname) strcpy_s(tname, sizeof(tname), mname); break; }
+            if (mnum == scene && numbered < 0.0)                                          // plain marker numbered N
+            { numbered = mpos; if (mname) strcpy_s(nname, sizeof(nname), mname); }
         }
         double pos = (tagged >= 0.0) ? tagged : numbered;
         if (pos < 0.0) return;
@@ -1156,6 +1166,15 @@ private:
         // Record the scene the console just recalled so the send/follow de-dup won't
         // echo this same recall straight back to the desk a moment later.
         m_scene_applied = scene;
+        // momentary overlay: flash "scene N: <marker name>" on the 2x40 display
+        if (m_overlay_scene)
+        {
+            const char *nm = (tagged >= 0.0) ? tname : nname;
+            char ov[80];
+            if (nm[0]) sprintf_s(ov, sizeof(ov), "scene %d: %s", scene, nm);
+            else       sprintf_s(ov, sizeof(ov), "scene %d", scene);
+            ShowOverlay(ov, "", 1200);
+        }
     }
 
     // Scene that owns a timeline position: the latest scene marker at or before it
@@ -1634,6 +1653,17 @@ private:
         else        RefreshEncoders();
         RefreshScribbles();             // show send-destination names (send mode) or restore track names
         RefreshSelectAssign();          // update the SELECT ASSIGN readout (Pan / SndA-E)
+        // momentary overlay: flash "AUX N -> <selected track's send dest>" on entering send mode
+        if (m_overlay_send && m_enc_send >= 0)
+        {
+            MediaTrack *str = GetSelectedTrack ? GetSelectedTrack(NULL, 0) : NULL;
+            char dest[64] = "";
+            if (str && GetTrackNumSends && m_enc_send < GetTrackNumSends(str, 0) && GetTrackSendName)
+                GetTrackSendName(str, m_enc_send, dest, sizeof(dest));
+            char ov[96];
+            sprintf_s(ov, sizeof(ov), "AUX %d -> %s", m_enc_send + 1, dest[0] ? dest : "(no send)");
+            ShowOverlay(ov, "", 1200);
+        }
     }
 
     // channel encoder turned while in send mode: nudge that channel's send level (1 dB/detent)
@@ -2540,6 +2570,19 @@ private:
         ShowConsoleMsg(msg);
     }
 
+    // momentary overlay: flash "FX i/n: <plugin name>" on the 2x40 display when the FX slot changes
+    void OverlayFXName(MediaTrack *tr)
+    {
+        if (!m_overlay_fx || !tr || !TrackFX_GetCount) return;
+        int n = TrackFX_GetCount(tr);
+        if (m_fx_slot < 0 || m_fx_slot >= n) return;
+        char fxname[128] = "";
+        if (TrackFX_GetFXName) TrackFX_GetFXName(tr, m_fx_slot, fxname, sizeof(fxname));
+        char ov[160];
+        sprintf_s(ov, sizeof(ov), "FX %d/%d: %s", m_fx_slot + 1, n, fxname);
+        ShowOverlay(ov, "", 1200);
+    }
+
     // EFFECTS/PLUG-INS buttons (zone 0x1C) - the F1-F4 buttons below the display.
     // The param knobs + page arrows are always live, so these just steer which FX:
     //   F4 (sw0) = jump to FX slot 0 / page 0 and report   F2 (sw7) = next FX slot
@@ -2560,6 +2603,7 @@ private:
                     if (n > 0) m_fx_slot = (m_fx_slot + n - 1) % n;
                     m_fx_page = 0;
                     FXReport(tr);
+                    OverlayFXName(tr);
                 }
                 break;
             case 7: // F2 (COMPARE): cycle to NEXT FX slot (right arrow)
@@ -2569,6 +2613,7 @@ private:
                     if (n > 0) m_fx_slot = (m_fx_slot + 1) % n;
                     m_fx_page = 0;
                     FXReport(tr);
+                    OverlayFXName(tr);
                 }
                 break;
             case 6: // F3 (BYPASS): toggle enable on the current slot

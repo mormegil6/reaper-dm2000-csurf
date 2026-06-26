@@ -320,10 +320,16 @@ touch_db       = 1
 select_assign  = 1
 cursor_mode    = 1
 
-; name_overlay = 1 (default): pressing a channel SEL briefly shows that track's FULL
-; name on the big 2x40 REMOTE display (vs the 4-char scribble), then reverts to the FX
-; editor view. Set 0 to disable.
+; Momentary 2x40-display overlays: briefly flash context on the big REMOTE display,
+; then revert to the FX-editor view. Each defaults on; set 0 to disable.
+;   name_overlay  = 1 : channel SEL press  -> "track N: <full name>"
+;   fx_overlay    = 1 : FX-slot change (F1/F2) -> "FX i/n: <plugin name>"
+;   scene_overlay = 1 : scene recall (GENERAL port) -> "scene N: <marker name>"
+;   send_overlay  = 1 : AUX SELECT -> "AUX N -> <selected track's send dest>"
 name_overlay   = 1
+fx_overlay     = 1
+scene_overlay  = 1
+send_overlay   = 1
 
 
 ; ===========================================================================
