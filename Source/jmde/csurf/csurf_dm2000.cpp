@@ -1345,6 +1345,8 @@ private:
                 // echo the position back so the desk updates its internal fader model and does
                 // not spring the motor back on release (same reason the volume path echoes)
                 SendFlipFader(gch, true);
+                // live send-dB on the strip while dragging (mirrors SetSurfaceVolume in normal mode)
+                if (m_scribble_peek == 2 || (m_touch_db && m_fader_touch[gch])) RefreshScribble(gch);
             }
             else if (tr)
                 // ignoresurf=NULL on purpose: the DM2000 keeps an internal model of
@@ -1481,17 +1483,25 @@ private:
     // Paint one channel's scribble for the current state: a held peek (track number /
     // fader dB) wins; else send-destination name while in send mode; else the cached
     // track name. SendTrackTitle truncates to the 4-char strip.
-    // Format a track's fader level as a 4-char-friendly dB string ("-inf", "+0", "-6"...).
-    void FormatTrackDb(MediaTrack *tr, char *buf, int bufsz)
+    // Format what the fader currently rides, as a 4-char-friendly dB string ("-inf",
+    // "+0", "-6"...): the selected send in FLIP, otherwise the track volume.
+    void FormatTrackDb(MediaTrack *tr, int gch, char *buf, int bufsz)
     {
         buf[0] = 0;
-        double vol, pan;
-        if (GetTrackUIVolPan && GetTrackUIVolPan(tr, &vol, &pan))
+        double db;
+        if (flipSends() && gch >= 0 && gch < 24 && GetTrackNumSends && GetTrackSendInfo_Value &&
+            m_enc_send < GetTrackNumSends(tr, 0))
         {
-            double db = VAL2DB(vol);
-            if (db <= -99.0) strcpy_s(buf, bufsz, "-inf");
-            else             sprintf_s(buf, bufsz, "%+.0f", db);
+            db = VAL2DB(GetTrackSendInfo_Value(tr, 0, m_enc_send, "D_VOL"));   // FLIP: fader rides the send
         }
+        else
+        {
+            double vol, pan;
+            if (!GetTrackUIVolPan || !GetTrackUIVolPan(tr, &vol, &pan)) return;
+            db = VAL2DB(vol);
+        }
+        if (db <= -99.0) strcpy_s(buf, bufsz, "-inf");
+        else             sprintf_s(buf, bufsz, "%+.0f", db);
     }
 
     void RefreshScribble(int gch)
@@ -1509,7 +1519,7 @@ private:
             }
             else if (m_touch_db && m_fader_touch[gch]) // riding this fader: show its dB
             {
-                FormatTrackDb(tr, buf, sizeof(buf));
+                FormatTrackDb(tr, gch, buf, sizeof(buf));
             }
             else if (m_scribble_peek == 1)       // hold: track number
             {
@@ -1517,7 +1527,7 @@ private:
             }
             else if (m_scribble_peek == 2)       // hold: fader level in dB
             {
-                FormatTrackDb(tr, buf, sizeof(buf));
+                FormatTrackDb(tr, gch, buf, sizeof(buf));
             }
             else if (m_enc_send >= 0)            // send mode: destination name
             {
@@ -1747,7 +1757,13 @@ private:
                     {
                         m_snap_pending[gch] = 0;
                         MediaTrack *trd = TrackFromCh(gch);
-                        if (trd) CSurf_SetSurfaceVolume(trd, CSurf_OnVolumeChange(trd, 1.0, false), NULL); // unity
+                        if (trd && flipSends() && gch < 24)   // FLIP: snap the ridden send to 0 dB
+                        {
+                            if (GetTrackNumSends && SetTrackSendInfo_Value && m_enc_send < GetTrackNumSends(trd, 0))
+                                SetTrackSendInfo_Value(trd, 0, m_enc_send, "D_VOL", DB2VAL(0.0));
+                            SendFlipFader(gch, true);         // drive the fader to the snapped send level
+                        }
+                        else if (trd) CSurf_SetSurfaceVolume(trd, CSurf_OnVolumeChange(trd, 1.0, false), NULL); // unity
                     }
                 }
                 if (m_touch_db) RefreshScribble(gch); // swap strip to dB on touch, name on release
