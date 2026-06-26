@@ -159,6 +159,11 @@ SysEx-set form, be driven by) the REAPER master fader. AUTO/SEL/ON are addressab
 Silent / not captured: `15 0E` (gap), the SOLO **CLEAR** button, and 2TR **D1/D2/D3**
 all transmit nothing. Port 8 also spams a constant `F0 43 10 3E 06 7F F7` heartbeat — ignore.
 
+**EQ / DYNAMICS / SELECTED CHANNEL: emit NO MIDI on any of the 8 ports** (tested
+2026-06-26 via `hui_deskmon.py all`). So EQ is not controllable from the desk *even
+on the native layer* — the native SysEx covers the monitor/master sections only, not
+channel DSP. This confirms DESIGN.md's "EQ not doable", now on every port, not just HUI.
+
 → Opens a potential **control-room feature** (talkback / slate / dim / mono / small /
 surround-monitor → REAPER monitoring actions), driven from the desk via the GENERAL
 port. Layer-4; record-session-friendly. Supersedes the A1/A4 "drop" calls (those held
@@ -168,10 +173,11 @@ only for the DAW/HUI layer).
 
 ## B. "Does the desk render / light it?" — run `hui_send.py`
 
-- [ ] **B1 — RUDE SOLO LED** (canonical zone `0x16` p3; we already drive p0–p2 =
+- [x] **B1 — RUDE SOLO LED** (canonical zone `0x16` p3; we already drive p0–p2 =
       TIME CODE / FEET / BEATS). Send `led 0x16 3 on`, then `led 0x16 3 off`.
-      Does a global "something is soloed" indicator light anywhere on the desk?
-      _Result:_ …  → if yes, drive it whenever any track is soloed (cheap win).
+      _Result (2026-06-26):_ **Nothing lights** → the DM2000 has no rude-solo
+      indicator (a Mackie-HUI hardware feature it doesn't implement). **Absent.**
+      (Other LEDs/counter from the same tool do light, so the desk is reachable.)
 
 - [ ] **B2 — Full REMOTE / 2×40 main display** (display SysEx **sub-command** `0x12`:
       `F0 00 00 66 05 00 12 …` — *not* the switch zone `0x12` of test A4). This is
@@ -195,9 +201,10 @@ only for the DAW/HUI layer).
       decimal point, and the field separators all land in the right positions.
       _Result:_ …
 
-- [ ] **B5 — Click / Beep** (canonical zone `0x1d` p2 = click, p3 = beep). Send
-      `led 0x1d 2 on` (click) and `led 0x1d 3 on` (beep). Any audible response?
-      _Result:_ …  (low priority — only if curious.)
+- [x] **B5 — Click / Beep** (canonical zone `0x1d` p2 = click, p3 = beep). Send
+      `led 0x1d 2 on` (click) and `led 0x1d 3 on` (beep).
+      _Result (2026-06-26):_ **Nothing** → click/beep are Mackie-HUI hardware features
+      the DM2000 doesn't implement. **Absent.**
 
 ---
 
