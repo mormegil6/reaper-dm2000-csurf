@@ -53,16 +53,28 @@ under each item, then fold the findings into `hui-canonical-coverage.md` /
       _Result (2026-06-26):_ **No HUI output.** This is the same rightmost section as
       talkback (A1); no button there reports MIDI. → **Drop.**
 
-- [ ] **A5 — Power-cycle / system reset** (`0xff`). With deskmon running, power the
+- [x] **A5 — Power-cycle / system reset** (`0xff`). With deskmon running, power the
       DM2000 off and on and confirm one or more `0xff` (MIDI System Reset) arrive.
       Then repeat with REAPER + csurf running and confirm the plugin recovers
       gracefully (re-onlines, no stuck LEDs/faders).
-      _Result:_ …
+      _Result (2026-06-26):_ **No `0xff` on power-down or power-up.** Expected for a
+      USB-MIDI console: a power cycle disconnects and re-enumerates the device at the
+      USB level, so the monitor's already-open ports go stale rather than receiving a
+      clean HUI `0xff` (which is meant for an always-connected HUI controller, not a
+      USB re-enumeration). Not a port/channel issue — `0xff` is a channel-less system
+      message, and the device itself drops off the bus. → **N/A** for FF detection.
+      The meaningful resilience check is power-cycling with REAPER + csurf running:
+      the desk shows "DAW Off-line" then re-onlines once csurf answers the keepalive
+      (already handled by the keepalive path).
 
-- [ ] **A6 — Completeness sweep.** With deskmon running, press every remaining
-      unmapped button / section once. Note any zone/switch that transmits but we
-      don't currently handle.
-      _Result:_ …
+- [ ] **A6 — Completeness sweep + cross-port check.** The DAW HUI layer (ports 1-4)
+      is already fully mapped from earlier captures, so a blind sweep just re-shows
+      known controls (a full "known-message filter" wasn't worth building). The
+      productive check is `python tools/hui_deskmon.py all`, which watches **all 8
+      ports** — any traffic on the non-DAW ports 5-8 is outside our mapping. Re-press
+      the A1-A4 buttons (talkback / edit / monitor) during this pass: if ports 5-8
+      stay silent, that confirms those controls emit nothing on *any* port.
+      _Result:_ … (run the all-8 pass to confirm)
 
 ---
 
