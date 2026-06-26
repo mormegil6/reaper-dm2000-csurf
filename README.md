@@ -1,4 +1,4 @@
-[![C++](https://img.shields.io/badge/C++-14-blue.svg)]() [![Windows](https://img.shields.io/badge/Windows-x64-0078D4.svg?logo=windows&logoColor=white)]() [![macOS](https://img.shields.io/badge/macOS-arm64%2Fx86__64-000000.svg?logo=apple&logoColor=white)]() [![REAPER](https://img.shields.io/badge/REAPER-6+-darkgreen.svg)]() [![v0.8](https://img.shields.io/badge/version-v0.8-lightgrey.svg)](https://bmroz.eu/projects/dm2000-csurf) [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
+[![C++](https://img.shields.io/badge/C++-14-blue.svg)]() [![Windows](https://img.shields.io/badge/Windows-x64-0078D4.svg?logo=windows&logoColor=white)]() [![macOS](https://img.shields.io/badge/macOS-arm64%2Fx86__64-000000.svg?logo=apple&logoColor=white)]() [![REAPER](https://img.shields.io/badge/REAPER-6+-darkgreen.svg)]() [![v0.9](https://img.shields.io/badge/version-v0.9-lightgrey.svg)](https://bmroz.eu/projects/dm2000-csurf) [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
 
 # reaper_csurf_dm2000 - Yamaha DM2000 control surface for REAPER
 
@@ -216,9 +216,18 @@ Full button/zone/MIDI reference: [DESIGN.md - Button / function / MIDI reference
   double-tapping a fader snaps it to 0 dB (`[channel] double_touch`).
 - **Startup splash** - on load the REMOTE display briefly shows `DM2000 csurf online vX.Y` and the
   project website, then hands off to the FX view - clearing the console's "Off-Line" message.
+
+### Layer 4 - new in v0.9
+
 - **FLIP** (FADER MODE button) - while the encoders ride a send, FLIP swaps them: the
   motorized faders ride the selected send (calibrated taper) and the encoders/rings ride
   volume; press again to swap back. The FADER / AUX-MTRX LED tracks it. Toggle with `[fader] flip`.
+- **2x40 display overlays** - momentary readouts on the big REMOTE display, then it reverts to
+  the FX view: full **track name** on SEL (vs the 4-char strip); **FX name + bank range + the
+  4 param names** on FX-slot / param-page change and the window toggle; **scene / marker name**
+  on recall; **send destination** on AUX SELECT. Each `[display]`-configurable.
+- **Polish / accented track names** - non-ASCII scribble names are transliterated to ASCII
+  (ł→l, ó→o, ż→z, é→e, ...) so they show meaningfully instead of being dropped.
 
 Everything above is configurable in `dm2000_keys.ini`; defaults are documented in
 [doc/dm2000_keys.ini.example](doc/dm2000_keys.ini.example) and

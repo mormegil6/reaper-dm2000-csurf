@@ -10,7 +10,7 @@
 #include "dm2000_compat.h"
 
 // Plugin version - shown on the startup splash. Keep in sync with res.rc and the README badge.
-#define DM2000_CSURF_VERSION "v0.8"
+#define DM2000_CSURF_VERSION "v0.9"
 
 // DM2000 fader taper calibrated via DM2000 Editor after running the console's built-in
 // fader calibration utility (MIDI-OX capture 2026-06-15; doc/fader-calibration-2026-06-15.txt).

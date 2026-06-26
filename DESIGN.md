@@ -10,7 +10,7 @@ port (Layer 3); port 8 native SysEx (extended scribble names, meter bridge) is
 partly stubbed and not yet active.
 No existing tool does this; this is the first open-source DM2000 csurf for REAPER.
 
-Version: v0.8
+Version: v0.9
 Homepage: bmroz.eu/projects/dm2000-csurf
 Repository: `git.pg.edu.pl/p829296` / `github.com/mormegil6`
 License: LGPL v3
