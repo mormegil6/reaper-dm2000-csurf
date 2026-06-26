@@ -21,30 +21,37 @@ under each item, then fold the findings into `hui-canonical-coverage.md` /
 
 ## A. "Does the desk send it?" — run `hui_deskmon.py`, then operate controls
 
-- [ ] **A1 — TALKBACK** (canonical zone `0x0e` p0). We already handle this zone's
+- [x] **A1 — TALKBACK** (canonical zone `0x0e` p0). We already handle this zone's
       p1–p5 (REW / FFWD / STOP / PLAY / REC); **p0 is the one port we don't use.**
       Press the desk's TALKBACK control and watch for `0x0e` sw0 (`b0 0f 0e` +
-      `b0 2f 40`). **Highest-value item on this list** — if it transmits, it's an
-      immediately implementable hardware talkback hook for recording sessions.
-      _Result:_ …  → if yes, wire to a REAPER talkback action / send.
+      `b0 2f 40`).
+      _Result (2026-06-26):_ **No HUI output.** No button in the console's
+      talkback / rightmost section transmits anything on the DAW layer (confirmed
+      with `hui_deskmon`). → **Drop** — talkback is internal to the console and not
+      addressable from the surface. (Any "talkback" feature would instead have to be
+      an assignable button — e.g. a UDK — triggering a REAPER-side talkback action.)
 
 - [ ] **A2 — Footswitch input** (canonical zone `0x1d` p0/p1). Plug a pedal into the
       DM2000's foot-switch jack(s) and press. Watch for `0x1d` / footswitch
       (`b0 0f 1d` + `b0 2f 40/41`).
-      _Result:_ …  → if it transmits, expose as an assignable `[foot]` action.
+      _Result (2026-06-26):_ **Not tested** — no footswitch/pedal on hand; deferred
+      until one is available. → if it transmits, expose as an assignable `[foot]` action.
 
-- [ ] **A3 — Edit operations** (canonical zone `0x1a` = paste/cut/capture/delete/
+- [x] **A3 — Edit operations** (canonical zone `0x1a` = paste/cut/capture/delete/
       copy/separate). Press the desk's edit-ish buttons that we don't decode yet.
       Watch for any `0x1a` press; note which physical button maps to which switch.
-      _Result:_ …  → if present, free cut/copy/paste/delete action hooks.
+      _Result (2026-06-26):_ **No HUI output.** The only edit buttons on the desk are
+      **COPY** and **PASTE** (under the **CHANNEL** label); neither transmits MIDI.
+      → **Drop** — no `0x1a` edit-op hooks available from the surface.
 
-- [ ] **A4 — Monitor / control-room section** (canonical switch zones `0x11`
+- [x] **A4 — Monitor / control-room section** (canonical switch zones `0x11`
       monitor-input, `0x12` monitor-output). Operate the monitor/control-room
       buttons; watch for `0x11` / `0x12` switch presses.
       ⚠️ This switch/LED **zone** `0x12` is unrelated to the display SysEx
       **sub-command** `0x12` in test B2 — two different namespaces that happen to
       share the number `0x12`.
-      _Result:_ …  → could map to REAPER monitoring.
+      _Result (2026-06-26):_ **No HUI output.** This is the same rightmost section as
+      talkback (A1); no button there reports MIDI. → **Drop.**
 
 - [ ] **A5 — Power-cycle / system reset** (`0xff`). With deskmon running, power the
       DM2000 off and on and confirm one or more `0xff` (MIDI System Reset) arrive.
