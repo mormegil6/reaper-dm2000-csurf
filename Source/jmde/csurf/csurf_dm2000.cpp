@@ -2551,7 +2551,7 @@ private:
         else         { if (m_fx_page > 0)       m_fx_page--; } // down = prev, stop at first page
         FXReport(tr);
         RefreshFXDisplay();                  // update the SEL rings/LEDs for the new page
-        OverlayFXName(tr, NULL, 1000);       // brief "params A-B/N" flash, then back to the params
+        OverlayFXParams(tr, 1000);       // brief "params A-B/N" flash, then back to the params
     }
 
     // Report the current FX slot / page to the console (temporary debugging aid).
@@ -2572,28 +2572,53 @@ private:
         ShowConsoleMsg(msg);
     }
 
-    // momentary overlay: top = "FX i/n: <plugin name>"; bottom = a caller string (e.g.
-    // "window ON"), or by default the current 4-param page range ("params 5-8/128").
-    // Used on FX-slot change, param-page change, and the window toggle.
-    void OverlayFXName(MediaTrack *tr, const char *bottom = NULL, DWORD ms = 1200)
+    // "VST3: ReaComp (Cockos)" / "ReaComp (Cockos)" -> "ReaComp": drop a leading type
+    // prefix ("XXX: ") and a trailing " (manufacturer)".
+    static void StripFXName(const char *in, char *out, int outsz)
+    {
+        const char *s = in ? in : "";
+        const char *colon = strstr(s, ": ");
+        if (colon && colon - s <= 6) s = colon + 2;            // leading "VST: " / "VST3i: " etc.
+        int i = 0; for (; i < outsz - 1 && s[i]; ++i) out[i] = s[i];
+        out[i] = 0;
+        char *p = strrchr(out, '(');
+        if (p && p > out && p[-1] == ' ') p[-1] = 0;           // trailing " (manufacturer)"
+    }
+
+    // FX-slot / param-page overlay: line 1 = "<plugin>  a-b/np" (name + bank range),
+    // line 2 = the current page's 4 param names, one per column.
+    void OverlayFXParams(MediaTrack *tr, DWORD ms = 1200)
+    {
+        if (!m_overlay_fx || !m_splash_done || !m_midiouts[0] || !tr || !TrackFX_GetCount) return;
+        int n = TrackFX_GetCount(tr);
+        if (m_fx_slot < 0 || m_fx_slot >= n) return;
+        int np = TrackFX_GetNumParams ? TrackFX_GetNumParams(tr, m_fx_slot) : 0;
+        char fxname[128] = ""; if (TrackFX_GetFXName) TrackFX_GetFXName(tr, m_fx_slot, fxname, sizeof(fxname));
+        char clean[64]; StripFXName(fxname, clean, sizeof(clean));
+        int a = m_fx_page * 4 + 1, b = m_fx_page * 4 + 4; if (b > np) b = np;
+        char top[80];
+        if (np > 0) sprintf_s(top, sizeof(top), "%s  %d-%d/%d", clean, a, b, np);
+        else        sprintf_s(top, sizeof(top), "%s", clean);
+        SendDisplayLine(0, top);                               // line 1 (cells 0-3)
+        for (int k = 0; k < 4; ++k)                            // line 2 (cells 4-7): one param name each
+        {
+            char nm[32] = ""; int param = m_fx_page * 4 + k;
+            if (param < np && TrackFX_GetParamName) TrackFX_GetParamName(tr, m_fx_slot, param, nm, sizeof(nm));
+            SendDisplayCell(4 + k, nm);
+        }
+        m_overlay_until = timeGetTime() + ms;
+    }
+
+    // window-toggle overlay: "FX i/n: <plugin>" + a caller line ("window ON"/"window OFF").
+    void OverlayFXName(MediaTrack *tr, const char *bottom, DWORD ms = 1200)
     {
         if (!m_overlay_fx || !tr || !TrackFX_GetCount) return;
         int n = TrackFX_GetCount(tr);
         if (m_fx_slot < 0 || m_fx_slot >= n) return;
-        char fxname[128] = "";
-        if (TrackFX_GetFXName) TrackFX_GetFXName(tr, m_fx_slot, fxname, sizeof(fxname));
-        char top[160];
-        sprintf_s(top, sizeof(top), "FX %d/%d: %s", m_fx_slot + 1, n, fxname);
-        char prange[40] = "";
-        if (!bottom)
-        {
-            int np = TrackFX_GetNumParams ? TrackFX_GetNumParams(tr, m_fx_slot) : 0;
-            int a = m_fx_page * 4 + 1, b = m_fx_page * 4 + 4;
-            if (b > np) b = np;
-            if (np > 0 && a <= np) sprintf_s(prange, sizeof(prange), "params %d-%d/%d", a, b, np);
-            bottom = prange;
-        }
-        ShowOverlay(top, bottom, ms);
+        char fxname[128] = ""; if (TrackFX_GetFXName) TrackFX_GetFXName(tr, m_fx_slot, fxname, sizeof(fxname));
+        char clean[64]; StripFXName(fxname, clean, sizeof(clean));
+        char top[80]; sprintf_s(top, sizeof(top), "FX %d/%d: %s", m_fx_slot + 1, n, clean);
+        ShowOverlay(top, bottom ? bottom : "", ms);
     }
 
     // EFFECTS/PLUG-INS buttons (zone 0x1C) - the F1-F4 buttons below the display.
@@ -2616,7 +2641,7 @@ private:
                     if (n > 0) m_fx_slot = (m_fx_slot + n - 1) % n;
                     m_fx_page = 0;
                     FXReport(tr);
-                    OverlayFXName(tr);
+                    OverlayFXParams(tr);
                 }
                 break;
             case 7: // F2 (COMPARE): cycle to NEXT FX slot (right arrow)
@@ -2626,7 +2651,7 @@ private:
                     if (n > 0) m_fx_slot = (m_fx_slot + 1) % n;
                     m_fx_page = 0;
                     FXReport(tr);
-                    OverlayFXName(tr);
+                    OverlayFXParams(tr);
                 }
                 break;
             case 6: // F3 (BYPASS): toggle enable on the current slot
