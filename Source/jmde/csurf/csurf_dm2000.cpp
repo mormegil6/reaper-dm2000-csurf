@@ -2528,6 +2528,7 @@ private:
         if (!tr) return;
         bool open = TrackFX_GetFloatingWindow && TrackFX_GetFloatingWindow(tr, m_fx_slot);
         TrackFX_Show(tr, m_fx_slot, open ? 2 : 3);
+        OverlayFXName(tr, !open ? "window ON" : "window OFF");   // new state = !open
     }
 
     // Page arrows (CC 0x4C): up arrow (dir>0) = next page, down arrow (dir<0) = previous,
@@ -2549,7 +2550,8 @@ private:
         if (dir > 0) { if (m_fx_page < maxpage) m_fx_page++; } // up = next, stop at last page
         else         { if (m_fx_page > 0)       m_fx_page--; } // down = prev, stop at first page
         FXReport(tr);
-        RefreshFXDisplay();
+        RefreshFXDisplay();                  // update the SEL rings/LEDs for the new page
+        OverlayFXName(tr, NULL, 1000);       // brief "params A-B/N" flash, then back to the params
     }
 
     // Report the current FX slot / page to the console (temporary debugging aid).
@@ -2570,17 +2572,28 @@ private:
         ShowConsoleMsg(msg);
     }
 
-    // momentary overlay: flash "FX i/n: <plugin name>" on the 2x40 display when the FX slot changes
-    void OverlayFXName(MediaTrack *tr)
+    // momentary overlay: top = "FX i/n: <plugin name>"; bottom = a caller string (e.g.
+    // "window ON"), or by default the current 4-param page range ("params 5-8/128").
+    // Used on FX-slot change, param-page change, and the window toggle.
+    void OverlayFXName(MediaTrack *tr, const char *bottom = NULL, DWORD ms = 1200)
     {
         if (!m_overlay_fx || !tr || !TrackFX_GetCount) return;
         int n = TrackFX_GetCount(tr);
         if (m_fx_slot < 0 || m_fx_slot >= n) return;
         char fxname[128] = "";
         if (TrackFX_GetFXName) TrackFX_GetFXName(tr, m_fx_slot, fxname, sizeof(fxname));
-        char ov[160];
-        sprintf_s(ov, sizeof(ov), "FX %d/%d: %s", m_fx_slot + 1, n, fxname);
-        ShowOverlay(ov, "", 1200);
+        char top[160];
+        sprintf_s(top, sizeof(top), "FX %d/%d: %s", m_fx_slot + 1, n, fxname);
+        char prange[40] = "";
+        if (!bottom)
+        {
+            int np = TrackFX_GetNumParams ? TrackFX_GetNumParams(tr, m_fx_slot) : 0;
+            int a = m_fx_page * 4 + 1, b = m_fx_page * 4 + 4;
+            if (b > np) b = np;
+            if (np > 0 && a <= np) sprintf_s(prange, sizeof(prange), "params %d-%d/%d", a, b, np);
+            bottom = prange;
+        }
+        ShowOverlay(top, bottom, ms);
     }
 
     // EFFECTS/PLUG-INS buttons (zone 0x1C) - the F1-F4 buttons below the display.
