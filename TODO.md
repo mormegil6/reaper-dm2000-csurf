@@ -151,7 +151,17 @@
       and there is no path to drive a REAPER EQ from them. Use the below-display **FX parameter editor**
       instead (assign ReaEQ, edit via the 4 knobs + page arrows). The GENERAL-port CC table still lists
       EQ ATT / faders / pans, but those are for remoting the console's *own* parameters, not a feed
-      from the EQ knobs.
+      from the EQ knobs. **Re-confirmed 2026-06-26** by an all-8-port sniff (`hui_deskmon.py all`):
+      EQ / dynamics / selected-channel emit nothing on *any* port. (The control-room / monitor section,
+      however, DOES transmit native SysEx - see the new item below.)
+
+- [ ] **Control-room / talkback via native SysEx (GENERAL port)** - hardware-captured 2026-06-26
+      ([doc/dm2000-native-sysex.md](doc/dm2000-native-sysex.md)). The DM2000's talkback, slate, dim,
+      mono, small, surround-monitor, solo knob, and 14-bit stereo-master strip (auto/sel/on/fader) all
+      transmit native Yamaha SysEx on ports 5 & 8 - silent on HUI, but the plugin already opens the
+      GENERAL port for scene recall, so they're sniffable there with no extra wiring. Candidate
+      Layer-4/5 feature: map talkback / slate / dim / mono / surround-monitor -> REAPER actions, and the
+      stereo-master fader/ON <-> REAPER master. Opt-in config like `[scene]`.
 
 - [x] **macOS port** - cross-platform SWELL build; every release is hardware-verified on
       macOS (universal arm64+x86_64) as well as Windows.

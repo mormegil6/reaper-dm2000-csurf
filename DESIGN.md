@@ -22,6 +22,12 @@ Build target: Windows x64 DLL + macOS universal dylib (arm64 + x86_64), REAPER 6
 plugin, and [doc/hui-test-plan.md](doc/hui-test-plan.md) lists the open questions
 to settle at the desk.
 
+**Native control-room layer:** beyond HUI, the DM2000's control-room / monitor /
+solo / stereo-master sections transmit Yamaha native SysEx on ports 5 & 8 (reachable
+on the GENERAL port) - hardware-captured map in
+[doc/dm2000-native-sysex.md](doc/dm2000-native-sysex.md). Candidate future feature
+(talkback / dim / mono / surround-monitor → REAPER actions; 14-bit master fader).
+
 ---
 
 ## Hardware context
@@ -913,12 +919,13 @@ runs on the GENERAL port, not port 8.)
   in the config dialog. Full
   SysEx scene *dump/restore* (an entire scene's contents) is out of scope - PC recall covers the
   live workflow.
-- **EQ from the console's EQ knobs is not possible**: confirmed 2026-06-16, re-verified 2026-06-18 by
-  direct desk sniff (`tools/hui_deskmon.py`, console online, no DAW) - the SELECTED CHANNEL EQ knobs emit
-  **no MIDI at all** in the DAW remote layer (they drive the DM2000's internal EQ only; the only
-  selected-channel knobs that transmit are the DYNAMICS ones, which we use for surround). Use the FX
-  parameter editor (assign ReaEQ) instead. Send routing via the channel encoders and talkback remain
-  candidate Layer-4 features.
+- **EQ from the console's EQ knobs is not possible**: confirmed 2026-06-16, re-verified 2026-06-18, and
+  again 2026-06-26 by an **all-8-port** sniff (`tools/hui_deskmon.py all`) - the SELECTED CHANNEL EQ knobs
+  emit **no MIDI on any port** (HUI *or* the native layer); they drive the DM2000's internal EQ only. The
+  only selected-channel knobs that transmit are the DYNAMICS ones, which we use for surround. Use the FX
+  parameter editor (assign ReaEQ) instead. **Talkback / control-room IS now doable** via the native SysEx
+  layer (see [doc/dm2000-native-sysex.md](doc/dm2000-native-sysex.md)) - a candidate future feature, along
+  with send routing via the channel encoders.
 - **ENC ASSIGN buttons (DAW layer, hw 2026-06-18)**: ASSIGN 1/2 = zone 0x0B sw1/sw0 (scribble peeks);
   **ASSIGN 4 emits no MIDI** (its on-desk blink/SEL behaviour is internal); **ASSIGN 3 = zone 0x0C
   sw0** (transmits, currently unmapped - a free assignable button).
