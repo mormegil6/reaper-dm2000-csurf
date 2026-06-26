@@ -165,3 +165,10 @@
 
 - [x] **macOS port** - cross-platform SWELL build; every release is hardware-verified on
       macOS (universal arm64+x86_64) as well as Windows.
+
+- [x] **Scribble non-ASCII transliteration** - implemented 2026-06-26. The 4-char scribble
+      strips drop any byte >= 0x80 (hardware-confirmed: "Łóżko" was showing as just "k"), so
+      track names with Polish/accented characters were vanishing. `scribbleAsciiFold` now folds
+      UTF-8 diacritics to base ASCII (ł->l, ó->o, ż->z, é->e, ß->s, ñ->n, …) before sending, on
+      both the HUI scribble and the port-8 native-name paths. ASCII names unchanged. Logic
+      unit-checked; pending a hardware confirm on the strips.

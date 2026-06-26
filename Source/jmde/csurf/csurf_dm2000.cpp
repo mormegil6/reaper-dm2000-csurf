@@ -812,18 +812,78 @@ private:
         return CSurf_TrackFromID(m_bank_offset + gch + 1, false);
     }
 
+    // Fold a Unicode code point to a base ASCII letter for the scribble strips, which
+    // drop any byte >= 0x80 (so "Łóżko" otherwise shows as just "k"). Covers Polish +
+    // Latin-1 accented letters; returns 0 to drop an unmapped non-ASCII character.
+    static char foldCp(unsigned int cp)
+    {
+        switch (cp)
+        {
+            case 0xC0: case 0xC1: case 0xC2: case 0xC3: case 0xC4: case 0xC5: case 0xC6: return 'A';
+            case 0xC7: return 'C';
+            case 0xC8: case 0xC9: case 0xCA: case 0xCB: return 'E';
+            case 0xCC: case 0xCD: case 0xCE: case 0xCF: return 'I';
+            case 0xD0: return 'D';
+            case 0xD1: return 'N';
+            case 0xD2: case 0xD3: case 0xD4: case 0xD5: case 0xD6: case 0xD8: return 'O';
+            case 0xD9: case 0xDA: case 0xDB: case 0xDC: return 'U';
+            case 0xDD: return 'Y';
+            case 0xDF: return 's';                                          // ß
+            case 0xE0: case 0xE1: case 0xE2: case 0xE3: case 0xE4: case 0xE5: case 0xE6: return 'a';
+            case 0xE7: return 'c';
+            case 0xE8: case 0xE9: case 0xEA: case 0xEB: return 'e';
+            case 0xEC: case 0xED: case 0xEE: case 0xEF: return 'i';
+            case 0xF1: return 'n';
+            case 0xF2: case 0xF3: case 0xF4: case 0xF5: case 0xF6: case 0xF8: return 'o';
+            case 0xF9: case 0xFA: case 0xFB: case 0xFC: return 'u';
+            case 0xFD: case 0xFF: return 'y';
+            case 0x104: return 'A'; case 0x105: return 'a';                 // Ą ą
+            case 0x106: return 'C'; case 0x107: return 'c';                 // Ć ć
+            case 0x118: return 'E'; case 0x119: return 'e';                 // Ę ę
+            case 0x141: return 'L'; case 0x142: return 'l';                 // Ł ł
+            case 0x143: return 'N'; case 0x144: return 'n';                 // Ń ń
+            case 0x15A: return 'S'; case 0x15B: return 's';                 // Ś ś
+            case 0x179: return 'Z'; case 0x17A: return 'z';                 // Ź ź
+            case 0x17B: return 'Z'; case 0x17C: return 'z';                 // Ż ż
+            default: return 0;                                              // unmapped -> drop
+        }
+    }
+
+    // UTF-8 -> ASCII fold for the scribble strips (the desk drops bytes >= 0x80, so
+    // accented / Polish track names would otherwise vanish). Decodes 1-3 byte UTF-8.
+    static void scribbleAsciiFold(const char *src, char *dst, int dstsize)
+    {
+        int o = 0;
+        const unsigned char *p = (const unsigned char *)src;
+        while (*p && o < dstsize - 1)
+        {
+            unsigned int cp;
+            if (*p < 0x80) cp = *p++;
+            else if ((p[0] & 0xE0) == 0xC0 && (p[1] & 0xC0) == 0x80)
+                { cp = ((p[0] & 0x1Fu) << 6) | (p[1] & 0x3Fu); p += 2; }
+            else if ((p[0] & 0xF0) == 0xE0 && (p[1] & 0xC0) == 0x80 && (p[2] & 0xC0) == 0x80)
+                { cp = ((p[0] & 0x0Fu) << 12) | ((p[1] & 0x3Fu) << 6) | (p[2] & 0x3Fu); p += 3; }
+            else { ++p; continue; }                                         // invalid byte - skip
+            char a = (cp < 0x80) ? (char)cp : foldCp(cp);
+            if (a) dst[o++] = a;
+        }
+        dst[o] = 0;
+    }
+
     // HUI channel scribble strip, same byte format as csurf_babyhui.cpp:
     // F0 00 00 66 05 00 10 <ch> <4 chars> F7
     void SendTrackTitle(int id, const char *title)
     {
         if (id < 0 || id >= 32 || !m_midiouts[id / 8]) return;
 
-        int len = title ? (int)strlen(title) : 0;
+        char name[16];
+        scribbleAsciiFold(title ? title : "", name, sizeof(name));   // UTF-8 (e.g. Polish) -> ASCII
+        int len = (int)strlen(name);
 
         unsigned char sysex[13] = { 0xF0, 0x00, 0x00, 0x66, 0x05, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF7 };
         sysex[7] = id & 7;
         for (int i = 0; i < 4 && i < len; ++i)
-            sysex[8 + i] = title[i] & 0x7F;
+            sysex[8 + i] = name[i] & 0x7F;
 
         char buf[sizeof(MIDI_event_t) + sizeof(sysex)];
         MIDI_event_t *msg = (MIDI_event_t *)buf;
@@ -839,7 +899,7 @@ private:
         {
             for (int pos = 0; pos < 8; ++pos)
             {
-                unsigned char c = (pos < len) ? (title[pos] & 0x7F) : 0x20;
+                unsigned char c = (pos < len) ? (name[pos] & 0x7F) : 0x20;
                 unsigned char buf[] = { 0xF0, 0x43, 0x17, 0x3E, 0x06, 0x02, 0x04,
                                         (unsigned char)pos, (unsigned char)(id & 0x7F),
                                         0x00, 0x00, 0x00, c, 0xF7 };

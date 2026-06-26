@@ -122,7 +122,9 @@ stands.)
       _Result (2026-06-26):_ **Non-ASCII is dropped.** "łóżk" → "k", "café" → "caf" —
       only 7-bit ASCII survives; accented / Polish chars vanish entirely. → **Action:**
       transliterate non-ASCII track names to ASCII before sending (ł→l, ó→o, ż→z, é→e,
-      …) so e.g. "Łóżko" shows as "Lozk" instead of "k". Small, worthwhile fix.
+      …) so e.g. "Łóżko" shows as "Lozk" instead of "k". **Implemented 2026-06-26**
+      (`scribbleAsciiFold` in `SendTrackTitle`; Polish + Latin-1 diacritics) — logic
+      unit-checked, pending a hardware confirm on the strips.
 
 - [x] **B4 — Timecode decimal points / separators.** Send a known counter value
       with separators, e.g. `counter 1:23:45.67`, and confirm the digits, the
