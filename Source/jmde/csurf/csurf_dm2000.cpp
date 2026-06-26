@@ -1342,7 +1342,9 @@ private:
             {
                 if (GetTrackNumSends && SetTrackSendInfo_Value && m_enc_send < GetTrackNumSends(tr, 0))
                     SetTrackSendInfo_Value(tr, 0, m_enc_send, "D_VOL", gain);
-                m_send_fader_last[gch] = volToInt14(gain);   // we drove the fader; keep the poll from fighting it
+                // echo the position back so the desk updates its internal fader model and does
+                // not spring the motor back on release (same reason the volume path echoes)
+                SendFlipFader(gch, true);
             }
             else if (tr)
                 // ignoresurf=NULL on purpose: the DM2000 keeps an internal model of
@@ -1767,8 +1769,12 @@ private:
                         if (m_auto_button == 1 && gch < 24)  // automation mode: flash the new mode on the strip
                         { m_auto_label_time[gch] = timeGetTime(); RefreshScribble(gch); }
                         break;
-                    case 5: // V-pot press: in send mode reset that send to 0 dB; else center pan
-                        if (m_enc_send >= 0 && GetTrackNumSends && SetTrackSendInfo_Value &&
+                    case 5: // V-pot press: flip -> reset volume to 0 dB; send mode -> reset send; else center pan
+                        if (flipSends())  // FLIP: the encoder rides volume, so reset it to unity
+                        {
+                            CSurf_SetSurfaceVolume(tr, CSurf_OnVolumeChange(tr, 1.0, false), NULL);
+                        }
+                        else if (m_enc_send >= 0 && GetTrackNumSends && SetTrackSendInfo_Value &&
                             m_enc_send < GetTrackNumSends(tr, 0))
                         {
                             SetTrackSendInfo_Value(tr, 0, m_enc_send, "D_VOL", DB2VAL(0.0));
