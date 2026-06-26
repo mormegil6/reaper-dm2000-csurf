@@ -1410,9 +1410,13 @@ private:
         MediaTrack *tr = TrackFromCh(gch);
         if (!tr) return;
 
-        // momentary overlay: flash this track's full (untruncated) name on the 2x40 display
-        if (m_overlay_names && gch >= 0 && gch < 24 && m_track_name[gch][0])
-            ShowOverlay(m_track_name[gch], "", 1500);
+        // momentary overlay: flash "track N: <full name>" on the 2x40 display
+        if (m_overlay_names && gch >= 0 && gch < 24)
+        {
+            char ov[64];
+            sprintf_s(ov, sizeof(ov), "track %d: %s", CSurf_TrackToID(tr, false), m_track_name[gch]);
+            ShowOverlay(ov, "", 1200);
+        }
 
         bool chord = false;                       // another SEL already held -> add to selection
         for (int i = 0; i < 32; ++i) if (i != gch && m_sel_held[i]) { chord = true; break; }
@@ -2394,7 +2398,7 @@ private:
     // Momentary 2x40 overlay: two 40-char lines for ~ms, then Run() reverts to the FX view.
     // While active it suppresses the FX display (RefreshFXDisplay early-returns) so knob /
     // selection refreshes don't stomp it. Non-ASCII is ASCII-folded for the 7-bit display.
-    void ShowOverlay(const char *top, const char *bottom, DWORD ms = 1500)
+    void ShowOverlay(const char *top, const char *bottom, DWORD ms = 1200)
     {
         if (!m_splash_done || !m_midiouts[0]) return;
         char tf[48], bf[48];
