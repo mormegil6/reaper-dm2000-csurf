@@ -93,6 +93,16 @@ setup (attaching to reaper.exe, breakpoints, etc.).
 See [MACOS_BUILD.md](MACOS_BUILD.md) for the full procedure (prerequisites,
 WDL clone, `make`, binary verification, install).
 
+## Continuous integration
+
+Windows builds are produced automatically by GitHub Actions
+([`.github/workflows/build.yml`](.github/workflows/build.yml)): every push
+compiles the **Release x64** DLL on a clean `windows-latest` runner (fetching WDL
+itself, since it is not vendored) and uploads it as a build artifact - find it
+under the workflow run's **Artifacts** section as `reaper_csurf_dm2000_x64`. When
+a `v*` tag is pushed, that same DLL is attached to the tag's GitHub release. So a
+verified Windows binary is available on every change without a local build machine.
+
 ## REAPER configuration
 
 1. `Preferences → Control/OSC/web → Add → "Yamaha DM2000"`.

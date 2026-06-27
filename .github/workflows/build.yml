@@ -1,0 +1,75 @@
+name: build
+
+# Builds the Windows x64 plugin on a clean runner so a verified DLL is produced
+# on every push, and attaches it to the GitHub release on a v* tag.
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    name: Windows x64 (Release)
+    runs-on: windows-latest
+    env:
+      # csurf.h pulls "WDL/db2val.h" / "WDL/wdlstring.h" and csurf_01X/csurf_mcu
+      # pull "WDL/ptrlist.h" — unguarded, include-path-style — so they resolve via
+      # $(REAPER_EXTENSION_SDK). WDL is gitignored (not vendored), so we fetch it and
+      # point the variable at the directory that *contains* the WDL/ folder. This
+      # mirrors the local convention (REAPER_EXTENSION_SDK -> C:\reaper_extension_sdk\,
+      # which bundles WDL/). No swell.h or sdk/ headers are needed on Windows.
+      REAPER_EXTENSION_SDK: ${{ github.workspace }}\external-wdl
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch WDL headers (not vendored; provides WDL/* used on Windows)
+        shell: bash
+        run: git clone --depth 1 https://github.com/justinfrankel/WDL.git external-wdl
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      # Release|x64 of the VS2019 solution — the same config that produces the
+      # working local DLL. PostBuildEventUseInBuild=false skips the project's
+      # post-build step (it copies into %APPDATA%\REAPER\UserPlugins\, which does
+      # not exist on a runner); the build configuration itself is untouched.
+      - name: Build (Release|x64)
+        shell: cmd
+        run: msbuild Builds\VisualStudio2019\reaper_csurf.sln /p:Configuration=Release /p:Platform=x64 /p:PostBuildEventUseInBuild=false /m /v:minimal
+
+      - name: Stage DLL under the release asset name
+        shell: bash
+        run: |
+          dll=$(find Builds/VisualStudio2019 -path '*Release*' -name 'reaper_csurf_x64.dll' | head -1)
+          test -n "$dll" || { echo "::error::built DLL not found under Builds/VisualStudio2019"; exit 1; }
+          mkdir -p dist
+          cp "$dll" dist/reaper_csurf_dm2000_x64.dll
+          echo "staged $dll -> dist/reaper_csurf_dm2000_x64.dll"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: reaper_csurf_dm2000_x64
+          path: dist/reaper_csurf_dm2000_x64.dll
+          if-no-files-found: error
+
+  release:
+    name: Attach DLL to GitHub release
+    needs: build-windows
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: reaper_csurf_dm2000_x64
+          path: dist
+
+      - name: Attach to the release for this tag
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/reaper_csurf_dm2000_x64.dll
+          fail_on_unmatched_files: true
