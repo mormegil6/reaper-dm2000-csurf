@@ -21,14 +21,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Fetch WDL headers (not vendored; provides WDL/* used on Windows)
         shell: bash
         run: git clone --depth 1 https://github.com/justinfrankel/WDL.git external-wdl
 
       - name: Set up MSBuild
-        uses: microsoft/setup-msbuild@v2
+        uses: microsoft/setup-msbuild@v3
 
       # Release|x64 of the VS2019 solution — the same config that produces the
       # working local DLL. PostBuildEventUseInBuild=false skips the project's
@@ -48,7 +48,7 @@ jobs:
           echo "staged $dll -> dist/reaper_csurf_dm2000_x64.dll"
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: reaper_csurf_dm2000_x64
           path: dist/reaper_csurf_dm2000_x64.dll
@@ -63,13 +63,13 @@ jobs:
       contents: write
     steps:
       - name: Download Windows artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: reaper_csurf_dm2000_x64
           path: dist
 
       - name: Attach to the release for this tag
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/reaper_csurf_dm2000_x64.dll
           fail_on_unmatched_files: true
