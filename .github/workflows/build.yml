@@ -55,7 +55,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    name: Attach DLL to GitHub release
+    name: Attach DLL to GitHub + GitLab releases
     needs: build-windows
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
@@ -68,8 +68,44 @@ jobs:
           name: reaper_csurf_dm2000_x64
           path: dist
 
-      - name: Attach to the release for this tag
+      - name: Name the asset with the tag
+        run: mv dist/reaper_csurf_dm2000_x64.dll "dist/reaper_csurf_dm2000_x64-${{ github.ref_name }}.dll"
+
+      - name: Attach to the GitHub release
         uses: softprops/action-gh-release@v3
         with:
-          files: dist/reaper_csurf_dm2000_x64.dll
+          files: dist/reaper_csurf_dm2000_x64-${{ github.ref_name }}.dll
           fail_on_unmatched_files: true
+
+      # Mirror the same DLL onto the GitLab release: PUT to the generic package
+      # registry, then add it as a release asset link - creating the release if the
+      # tag has none yet, and leaving notes untouched on one that already exists.
+      # Uses the GITLAB_TOKEN secret (a GitLab PAT with api scope).
+      - name: Attach to the GitLab release
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name }}"
+          VER="${TAG#v}"                          # v1.0 -> 1.0 (matches existing package versions)
+          FILE="reaper_csurf_dm2000_x64-${TAG}.dll"
+          BASE="https://git.pg.edu.pl/api/v4/projects/5488"
+          PKG="${BASE}/packages/generic/reaper_csurf_dm2000/${VER}/${FILE}"
+
+          echo "Uploading ${FILE} to the GitLab package registry..."
+          curl -sf --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" --upload-file "dist/${FILE}" "${PKG}"; echo
+
+          code=$(curl -s -o /dev/null -w '%{http_code}' --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" "${BASE}/releases/${TAG}")
+          if [ "${code}" = "404" ]; then
+            echo "GitLab release ${TAG} missing - creating it with the DLL asset"
+            curl -sf --request POST --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+              --header "Content-Type: application/json" \
+              --data "{\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"assets\":{\"links\":[{\"name\":\"${FILE}\",\"url\":\"${PKG}\",\"link_type\":\"package\"}]}}" \
+              "${BASE}/releases" >/dev/null
+          else
+            echo "GitLab release ${TAG} exists - adding the DLL asset link"
+            curl -s --request POST --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+              --data "name=${FILE}" --data-urlencode "url=${PKG}" --data "link_type=package" \
+              "${BASE}/releases/${TAG}/assets/links" >/dev/null || true
+          fi
+          echo "GitLab release ${TAG} now carries ${FILE}"
