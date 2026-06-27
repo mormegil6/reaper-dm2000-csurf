@@ -35,6 +35,8 @@ reference, layer plan, and task tracking.
 
 **Logic Pro Control Surfaces Support Guide - Yamaha DM2000:** [support.apple.com - logicpro-css](https://support.apple.com/guide/logicpro-css/yamaha-dm2000-ctls74ca162f/mac) - the most complete map of how the DM2000's controls behave as a DAW surface (Apple's HUI-derived implementation); used here as a cross-reference for control assignments.
 
+**HUI Protocol Specification (Mackie HUI):** [stash.reaper.fm - HUI.pdf](https://stash.reaper.fm/12332/HUI.pdf) - the canonical reverse-engineered HUI MIDI protocol (theageman, 2010; compiled document © 2011 SSEI), the basis for the DM2000's HUI emulation and this plugin's protocol work. See [doc/hui-spec/](doc/hui-spec/HUI_SPEC_REFERENCES.md) for the mirrored `.txt` references and full credits.
+
 ## Installation (pre-built)
 
 Download the latest release from the [Releases](../../releases) page.
